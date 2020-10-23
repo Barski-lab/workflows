@@ -43,3 +43,4 @@ urllib3==1.25.10
 Werkzeug==1.0.1
 wheel==0.35.1
 pycairo==1.18.2
+pip install h5py==2.10.0
