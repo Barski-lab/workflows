@@ -31,37 +31,37 @@ inputs:
     doc: |
       Bash function to generate needed html and scripts for cellbrowser.
 
-  input1:
+  GeneCellMatrix:
     type: File
     inputBinding:
       position: 2
 
-  input2:
+  MetaData:
     type: File
     inputBinding:
       position: 3
 
-  input3:
+  Coords:
     type: File
     inputBinding:
       position: 4
 
-  input4:
+  ConfigPaths:
     type: File
     inputBinding:
       position: 5
 
-  input5:
+  ConfigDesc:
     type: File
     inputBinding:
       position: 6
 
-  input6:
+  ConfigStarterGenes:
     type: File
     inputBinding:
       position: 7
 
-  input7:
+  Markers:
     type: File
     inputBinding:
       position: 8
