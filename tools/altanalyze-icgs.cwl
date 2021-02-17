@@ -37,7 +37,7 @@ inputs:
       mkdir ./altanalyze/userdata/
       cp ${FBC_MATRIX} ./altanalyze/userdata/raw_feature_bc_matrices_h5.h5
       python ./altanalyze/AltAnalyze.py --species ${SPECIES} \
-      --platform RNASeq --runICGS yes \
+      --platform RNASeq --runICGS yes --cellBrowser yes\
       --ChromiumSparseMatrix ./altanalyze/userdata/ --output ./altanalyze/userdata/ \
       --expname icgs ${@:2}
     inputBinding:

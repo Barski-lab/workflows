@@ -6,7 +6,7 @@
 # Description:      An automated cross-platform workflow for
 #                   RNA-Seq gene, splicing and pathway analysis
 # Website:          http://www.altanalyze.org
-# Provides:         AltAnalyze (5ca1017133a51256a066f260809bcd948d51f2b1)
+# Provides:         AltAnalyze (ef5eb90215ea0d40327d8d92380abfcde19ab98e)
 # Base Image:       python:2.7
 # Build Cmd:        docker build --rm -t biowardrobe2/altanalyze:v0.0.4 -f altanalyze-Dockerfile .
 # Pull Cmd:         docker pull biowardrobe2/altanalyze:v0.0.4
@@ -20,7 +20,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 WORKDIR /tmp
 
-ENV ALTA_VERSION "5ca1017133a51256a066f260809bcd948d51f2b1"
+ENV ALTA_VERSION "ef5eb90215ea0d40327d8d92380abfcde19ab98e"
 ENV ALTA_URL "https://github.com/nsalomonis/altanalyze.git"
 
 ENV BIOC_VERSION 1.30.10

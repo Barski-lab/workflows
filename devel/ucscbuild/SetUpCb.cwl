@@ -20,9 +20,11 @@ inputs:
       cp "$3" .
       cp "$4" .
       cp "$5" .
+      cp "$6" markers.tsv
       cbBuild -o outputhtml
       ls outputhtml
       cp -r outputhtml .
+      echo $?
 
     inputBinding:
       position: 1
@@ -58,6 +60,11 @@ inputs:
     type: File
     inputBinding:
       position: 7
+
+  input7:
+    type: File
+    inputBinding:
+      position: 8
 
 outputs:
   stdout_log:

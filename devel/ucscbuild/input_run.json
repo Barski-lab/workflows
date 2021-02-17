@@ -1,12 +1,14 @@
 {"input1": {"class": "File",
-"path": "ExpressionInput/exp.scRNA-Seq-ICGS.txt"},
+"path": "ICGS-NMF/cellbrowser/exp.cellbrowser.txt"},
 "input2": {"class": "File",
-"path": "ICGS-NMF/FinalGroups-CellTypesFull.txt"},
+"path": "ICGS-NMF/cellbrowser/FinalGroups-CellTypesFull.txt"},
 "input3": {"class": "File",
-"path": "ICGS-NMF/FinalMarkerHeatmap-UMAP_coordinates.txt"},
+"path": "ICGS-NMF/cellbrowser/FinalMarkerHeatmap-UMAP_coordinates.txt"},
 "input4": {"class": "File",
 "path": "conf/cellbrowser.conf"},
 "input5": {"class": "File",
 "path": "conf/desc.conf"},
 "input6": {"class": "File",
-"path": "conf/quickGenes.csv"}}
+"path": "conf/quickGenes.csv"},
+"input7": {"class": "File",
+"path": "ICGS-NMF/cellbrowser/markers.tsv"}}
