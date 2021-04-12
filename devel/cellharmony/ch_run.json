@@ -1,0 +1,10 @@
+{"data_in": {"class": "Directory",
+"location": "EnsMart72"},
+"reference": {"class": "File",
+"path": "FinalMarkerHeatmap.txt"},
+"labels": {"class": "File",
+"path": "FinalGroups-CellTypesFull.txt"},
+"referenceFull": {"class": "File",
+"path": "exp.scRNA-Seq.txt"},
+"input": {"class": "File",
+"path": "Hox_AD_mutant-Left-Kidney-20200319_filtered_feature_bc_matrix.h5"}}
