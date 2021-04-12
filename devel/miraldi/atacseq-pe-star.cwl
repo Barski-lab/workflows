@@ -50,6 +50,11 @@ inputs:
     default: ".*Per base sequence quality.*|.*Per sequence quality scores.*|.*Overrepresented sequences.*|.*Adapter Content.*"
     doc: "Regex for setting failed FastQC summary items any of which will trigger adapter trimming"
 
+  tn5_flanking_size:
+    type: int?
+    default: 20
+    doc: "Bi-directional Tn5 cut sites extention, bp"
+
   threads:
     type: int?
     default: 4
@@ -403,29 +408,42 @@ steps:
     out:
     - bed_file                                                        # Uniquely mapped filtered deduped reads as regions. Connections between pairs are lost
 
-  shift_reads:
+  get_tn5_cut_sites:
     doc: |
-      Shifts and center uniquely mapped filtered deduped reads
-      (regions) to Tn5 binding sites. Returns sorted by -k1,1
-      -k2,2n -k3,3n results. Each region becomes 40bp long.
+      Infers 1 bp resolved Tn5 cut sites. Returns sorted by -k1,1
+      -k2,2n -k3,3n results.
     run: ../../tools/custom-bash.cwl
     in:
       input_file: convert_bam_to_bed/bed_file                         # Uniquely mapped filtered deduped reads as regions
       param:
         source: convert_bam_to_bed/bed_file                           # Sets the output file name to include BED file root name and updated suffix
-        valueFrom: $(get_root(self.basename)+"_shifted.bed")
+        valueFrom: $(get_root(self.basename)+"_tn5_cut.bed")
       script:
-        default: cat "$0" | awk 'BEGIN {OFS = "\t"} ; {if ($6 == "+") print $1, ($3 + 4) - 20, ($3 + 4) + 20, $4, $5, $6; else print $1, ($2 - 5) - 20, ($2 - 5) + 20, $4, $5, $6}' | sort -k1,1 -k2,2n -k3,3n> $1
+        default: cat "$0" | awk 'BEGIN {OFS = "\t"} ; {if ($6 == "+") print $1, $2 + 4, $2 + 5, $4, $5, $6; else print $1, $3 - 5, $3 - 4, $4, $5, $6}' | sort -k1,1 -k2,2n -k3,3n > $1
     out:
-    - output_file                                                     # Sorted by coordinates Tn5 binding sites
+    - output_file                                                     # Sorted by coordinates Tn5 cut sites 1 bp long
+
+  get_tn5_binding_sites:
+    doc: |
+      Increases the size of each Tn5 cut site by a tn5_flanking_size
+      number of bases in two directions. Each region becomes
+      2 x tn5_flanking_size + 1 long, because the original Tn5 cut
+      site was 1 bp long.
+    run: ../../tools/bedtools-slop.cwl
+    in:
+      bed_file: get_tn5_cut_sites/output_file                         # Sorted by coordinates Tn5 cut sites
+      chrom_length_file: get_chr_name_length/selected_file
+      bi_direction: tn5_flanking_size
+    out:
+    - extended_bed_file                                               # Not sorted Tn5 binding sites
 
   remove_blacklisted:
     doc: |
-      Removes all Tn5 binding sites that intersect blacklisted
-      regions
+      Removes all Tn5 binding sites that intersected
+      blacklisted regions
     run: ../../tools/bedtools-intersect.cwl
     in:
-      file_a: shift_reads/output_file                                 # Sorted by coordinates Tn5 binding sites
+      file_a: get_tn5_binding_sites/extended_bed_file                 # Not sorted Tn5 binding sites. Bedtools intersect it's not mandatory to have sorted input
       file_b: blacklisted_regions_bed
       no_overlaps:                                                    # Reports those entries in file_a that have no overlaps with file_b
         default: true

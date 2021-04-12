@@ -9,6 +9,9 @@ suppressMessages(library(DiffBind))
 
 ##########################################################################################
 #
+# v0.0.14
+# - add --color parameter
+#
 # v0.0.13
 # - add --blockfile to set multiple groups for multi-factor analysis
 #
@@ -156,16 +159,16 @@ assert_args <- function(args){
 }
 
 
-export_raw_counts_correlation_heatmap <- function(dba_data, rootname, padding, width=800, height=800, res=72){
+export_raw_counts_correlation_heatmap <- function(dba_data, rootname, padding, color_scheme, width=800, height=800, res=72){
     tryCatch(
         expr = {
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=res)
-            dba.plotHeatmap(dba_data, margin=padding, score=DBA_SCORE_READS)
+            dba.plotHeatmap(dba_data, margin=padding, score=DBA_SCORE_READS, colScheme=color_scheme)
             dev.off()
 
             pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/res), height=round(height/res))
-            dba.plotHeatmap(dba_data, margin=padding, score=DBA_SCORE_READS)
+            dba.plotHeatmap(dba_data, margin=padding, score=DBA_SCORE_READS, colScheme=color_scheme)
             dev.off()
 
             cat(paste("\nExport raw counts correlation heatmap to ", rootname, ".(png/pdf)", sep=""))
@@ -178,16 +181,16 @@ export_raw_counts_correlation_heatmap <- function(dba_data, rootname, padding, w
 }
 
 
-export_peak_overlap_correlation_heatmap <- function(dba_data, rootname, padding, width=800, height=800, res=72){
+export_peak_overlap_correlation_heatmap <- function(dba_data, rootname, padding, color_scheme, width=800, height=800, res=72){
     tryCatch(
         expr = {
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=res)
-            dba.plotHeatmap(dba_data, margin=padding)
+            dba.plotHeatmap(dba_data, margin=padding, colScheme=color_scheme)
             dev.off()
 
             pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/res), height=round(height/res))
-            dba.plotHeatmap(dba_data, margin=padding)
+            dba.plotHeatmap(dba_data, margin=padding, colScheme=color_scheme)
             dev.off()
 
             cat(paste("\nExport peak overlap correlation heatmap to ", rootname, ".(png/pdf)", sep=""))
@@ -222,16 +225,16 @@ export_peak_overlap_rate_plot <- function(peak_overlap_rate, rootname, width=800
 }
 
 
-export_normalized_counts_correlation_heatmap <- function(dba_data, rootname, method, padding, th=1, use_pval=FALSE, width=800, height=800, res=72){
+export_normalized_counts_correlation_heatmap <- function(dba_data, rootname, method, padding, color_scheme, th=1, use_pval=FALSE, width=800, height=800, res=72){
     tryCatch(
         expr = {
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=res)
-            dba.plotHeatmap(dba_data, contrast=1, th=th, bUsePval=use_pval, method=method, margin=padding)
+            dba.plotHeatmap(dba_data, contrast=1, colScheme=color_scheme, th=th, bUsePval=use_pval, method=method, margin=padding)
             dev.off()
 
             pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/res), height=round(height/res))
-            dba.plotHeatmap(dba_data, contrast=1, th=th, bUsePval=use_pval, method=method, margin=padding)
+            dba.plotHeatmap(dba_data, contrast=1, colScheme=color_scheme, th=th, bUsePval=use_pval, method=method, margin=padding)
             dev.off()
 
             cat(paste("\nExport normalized counts correlation heatmap to ", rootname, ".(png/pdf)", sep=""))
@@ -244,16 +247,16 @@ export_normalized_counts_correlation_heatmap <- function(dba_data, rootname, met
 }
 
 
-export_binding_heatmap <- function(dba_data, rootname, method, padding, th=1, use_pval=FALSE, width=800, height=800, res=72){
+export_binding_heatmap <- function(dba_data, rootname, method, padding, color_scheme, th=1, use_pval=FALSE, width=800, height=800, res=72){
     tryCatch(
         expr = {
             
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=res)
-            dba.plotHeatmap(dba_data, contrast=1, correlations=FALSE, th=th, bUsePval=use_pval, method=method, margin=padding, scale="row")
+            dba.plotHeatmap(dba_data, contrast=1, colScheme=color_scheme, correlations=FALSE, th=th, bUsePval=use_pval, method=method, margin=padding, scale="row")
             dev.off()
 
             pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/res), height=round(height/res))
-            dba.plotHeatmap(dba_data, contrast=1, correlations=FALSE, th=th, bUsePval=use_pval, method=method, margin=padding, scale="row")
+            dba.plotHeatmap(dba_data, contrast=1, colScheme=color_scheme, correlations=FALSE, th=th, bUsePval=use_pval, method=method, margin=padding, scale="row")
             dev.off()
 
             cat(paste("\nExport binding heatmap to ", rootname, ".(png/pdf)", sep=""))
@@ -421,6 +424,7 @@ get_args <- function(){
     parser$add_argument("-cu", "--cutoff",       help='Cutoff for reported results. Applied to the parameter set with -cp. Default: 0.05', type="double",    default=0.05)
     parser$add_argument("-cp", "--cparam",       help='Parameter to which cutoff should be applied (fdr or pvalue). Default: fdr',         type="character", choices=c("pvalue","fdr"), default="fdr")
 
+    parser$add_argument("-co", "--color",        help='Color scheme. Default: Greens', type="character", choices=c("Reds", "Greens", "Blues", "Greys", "YlOrRd", "Oranges"), default="Greens")
     parser$add_argument("-th", "--threads",      help='Threads to use',                                     type="integer",   default=1)
     parser$add_argument("-pa", "--padding",      help='Padding for generated heatmaps. Default: 20',        type="integer",   default=20)
     parser$add_argument("-o",  "--output",       help='Output prefix. Default: diffbind',                   type="character", default="./diffbind")
@@ -487,7 +491,7 @@ if (!args$usecommon){
 
 
 # Export peak overlap correlation heatmap
-export_peak_overlap_correlation_heatmap(diff_dba, paste(args$output, "_peak_overlap_correlation_heatmap", sep=""), args$padding)
+export_peak_overlap_correlation_heatmap(diff_dba, paste(args$output, "_peak_overlap_correlation_heatmap", sep=""), args$padding, args$color)
 
 
 # Count reads in binding site intervals
@@ -508,7 +512,7 @@ print(diff_dba)
 
 
 # Export raw counts correlation heatmap
-export_raw_counts_correlation_heatmap(diff_dba, paste(args$output, "_raw_counts_correlation_heatmap", sep=""), args$padding)
+export_raw_counts_correlation_heatmap(diff_dba, paste(args$output, "_raw_counts_correlation_heatmap", sep=""), args$padding, args$color)
 
 
 # Export consensus peak venn diagram
@@ -543,19 +547,23 @@ print(diff_dba)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_all_normalized_counts_correlation_heatmap_deseq", sep=""),
                                              DBA_DESEQ2,
-                                             args$padding)
+                                             args$padding,
+                                             args$color)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_all_normalized_counts_correlation_heatmap_deseq_block", sep=""),
                                              DBA_DESEQ2_BLOCK,
-                                             args$padding)                                             
+                                             args$padding,
+                                             args$color)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_all_normalized_counts_correlation_heatmap_edger", sep=""),
                                              DBA_EDGER,
-                                             args$padding)
+                                             args$padding,
+                                             args$color)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_all_normalized_counts_correlation_heatmap_edger_block", sep=""),
                                              DBA_EDGER_BLOCK,
-                                             args$padding)
+                                             args$padding,
+                                             args$color)
 
 
 # Export filtered normalized counts correlation heatmaps
@@ -563,24 +571,28 @@ export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_filtered_normalized_counts_correlation_heatmap_deseq", sep=""),
                                              DBA_DESEQ2,
                                              args$padding,
+                                             args$color,
                                              args$cutoff,
                                              args$cparam)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_filtered_normalized_counts_correlation_heatmap_deseq_block", sep=""),
                                              DBA_DESEQ2_BLOCK,
                                              args$padding,
+                                             args$color,
                                              args$cutoff,
                                              args$cparam)                                             
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_filtered_normalized_counts_correlation_heatmap_edger", sep=""),
                                              DBA_EDGER,
                                              args$padding,
+                                             args$color,
                                              args$cutoff,
                                              args$cparam)
 export_normalized_counts_correlation_heatmap(diff_dba,
                                              paste(args$output, "_filtered_normalized_counts_correlation_heatmap_edger_block", sep=""),
                                              DBA_EDGER_BLOCK,
                                              args$padding,
+                                             args$color,
                                              args$cutoff,
                                              args$cparam)
 
@@ -590,24 +602,28 @@ export_binding_heatmap(diff_dba,
                        paste(args$output, "_filtered_binding_heatmap_deseq", sep=""),
                        DBA_DESEQ2,
                        args$padding,
+                       args$color,
                        args$cutoff,
                        args$cparam)
 export_binding_heatmap(diff_dba,
                        paste(args$output, "_filtered_binding_heatmap_deseq_block", sep=""),
                        DBA_DESEQ2_BLOCK,
                        args$padding,
+                       args$color,
                        args$cutoff,
                        args$cparam)
 export_binding_heatmap(diff_dba,
                        paste(args$output, "_filtered_binding_heatmap_edger", sep=""),
                        DBA_EDGER,
                        args$padding,
+                       args$color,
                        args$cutoff,
                        args$cparam)
 export_binding_heatmap(diff_dba,
                        paste(args$output, "_filtered_binding_heatmap_edger_block", sep=""),
                        DBA_EDGER_BLOCK,
                        args$padding,
+                       args$color,
                        args$cutoff,
                        args$cparam)
 

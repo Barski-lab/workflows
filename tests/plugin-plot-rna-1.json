@@ -11,9 +11,6 @@
         "class": "File",
         "location": "./data/dm3_chr4/main_inputs/geep/t1_1000.isoforms.csv"
     },
-    "stats_file": {
-        "class": "File",
-        "location": "./data/dm3_chr4/generated_inputs/logs/python_get_stat_rnaseq/chr4_100_mapped_reads.stat"
-    },
+    "mapped_reads_number": 100,
     "pair": true
 }

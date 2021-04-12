@@ -4776,36 +4776,52 @@
 - job: ./plugin-plot-rna-1.json
   tool: ../tools/plugin-plot-rna.cwl
   output:
-    coverage_file:
+    gene_body_report_file:
       class: File
-      location: chr4_100_mapped_reads.Aligned.out_default_cov.tsv
-      size: 402
-    rpkm_file:
+      location: coverage_gene_body_report.tsv
+    gene_body_plot_pdf:
       class: File
-      location: chr4_100_mapped_reads.Aligned.out_default_rpkm.tsv
-      size: 9084
-    png_file:
-    - class: File
-      location: chr4_100_mapped_reads.Aligned.out_default_001.png
-    - class: File
-      location: chr4_100_mapped_reads.Aligned.out_default_002.png
+      location: coverage_gene_body_plot.pdf
+    gene_body_plot_png:
+      class: File
+      location: coverage_gene_body_plot.png
+    rpkm_distribution_plot_pdf:
+      class: File
+      location: coverage_rpkm_distribution_plot.pdf
+    rpkm_distribution_plot_png:
+      class: File
+      location: coverage_rpkm_distribution_plot.png
+    stdout_log:
+      class: File
+      location: gene_body_stdout.log
+    stderr_log:
+      class: File
+      location: gene_body_stderr.log
 
 - job: ./plugin-plot-rna-2.json
   tool: ../tools/plugin-plot-rna.cwl
   output:
-    coverage_file:
+    gene_body_report_file:
       class: File
-      location: dummy_cov.tsv
-      size: 402
-    rpkm_file:
+      location: dummy_gene_body_report.tsv
+    gene_body_plot_pdf:
       class: File
-      location: dummy_rpkm.tsv
-      size: 9084
-    png_file:
-    - class: File
-      location: dummy_001.png
-    - class: File
-      location: dummy_002.png
+      location: dummy_gene_body_plot.pdf
+    gene_body_plot_png:
+      class: File
+      location: dummy_gene_body_plot.png
+    rpkm_distribution_plot_pdf:
+      class: File
+      location: dummy_rpkm_distribution_plot.pdf
+    rpkm_distribution_plot_png:
+      class: File
+      location: dummy_rpkm_distribution_plot.png
+    stdout_log:
+      class: File
+      location: gene_body_stdout.log
+    stderr_log:
+      class: File
+      location: gene_body_stderr.log
 
 # ========================================================
 # pca
@@ -4816,22 +4832,31 @@
   output:
     pca1_vs_pca2_plot:
       class: File
-      location: dummy_001.png
+      location: dummy_pc1_pc2_plot.png
+    pca1_vs_pca2_plot_pdf:
+      class: File
+      location: dummy_pc1_pc2_plot.pdf
     pca2_vs_pca3_plot:
       class: File
-      location: dummy_002.png
+      location: dummy_pc2_pc3_plot.png
+    pca2_vs_pca3_plot_pdf:
+      class: File
+      location: dummy_pc2_pc3_plot.pdf
     variance_plot:
       class: File
-      location: dummy_003.png
-    pca_3d_plot:
+      location: dummy_variance_plot.png
+    variance_plot_pdf:
       class: File
-      location: dummy_004.png
+      location: dummy_variance_plot.pdf
     pca_3d_html:
       class: File
-      location: dummy_pca3d.html
-    pca_file:
+      location: dummy_pca_3d_plot.html
+    pca_scores_file:
       class: File
-      location: dummy_pca.tsv
+      location: dummy_scores.tsv
+    pca_loadings_file:
+      class: File
+      location: dummy_loadings.tsv
     stdout_log:
       class: File
       location: pca_stdout.log
@@ -4844,22 +4869,31 @@
   output:
     pca1_vs_pca2_plot:
       class: File
-      location: dummy_001.png
+      location: report_pc1_pc2_plot.png
+    pca1_vs_pca2_plot_pdf:
+      class: File
+      location: report_pc1_pc2_plot.pdf
     pca2_vs_pca3_plot:
       class: File
-      location: dummy_002.png
+      location: report_pc2_pc3_plot.png
+    pca2_vs_pca3_plot_pdf:
+      class: File
+      location: report_pc2_pc3_plot.pdf
     variance_plot:
       class: File
-      location: dummy_003.png
-    pca_3d_plot:
+      location: report_variance_plot.png
+    variance_plot_pdf:
       class: File
-      location: dummy_004.png
+      location: report_variance_plot.pdf
     pca_3d_html:
       class: File
-      location: dummy_pca3d.html
-    pca_file:
+      location: report_pca_3d_plot.html
+    pca_scores_file:
       class: File
-      location: dummy_pca.tsv
+      location: report_scores.tsv
+    pca_loadings_file:
+      class: File
+      location: report_loadings.tsv
     stdout_log:
       class: File
       location: pca_stdout.log
@@ -6466,3 +6500,178 @@
     stderr_log:
       class: File
       location: genepredtogtf_stderr.log
+
+# ========================================================
+# feature-select-sql
+# ========================================================
+
+- job: ./feature-select-sql-1.json
+  tool: ../tools/feature-select-sql.cwl
+  output:
+    filtered_file:
+      class: File
+      location: u1_1000_filtered.tsv
+    stdout_log:
+      class: File
+      location: sql_select_stdout.log
+    stderr_log:
+      class: File
+      location: sql_select_stderr.log
+
+- job: ./feature-select-sql-2.json
+  tool: ../tools/feature-select-sql.cwl
+  output:
+    filtered_file:
+      class: File
+      location: results.tsv
+    stdout_log:
+      class: File
+      location: sql_select_stdout.log
+    stderr_log:
+      class: File
+      location: sql_select_stderr.log
+
+- job: ./feature-select-sql-3.json
+  tool: ../tools/feature-select-sql.cwl
+  output:
+    filtered_file:
+      class: File
+      location: t1_1000_filtered.tsv
+    stdout_log:
+      class: File
+      location: sql_select_stdout.log
+    stderr_log:
+      class: File
+      location: sql_select_stderr.log
+
+- job: ./feature-select-sql-4.json
+  tool: ../tools/feature-select-sql.cwl
+  output:
+    filtered_file:
+      class: File
+      location: t1_1000_filtered.tsv
+    stdout_log:
+      class: File
+      location: sql_select_stdout.log
+    stderr_log:
+      class: File
+      location: sql_select_stderr.log
+
+# ========================================================
+# bedtools-multicov
+# ========================================================
+
+- job: ./bedtools-multicov-1.json
+  tool: ../tools/bedtools-multicov.cwl
+  output:
+    report_file:
+      class: File
+      location: chr4_100_mapped_reads.Aligned.out.tsv
+    stderr_log:
+      class: File
+      location: bedtools_multicov_stderr.log
+
+- job: ./bedtools-multicov-2.json
+  tool: ../tools/bedtools-multicov.cwl
+  output:
+    report_file:
+      class: File
+      location: chr4_100_mapped_reads.Aligned.out.tsv
+    stderr_log:
+      class: File
+      location: bedtools_multicov_stderr.log
+
+- job: ./bedtools-multicov-3.json
+  tool: ../tools/bedtools-multicov.cwl
+  output:
+    report_file:
+      class: File
+      location: report.tsv
+    stderr_log:
+      class: File
+      location: bedtools_multicov_stderr.log
+
+# ========================================================
+# intervene
+# ========================================================
+
+- job: ./intervene-1.json
+  tool: ../tools/intervene.cwl
+  output:
+    overlapped_plot:
+      class: File
+      location: intervene_venn.pdf
+    overlapped_intervals_files:
+    - class: File
+      location: 001_workspace.bed
+    - class: File
+      location: 011_annotations_workspace.bed
+    - class: File
+      location: 101_segments_workspace.bed
+    - class: File
+      location: 111_segments_annotations_workspace.bed
+    stdout_log:
+      class: File
+      location: intervene_stdout.log
+    stderr_log:
+      class: File
+      location: intervene_stderr.log
+
+- job: ./intervene-2.json
+  tool: ../tools/intervene.cwl
+  output:
+    overlapped_plot:
+      class: File
+      location: intervene_upset.png
+    overlapped_combinations:
+      class: File
+      location: intervene_upset_combinations.txt
+    overlapped_intervals_files:
+    - class: File
+      location: 101_segments_regions_workspace_regions.bed
+    - class: File
+      location: 111_segments_regions_annotations__regions_workspace_regions.bed
+    stdout_log:
+      class: File
+      location: intervene_stdout.log
+    stderr_log:
+      class: File
+      location: intervene_stderr.log
+      
+- job: ./intervene-3.json
+  tool: ../tools/intervene.cwl
+  output:
+    overlapped_plot:
+      class: File
+      location: intervene_pairwise_frac.tiff
+    overlapped_fraction_matrix:
+      class: File
+      location: intervene_pairwise_frac_matrix.txt
+    stdout_log:
+      class: File
+      location: intervene_stdout.log
+    stderr_log:
+      class: File
+      location: intervene_stderr.log
+
+- job: ./intervene-4.json
+  tool: ../tools/intervene.cwl
+  output:
+    overlapped_plot:
+      class: File
+      location: intervene_venn.png
+    overlapped_intervals_files:
+    - class: File
+      location: 001_workspace.bed
+    - class: File
+      location: 011_annotations_workspace.bed
+    - class: File
+      location: 101_segments_workspace.bed
+    - class: File
+      location: 111_segments_annotations_workspace.bed
+    stdout_log:
+      class: File
+      location: intervene_stdout.log
+    stderr_log:
+      class: File
+      location: intervene_stderr.log

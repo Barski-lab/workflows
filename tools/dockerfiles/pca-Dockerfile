@@ -2,18 +2,22 @@
 # Dockerfile
 #
 # Software:         BioWardrobe PCA script
-# Software Version: v0.0.8
+# Software Version: v0.0.9
 # Description:      Dockerized version of PCA script from BioWardrobe
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         PCA script from BioWardrobe
-# Base Image:       r-base:4.0.2
-# Build Cmd:        docker build --rm -t biowardrobe2/pca:v0.0.8 -f pca-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/pca:v0.0.8
-# Run Cmd:          docker run --rm -ti biowardrobe2/pca:v0.0.8
+# Base Image:       r-base:4.0.4
+# Build Cmd:        docker build --rm -t biowardrobe2/pca:v0.0.9 -f pca-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/pca:v0.0.9
+# Run Cmd:          docker run --rm -ti biowardrobe2/pca:v0.0.9
 #################################################################
 # Argparse, jsonlite, scatterplot3d and FindPython are set to the
 # specific versions to garantee that they will work on R 3.2.3-4
 # inherited from the base image.
+#
+# v0.0.9
+# - Use r-base:4.0.4
+# - Reports loadings, PDF, no 3d plot in PNG anymore
 #
 # v0.0.8
 # - add ggrepel package for proper label visualization
@@ -47,7 +51,7 @@
 
 
 ### Base Image
-FROM r-base:4.0.2
+FROM r-base:4.0.4
 LABEL maintainer="misha.kotliar@gmail.com"
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -60,7 +64,7 @@ COPY ./scripts/run_pca.R /usr/local/bin/run_pca.R
 
 ### Installing dependencies
 RUN apt-get update && \
-    apt-get install libgcc-8-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev libssl-dev pandoc -y && \
+    apt-get install libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev libssl-dev pandoc -y && \
 ### Installing dependencies
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("scatterplot3d", repo = "https://cloud.r-project.org/")' && \

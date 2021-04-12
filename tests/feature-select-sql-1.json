@@ -1,0 +1,7 @@
+{
+  "feature_file": {
+    "class": "File",
+    "location": "./data/dm3_chr4/generated_inputs/group_isoforms/u1_1000.genes.tsv"
+  },
+  "sql_query": "TxStart > 100000000"
+}

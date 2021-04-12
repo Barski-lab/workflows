@@ -1,0 +1,21 @@
+{
+    "intervals_files": [
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/segments.bed"
+        },
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/annotations.bed"
+        },
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/workspace.bed"
+        }
+    ],
+    "intervals_aliases": ["segments regions", "annotations  regions", "workspace regions"],
+    "overlap_threshold": 10,
+    "diagram_type": "upset",
+    "figure_format": "png",
+    "intervals_colors": ["r","b","k"]
+}

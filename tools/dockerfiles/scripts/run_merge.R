@@ -8,6 +8,11 @@ suppressMessages(library(argparse))
 
 ##########################################################################################
 #
+# v0.0.2
+#
+# Outputs all columns that are not used for merging. Use --aliases to prefix columns
+# with the same name
+#
 # v0.0.1
 #
 # All input CSV/TSV files should have the header (case-sensitive)
@@ -38,19 +43,24 @@ get_file_type <- function (filename) {
 }
 
 
-merge_features <- function(features, aliases, mergeby, report) {
+merge_features <- function(features, aliases, mergeby) {
     merged_data <- NULL
     for (i in 1:length(features)) {
-        raw_data <- read.table(features[i], sep=get_file_type(features[i]), header=TRUE, stringsAsFactors=FALSE)
-        colnames(raw_data)[colnames(raw_data) == report] <- aliases[i]
-        print(paste("Load ", nrow(raw_data), " rows from '", features[i], "' as '", aliases[i], "'", sep=""))
+        raw_data <- read.table(features[i], sep=get_file_type(features[i]), header=TRUE, check.names=FALSE, stringsAsFactors=FALSE)
+        colnames(raw_data)[!colnames(raw_data) %in% mergeby] <- lapply(
+            colnames(raw_data)[!colnames(raw_data) %in% mergeby],
+            function(x) paste(aliases[i], x, sep="_")
+        )
+        print(paste("Load ", nrow(raw_data), " rows from '", features[i], "'", sep=""))
+        print(head(raw_data))
         if (is.null(merged_data)){
             merged_data = raw_data
         } else {
             merged_data <- merge(merged_data, raw_data, by=mergeby, sort = FALSE)
         }
     }
-    merged_data <- merged_data[, c(mergeby, aliases)]
+    print("Merged data")
+    print(head(merged_data))
     return (merged_data)
 }
 
@@ -83,22 +93,16 @@ get_args <- function(){
     )
     parser$add_argument(
         "-a", "--aliases",
-        help="Unique aliases for feature files to be used as names for the --report columns in the merged file. Default: basenames of files provided in --features without extensions",
+        help="Unique aliases for feature files to be used as prefixes for not --mergeby columns in the merged file. Default: basenames of files provided in --features without extensions",
         type="character",
         nargs="*"
     )
     parser$add_argument(
         "-m", "--mergeby",
-        help="Column names to merge feature files by. Default: GeneId, Chrom, TxStart, TxEnd, Strand",
+        help="Column names to merge feature files by. Default: RefseqId, GeneId, Chrom, TxStart, TxEnd, Strand",
         type="character",
         nargs="*",
-        default=c("GeneId", "Chrom", "TxStart", "TxEnd", "Strand")
-    )
-    parser$add_argument(
-        "-r", "--report",
-        help="Column name to be reported in the merged file. Default: Rpkm",
-        type="character",
-        default="Rpkm"
+        default=c("RefseqId", "GeneId", "Chrom", "TxStart", "TxEnd", "Strand")
     )
     parser$add_argument(
         "-o", "--output",
@@ -115,7 +119,7 @@ args <- get_args()
 
 
 # Load feature files
-merged_data <- merge_features(args$features, args$aliases, args$mergeby, args$report)
+merged_data <- merge_features(args$features, args$aliases, args$mergeby)
 
 
 # Export merged results to file

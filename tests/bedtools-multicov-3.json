@@ -1,0 +1,17 @@
+{
+    "alignment_files": [
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/bam_bai/chr4_100_mapped_reads.Aligned.out.bam"
+        },
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/bam_bai/chr4_100_mapped_reads.Aligned.out.bam"
+        }
+    ],
+    "intervals_file": {
+        "class": "File",
+        "location": "./data/dm3_chr4/generated_inputs/bed/chr4_100_mapped_reads.Aligned.out.bed"
+    },
+    "output_filename": "report.tsv"
+}

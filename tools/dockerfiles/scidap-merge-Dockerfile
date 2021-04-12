@@ -2,20 +2,27 @@
 # Dockerfile
 #
 # Software:         Scidap merge script
-# Software Version: v0.0.1
-# Description:      Dockerized version of run_merge.R script
+# Software Version: v0.0.3
+# Description:      Dockerized version of run_merge.R and
+#                   sql_select.R scripts
 # Website:          https://github.com/Barski-lab/workflows
-# Provides:         run_merge.R v0.0.1
+# Provides:         run_merge.R v0.0.2
+#                   sql_select.R v0.0.1
+# Base Image:       r-base:4.0.4
+# Build Cmd:        docker build --rm -t biowardrobe2/scidap-merge:v0.0.3 -f scidap-merge-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/scidap-merge:v0.0.3
+# Run Cmd:          docker run --rm -ti biowardrobe2/scidap-merge:v0.0.3 /bin/bash
+#################################################################
 #
-# Base Image:       r-base:4.0.3
-# Build Cmd:        docker build --rm -t biowardrobe2/scidap-merge:v0.0.1 -f scidap-merge-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/scidap-merge:v0.0.1
-# Run Cmd:          docker run --rm -ti biowardrobe2/scidap-merge:v0.0.1 run_merge.R --help
+# v0.0.3
+# run_merge.R (v0.0.2) outputs all columns that are not used for
+# merging. Uses --aliases to prefix columns with the same name
+#
 #################################################################
 
 
 ### Base Image
-FROM r-base:4.0.3
+FROM r-base:4.0.4
 LABEL maintainer="misha.kotliar@gmail.com"
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -24,15 +31,18 @@ ENV DEBIAN_FRONTEND noninteractive
 WORKDIR /tmp
 
 COPY ./scripts/run_merge.R /usr/local/bin/run_merge.R
+COPY ./scripts/sql_select.R /usr/local/bin/sql_select.R
 
 ### Installing python3, pip3 and argparse
 RUN apt-get update && \
-    apt-get install -y gcc-8-base libmpx2 libgcc-8-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev && \
+    apt-get install -y gcc-10-base libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev && \
     pip3 install argparse && \
 ### Installing argparse
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
-### Installing run_merge.R script
+    R -e 'install.packages("sqldf", repo = "https://cloud.r-project.org/")' && \
+### Installing run_merge.R and sql_select.R scripts
     chmod +x /usr/local/bin/run_merge.R && \
+    chmod +x /usr/local/bin/sql_select.R && \
 ### Cleaning
     apt-get clean && \
     apt-get purge && \

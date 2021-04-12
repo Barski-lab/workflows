@@ -1,0 +1,16 @@
+{
+    "intervals_files": [
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/segments.bed"
+        },
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/annotations.bed"
+        },
+        {
+            "class": "File",
+            "location": "./data/dm3_chr4/generated_inputs/gat/workspace.bed"
+        }
+    ]
+}

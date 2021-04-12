@@ -12,6 +12,19 @@ suppressMessages(library(ggrepel))
 
 ##########################################################################################
 #
+# v0.0.24
+#
+# - Fix bug with pval in DESeq and pvalue in DESeq2. Now all it pvalue
+#
+# v0.0.23
+#
+# - Use RpkmCondition1 and RpkmCondition2 for RPKM columns in the output TSV file
+#   We need hardcoded values for later filtering.
+#
+# v0.0.22
+#
+# - Column names for RPKM don't include spaces and brackets anymore
+#
 # v0.0.21
 #
 # - Add ggrepel for proper label positioning
@@ -66,7 +79,7 @@ suppressMessages(library(ggrepel))
 # Output file includes only intersected rows from all input files. Intersected by
 # RefseqId, GeneId, Chrom, TxStart, TxEnd, Strand
 #
-# DESeq/DESeq2 always compares untreated_vs_treated groups
+# DESeq/DESeq2 always compares untreated_vs_treated groups (condition-1-vs-condition-2)
 # 
 # Additionally we calculate -LOG10(pval) and -LOG10(padj)
 #
@@ -81,6 +94,8 @@ suppressMessages(library(ggrepel))
 READ_COL <- "TotalReads"
 RPKM_COL <- "Rpkm"
 INTERSECT_BY <- c("RefseqId", "GeneId", "Chrom", "TxStart", "TxEnd", "Strand")
+RPKM_UNTREATED_ALIAS <- "RpkmCondition1"
+RPKM_TREATED_ALIAS <- "RpkmCondition2"
 
 
 get_file_type <- function (filename) {
@@ -93,10 +108,10 @@ get_file_type <- function (filename) {
 }
 
 
-load_isoform_set <- function(filenames, prefixes, read_colname, rpkm_colname, conditions, intersect_by, digits, batch_metadata, collected_data=NULL) {
+load_isoform_set <- function(filenames, prefixes, read_colname, rpkm_colname, rpkm_colname_alias, conditions, intersect_by, digits, batch_metadata, collected_data=NULL) {
     for (i in 1:length(filenames)) {
         isoforms <- read.table(filenames[i], sep=get_file_type(filenames[i]), header=TRUE, stringsAsFactors=FALSE)
-        new_read_colname = paste(prefixes[i], " [", conditions, "]", sep="")
+        new_read_colname = paste(prefixes[i], conditions, sep="_")
         colnames(isoforms)[colnames(isoforms) == read_colname] <- new_read_colname
         colnames(isoforms)[colnames(isoforms) == rpkm_colname] <- paste(conditions, i, rpkm_colname, sep=" ")
         if (!is.null(batch_metadata)){
@@ -116,9 +131,8 @@ load_isoform_set <- function(filenames, prefixes, read_colname, rpkm_colname, co
         }
     }
     rpkm_columns = grep(paste("^", conditions, " [0-9]+ ", rpkm_colname, sep=""), colnames(collected_data$collected_isoforms), value = TRUE, ignore.case = TRUE)
-    new_rpkm_colname = paste(rpkm_colname, " [", conditions, "]", sep="")
-    collected_data$collected_isoforms[new_rpkm_colname] = format(rowSums(collected_data$collected_isoforms[, rpkm_columns, drop = FALSE]) / length(filenames), digits=digits)
-    collected_data$rpkm_colnames = c(collected_data$rpkm_colnames, new_rpkm_colname)
+    collected_data$collected_isoforms[rpkm_colname_alias] = format(rowSums(collected_data$collected_isoforms[, rpkm_columns, drop = FALSE]) / length(filenames), digits=digits)
+    collected_data$rpkm_colnames = c(collected_data$rpkm_colnames, rpkm_colname_alias)
     collected_data$collected_isoforms <- collected_data$collected_isoforms[, !colnames(collected_data$collected_isoforms) %in% rpkm_columns]
     return( collected_data )
 }
@@ -315,13 +329,13 @@ assert_args <- function(args){
 
 
 get_args <- function(){
-    parser <- ArgumentParser(description='Run BioWardrobe DESeq/DESeq2 for untreated-vs-treated groups')
-    parser$add_argument("-u",  "--untreated", help='Untreated CSV/TSV isoforms expression files',    type="character", required="True", nargs='+')
-    parser$add_argument("-t",  "--treated",   help='Treated CSV/TSV isoforms expression files',      type="character", required="True", nargs='+')
-    parser$add_argument("-ua", "--ualias",    help='Unique aliases for untreated expression files. Default: basenames of -u without extensions', type="character", nargs='*')
-    parser$add_argument("-ta", "--talias",    help='Unique aliases for treated expression files. Default: basenames of -t without extensions',   type="character", nargs='*')
-    parser$add_argument("-un", "--uname",     help='Name for untreated condition, use only letters and numbers', type="character", default="untreated")
-    parser$add_argument("-tn", "--tname",     help='Name for treated condition, use only letters and numbers',   type="character", default="treated")
+    parser <- ArgumentParser(description='Run BioWardrobe DESeq/DESeq2 for untreated-vs-treated groups (condition-1-vs-condition-2)')
+    parser$add_argument("-u",  "--untreated", help='Untreated (condition 1) CSV/TSV isoforms expression files',    type="character", required="True", nargs='+')
+    parser$add_argument("-t",  "--treated",   help='Treated (condition 2) CSV/TSV isoforms expression files',      type="character", required="True", nargs='+')
+    parser$add_argument("-ua", "--ualias",    help='Unique aliases for untreated (condition 1) expression files. Default: basenames of -u without extensions', type="character", nargs='*')
+    parser$add_argument("-ta", "--talias",    help='Unique aliases for treated (condition 2) expression files. Default: basenames of -t without extensions',   type="character", nargs='*')
+    parser$add_argument("-un", "--uname",     help='Name for untreated (condition 1), use only letters and numbers', type="character", default="untreated")
+    parser$add_argument("-tn", "--tname",     help='Name for treated (condition 2), use only letters and numbers',   type="character", default="treated")
     parser$add_argument("-bf", "--batchfile", help='Metadata file for multi-factor analysis. Headerless TSV/CSV file. First column - names from --ualias and --talias, second column - batch group name. Default: None', type="character")
     parser$add_argument("-cu", "--cutoff",    help='Minimum threshold for rpkm filtering. Default: 5', type="double", default=5)
     parser$add_argument("-o",  "--output",    help='Output prefix. Default: deseq',    type="character", default="./deseq")
@@ -340,7 +354,7 @@ register(MulticoreParam(args$threads))
 
 
 # Load isoforms/genes/tss files
-raw_data <- load_isoform_set(args$treated, args$talias, READ_COL, RPKM_COL, args$tname, INTERSECT_BY, args$digits, args$batchfile, load_isoform_set(args$untreated, args$ualias, READ_COL, RPKM_COL, args$uname, INTERSECT_BY, args$digits, args$batchfile))
+raw_data <- load_isoform_set(args$treated, args$talias, READ_COL, RPKM_COL, RPKM_TREATED_ALIAS, args$tname, INTERSECT_BY, args$digits, args$batchfile, load_isoform_set(args$untreated, args$ualias, READ_COL, RPKM_COL, RPKM_UNTREATED_ALIAS, args$uname, INTERSECT_BY, args$digits, args$batchfile))
 collected_isoforms <- apply_cutoff(raw_data$collected_isoforms, args$cutoff, raw_data$rpkm_colnames)
 read_count_cols = raw_data$read_colnames
 column_data = raw_data$column_data
@@ -410,6 +424,7 @@ if (length(args$treated) > 1 && length(args$untreated) > 1){
     mat <- vsd[order(rowMeans(counts(cdsD, normalized=TRUE)), decreasing=TRUE)[1:30],]
 
     DESeqRes <- res[,c(6,7,8)]
+    colnames(DESeqRes)[2] <- "pvalue"  # in DESeq2 it's pvalue, need to use the same here
 }
 
 
@@ -433,7 +448,7 @@ DESeqRes <- format(DESeqRes, digits=args$digits)
 
 # Add metadata columns to the DESeq results
 collected_isoforms <- data.frame(cbind(collected_isoforms[, !colnames(collected_isoforms) %in% read_count_cols], DESeqRes), check.names=F, check.rows=F)
-collected_isoforms[,"'-LOG10(pval)'"] <- format(-log(as.numeric(collected_isoforms$pval), 10), digits=args$digits)
+collected_isoforms[,"'-LOG10(pval)'"] <- format(-log(as.numeric(collected_isoforms$pvalue), 10), digits=args$digits)
 collected_isoforms[,"'-LOG10(padj)'"] <- format(-log(as.numeric(collected_isoforms$padj), 10), digits=args$digits)
 
 

@@ -1,0 +1,9 @@
+{
+  "feature_file": {
+    "class": "File",
+    "location": "./data/dm3_chr4/main_inputs/geep/t1_1000.isoforms.csv"
+  },
+  "sql_query": "TxStart > 100000000",
+  "columns": "Chrom,TxStart,TxEnd,GeneId,TotalReads,Strand",
+  "header": true
+}

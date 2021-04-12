@@ -29,5 +29,5 @@
       "class": "File",
       "location": "./data/dm3_chr4/main_inputs/geep/genelist.tsv"
     },
-    "output_prefix": "dummy_"
+    "target_column": "TotalReads"
   }
