@@ -309,7 +309,7 @@ load_seurat_data <- function(locations, mincells, cell_identity_data, condition_
         for (i in 1:length(locations)){
             current_location <- locations[i]
             print(paste("Read not aggregated 10x data from", current_location, "replacing the original barcode suffixes with", i))
-            print(paste("ignoring --mincells filtering parameter as it can't be applied for individual datasets"))
+            print(paste("ignoring --mincells filtering parameter as it can't be applied for individual datasets due to influence on genes number"))
             seurat_data <- CreateSeuratObject(
                 counts=Read10X(data.dir=current_location, strip.suffix=TRUE),  # removes suffix from barcode
                 names.delim="-",
@@ -359,16 +359,48 @@ add_qc_metrics <- function(seurat_data, mitopattern) {
 }
 
 
-apply_qc_filters <- function(seurat_data, args) {
-    filtered_seurat_data <- subset(
-        seurat_data,
-        subset = (nFeature_RNA >= args$minfeatures) &
-                 (nFeature_RNA <= args$maxfeatures) &
-                 (nCount_RNA >= args$minumi) &
-                 (log10_gene_per_log10_umi >= args$minnovelty) &
-                 (mito_percentage <= args$maxmt)
-    )
-    return (filtered_seurat_data)
+apply_qc_filters <- function(seurat_data, cell_identity_data, args) {
+    if (length(args$minfeatures) == 1){
+        print("Filtering all datasets at once")
+        filtered_seurat_data <- subset(
+            seurat_data,
+            subset = (nFeature_RNA >= args$minfeatures) &
+                    (nFeature_RNA <= args$maxfeatures) &
+                    (nCount_RNA >= args$minumi) &
+                    (log10_gene_per_log10_umi >= args$minnovelty) &
+                    (mito_percentage <= args$maxmt)
+        )
+        return (filtered_seurat_data)
+    } else {
+        merged_seurat_data <- NULL
+        for (i in 1:length(args$minfeatures)){
+            identity <- cell_identity_data$library_id[i]
+            minfeatures <- args$minfeatures[i]
+            maxfeatures <- args$maxfeatures[i]
+            minumi <- args$minumi[i]
+            minnovelty <- args$minnovelty[i]
+            print(paste("Filtering", identity))
+            print(paste(" ", minfeatures, "<= Genes per cell <=", maxfeatures))
+            print(paste(" ", "UMIs per cell >=", minumi))
+            print(paste(" ", "Novelty score >=", minnovelty))
+            print(paste(" ", "Mitochondrial gene expression <=", args$maxmt))
+            filtered_seurat_data <- subset(
+                seurat_data,
+                idents=identity,
+                subset=(nFeature_RNA >= minfeatures) &
+                    (nFeature_RNA <= maxfeatures) &
+                    (nCount_RNA >= minumi) &
+                    (log10_gene_per_log10_umi >= minnovelty) &
+                    (mito_percentage <= args$maxmt)
+            )
+            if (is.null(merged_seurat_data)){
+                merged_seurat_data <- filtered_seurat_data
+            } else {
+                merged_seurat_data <- merge(merged_seurat_data, y=filtered_seurat_data)
+            }
+        }
+        return (merged_seurat_data)
+    }
 }
 
 
@@ -1382,7 +1414,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "umi_dnst_spl_by_cond", sep="_"),
         x_axis="nCount_RNA",
         color_by="new.ident",
-        x_left_intercept=args$minumi,
+        x_left_intercept=min(args$minumi),
         x_label="UMIs per cell",
         y_label="Density",
         legend_title="Identity",
@@ -1397,8 +1429,8 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_dnst_spl_by_cond", sep="_"),
         x_axis="nFeature_RNA",
         color_by="new.ident",
-        x_left_intercept=args$minfeatures,
-        x_right_intercept=args$maxfeatures,
+        x_left_intercept=min(args$minfeatures),
+        x_right_intercept=max(args$maxfeatures),
         x_label="Genes per cell",
         y_label="Density",
         legend_title="Identity",
@@ -1414,9 +1446,9 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_umi_corr_spl_by_ident", sep="_"),
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
-        x_left_intercept=args$minumi,
-        y_low_intercept=args$minfeatures,
-        y_high_intercept=args$maxfeatures,
+        x_left_intercept=min(args$minumi),
+        y_low_intercept=min(args$minfeatures),
+        y_high_intercept=max(args$maxfeatures),
         color_by="mito_percentage",
         colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
@@ -1449,7 +1481,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "nvlt_score_dnst_spl_by_cond", sep="_"),
         x_axis="log10_gene_per_log10_umi",
         color_by="new.ident",
-        x_left_intercept=args$minnovelty,
+        x_left_intercept=min(args$minnovelty),
         x_label="log10 Genes / log10 UMIs per cell",
         y_label="Density",
         legend_title="Identity",
@@ -1566,10 +1598,10 @@ get_args <- function(){
     parser$add_argument("--barcodes",      help="Path to the headerless TSV/CSV file with selected barcodes (one per line) to prefilter input feature-barcode matrices. Default: use all cells", type="character")
     # Apply QC filters
     parser$add_argument("--mincells",      help="Include features detected in at least this many cells (applied to thoughout all datasets together, ignored when --mex points to multiple locations). Default: 10", type="integer", default=10)
-    parser$add_argument("--minfeatures",   help="Include cells where at least this many features are detected. Default: 250", type="integer", default=250)
-    parser$add_argument("--maxfeatures",   help="Include cells with the number of features not bigger than this value. Default: 5000", type="integer", default=5000)
-    parser$add_argument("--minumi",        help="Include cells where at least this many UMI are detected. Default: 500", type="integer", default=500)
-    parser$add_argument("--minnovelty",    help="Include cells with the novelty score not lower than this value (calculated as log10(genes)/log10(UMIs)). Default: 0.8", type="double", default=0.8)
+    parser$add_argument("--minfeatures",   help="Include cells where at least this many features are detected (if multiple values provided each identity will be filtered separately). Default: 250", type="integer", default=250, nargs="*")
+    parser$add_argument("--maxfeatures",   help="Include cells with the number of features not bigger than this value (if multiple values provided each identity will be filtered separately). Default: 5000", type="integer", default=5000, nargs="*")
+    parser$add_argument("--minumi",        help="Include cells where at least this many UMI are detected (if multiple values provided each identity will be filtered separately). Default: 500", type="integer", default=500, nargs="*")
+    parser$add_argument("--minnovelty",    help="Include cells with the novelty score not lower than this value, calculated as log10(genes)/log10(UMIs) (if multiple values provided each identity will be filtered separately). Default: 0.8", type="double", default=0.8, nargs="*")
     parser$add_argument("--maxmt",         help="Include cells with the mitochondrial contamination percentage not bigger than this value. Default: 5", type="double", default=5)
     parser$add_argument("--mitopattern",   help="Regex pattern to identify mitochondrial reads. Default: ^Mt-", type="character", default="^Mt-")
     # Integration, clustering, and cell types and marker genes identification parameters
@@ -1625,8 +1657,8 @@ cat("\n\nStep 2: Filtering raw datasets\n")
 print("Adding QC metrics to not filtered seurat data")
 seurat_data <- add_qc_metrics(seurat_data, args$mitopattern)
 export_all_qc_plots(seurat_data, "raw", args)                                                                  # <--- raw
-print("Applying QC filters to all datasets at once")
-seurat_data <- apply_qc_filters(seurat_data, args)
+print("Applying QC filters")
+seurat_data <- apply_qc_filters(seurat_data, cell_identity_data, args)
 export_all_qc_plots(seurat_data, "fltr", args)                                                                 # <--- fltr
 print("Evaluating effects of cell cycle and mitochodrial gene expression")
 explore_unwanted_variation(seurat_data, cell_cycle_data, args)
