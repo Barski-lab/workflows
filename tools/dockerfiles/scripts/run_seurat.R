@@ -289,18 +289,45 @@ load_barcodes_data <- function(location, seurat_data) {
 }
 
 
-load_seurat_data <- function(location, mincells, cell_identity_data, condition_data) {
-    seurat_data <- CreateSeuratObject(
-        counts=Read10X(data.dir=location),
-        min.cells=mincells,
-        names.delim="-",  # to get cell identity index from Cellranger aggr output
-        names.field=2
-    )
-    idents <- as.numeric(as.character(Idents(seurat_data)))              # need to properly convert factor to numeric vector
-    seurat_data[["new.ident"]] <- cell_identity_data$library_id[idents]
-    seurat_data[["condition"]] <- condition_data$condition[match(seurat_data$new.ident, condition_data$library_id)]
-    Idents(seurat_data) <- "new.ident"
-    return (seurat_data)
+load_seurat_data <- function(locations, mincells, cell_identity_data, condition_data) {
+    if (length(locations) == 1){
+        current_location <- locations
+        print(paste("Read aggregated 10x data from", current_location, "using the original barcode suffixes"))
+        seurat_data <- CreateSeuratObject(
+            counts=Read10X(data.dir=current_location),
+            min.cells=mincells,
+            names.delim="-",  # to get cell identity index from Cellranger aggr output
+            names.field=2
+        )
+        idents <- as.numeric(as.character(Idents(seurat_data)))              # need to properly convert factor to numeric vector
+        seurat_data[["new.ident"]] <- cell_identity_data$library_id[idents]
+        seurat_data[["condition"]] <- condition_data$condition[match(seurat_data$new.ident, condition_data$library_id)]
+        Idents(seurat_data) <- "new.ident"
+        return (seurat_data)
+    } else {
+        merged_seurat_data <- NULL
+        for (i in 1:length(locations)){
+            current_location <- locations[i]
+            print(paste("Read not aggregated 10x data from", current_location, "replacing the original barcode suffixes with", i))
+            print(paste("ignoring --mincells filtering parameter as it can't be applied for individual datasets"))
+            seurat_data <- CreateSeuratObject(
+                counts=Read10X(data.dir=current_location, strip.suffix=TRUE),  # removes suffix from barcode
+                names.delim="-",
+                names.field=2
+            )
+            idents <- i
+            seurat_data[["new.ident"]] <- cell_identity_data$library_id[idents]
+            seurat_data[["condition"]] <- condition_data$condition[match(seurat_data$new.ident, condition_data$library_id)]
+            Idents(seurat_data) <- "new.ident"
+            seurat_data <- RenameCells(seurat_data, new.names=paste0(Cells(seurat_data), "-", idents))  # to add new barcode suffix
+            if (is.null(merged_seurat_data)){
+                merged_seurat_data <- seurat_data
+            } else {
+                merged_seurat_data <- merge(merged_seurat_data, y=seurat_data)
+            }
+        }
+        return (merged_seurat_data)
+    }
 }
 
 
@@ -359,11 +386,18 @@ explore_unwanted_variation <- function(seurat_data, cell_cycle_data, args) {
             print("Failed to run cell cycle scoring when exploring cell cycle phase as a source of unwanted variation")
         }
     )
-    mito_quartiles <- quantile(temp_seurat_data@meta.data$mito_percentage, c(0.25, 0.5, 0.75))
-    temp_seurat_data@meta.data$mito_factor <- cut(
-        temp_seurat_data@meta.data$mito_percentage, 
-        breaks=c(-Inf, mito_quartiles[1], mito_quartiles[2], mito_quartiles[3], Inf), 
-        labels=c("Low", "Medium", "Medium high", "High")
+    tryCatch(
+        expr = {
+            mito_quartiles <- quantile(temp_seurat_data@meta.data$mito_percentage, c(0.25, 0.5, 0.75))
+            temp_seurat_data@meta.data$mito_factor <- cut(
+                temp_seurat_data@meta.data$mito_percentage, 
+                breaks=c(-Inf, mito_quartiles[1], mito_quartiles[2], mito_quartiles[3], Inf), 
+                labels=c("Low", "Medium", "Medium high", "High")
+            )
+        },
+        error = function(e){
+            print("Failed to run mito factor scoring when exploring mitochondrial gene expression as a source of unwanted variation")
+        }
     )
     temp_seurat_data <- FindVariableFeatures(temp_seurat_data, verbose=FALSE)
     temp_seurat_data <- ScaleData(temp_seurat_data, verbose=FALSE)
@@ -1524,14 +1558,14 @@ export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=F
 get_args <- function(){
     parser <- ArgumentParser(description='Runs Seurat for comparative scRNA-seq analysis of across experimental conditions')
     # Import data from Cellranger Aggregate results
-    parser$add_argument("--mex",           help="Path to the folder with not normalized aggregated feature-barcode matrices in MEX format", type="character", required="True")
+    parser$add_argument("--mex",           help="Path to the folder with not normalized aggregated feature-barcode matrices in MEX format (if multiple locations provided data is assumed to be not aggregated and will be merged)", type="character", required="True", nargs="+")
     parser$add_argument("--identity",      help="Path to the aggregation CSV file to set the initial cell identity classes", type="character", required="True")
     parser$add_argument("--condition",     help="Path to the TSV/CSV file to define datasets conditions for grouping. First column - 'library_id' with values from the --identity file, second column 'condition'. Default: each dataset is assigned to its own biological condition", type="character")
     parser$add_argument("--classifier",    help="Path to the Garnett classifier rds file for cell type prediction. Default: skip cell type prediction", type="character")
     parser$add_argument("--cellcycle",     help="Path to the TSV/CSV file with cell cycle data. First column - 'phase', second column 'gene_id'. Default: skip cell cycle score assignment", type="character")
     parser$add_argument("--barcodes",      help="Path to the headerless TSV/CSV file with selected barcodes (one per line) to prefilter input feature-barcode matrices. Default: use all cells", type="character")
     # Apply QC filters
-    parser$add_argument("--mincells",      help="Include features detected in at least this many cells (applied to thoughout all datasets together). Default: 10", type="integer", default=10)
+    parser$add_argument("--mincells",      help="Include features detected in at least this many cells (applied to thoughout all datasets together, ignored when --mex points to multiple locations). Default: 10", type="integer", default=10)
     parser$add_argument("--minfeatures",   help="Include cells where at least this many features are detected. Default: 250", type="integer", default=250)
     parser$add_argument("--maxfeatures",   help="Include cells with the number of features not bigger than this value. Default: 5000", type="integer", default=5000)
     parser$add_argument("--minumi",        help="Include cells where at least this many UMI are detected. Default: 500", type="integer", default=500)
@@ -1577,7 +1611,7 @@ print("Trying to load cell cycle data")
 cell_cycle_data <- load_cell_cycle_data(args$cellcycle)
 print("Trying to load condition data")
 condition_data <- load_condition_data(args$condition, cell_identity_data)
-print(paste("Loading feature-barcode matrices from", args$mex))
+print("Loading feature-barcode matrices")
 seurat_data <- load_seurat_data(args$mex, args$mincells, cell_identity_data, condition_data)
 print("Trying to load barcodes of interest to prefilter feature-barcode matrices by cells")
 barcodes_data <- load_barcodes_data(args$barcodes, seurat_data)
