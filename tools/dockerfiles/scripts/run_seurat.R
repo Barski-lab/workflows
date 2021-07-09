@@ -737,11 +737,17 @@ export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_in
                     xlab(x_label) +
                     ylab(y_label) +
                     guides(fill=guide_legend(legend_title)) +
-                    geom_vline(xintercept=x_left_intercept, color="red") +
                     ggtitle(plot_title) +
                     scale_fill_brewer(palette=palette)
 
-            if (!is.null(x_right_intercept)){ plot <- plot + geom_vline(xintercept=x_right_intercept, color="green") }
+            for (i in 1:length(x_left_intercept)){
+                plot <- plot + geom_vline(xintercept=x_left_intercept[i], color="red")
+            }
+            if (!is.null(x_right_intercept)){
+                for (i in 1:length(x_right_intercept)){
+                    plot <- plot + geom_vline(xintercept=x_right_intercept[i], color="green")
+                }
+            }
             if (scale_x_log10){ plot <- plot + scale_x_log10() }
             if (scale_y_log10){ plot <- plot + scale_y_log10() }
             if (!is.null(facet_by)){ plot <- plot + facet_wrap(as.formula(paste("~", facet_by))) }
@@ -750,14 +756,18 @@ export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_in
                                geom_density(show.legend=FALSE, size=1) +
                                xlab(x_label) +
                                ylab(y_label) +
-                               geom_vline(xintercept=x_left_intercept, color="red") +
                                scale_color_brewer(palette=palette)
+                for (i in 1:length(x_left_intercept)){
+                    zoomed_plot <- zoomed_plot + geom_vline(xintercept=x_left_intercept[i], color="red")
+                }
                 if (!is.null(x_right_intercept)) {
                     zoomed_plot <- zoomed_plot +
-                                   geom_vline(xintercept=x_right_intercept, color="green") +
-                                   coord_cartesian(xlim=c(x_left_intercept, x_right_intercept))
+                                   coord_cartesian(xlim=c(min(x_left_intercept), max(x_right_intercept)))
+                    for (i in 1:length(x_right_intercept)){
+                        zoomed_plot <- zoomed_plot + geom_vline(xintercept=x_right_intercept[i], color="green")
+                    }
                 } else {
-                    zoomed_plot <- zoomed_plot + coord_cartesian(xlim=c(NA, x_left_intercept))
+                    zoomed_plot <- zoomed_plot + coord_cartesian(xlim=c(NA, max(x_left_intercept)))
                 }
                 if (scale_x_log10){ zoomed_plot <- zoomed_plot + scale_x_log10() }
                 if (scale_y_log10){ zoomed_plot <- zoomed_plot + scale_y_log10() }
@@ -771,9 +781,15 @@ export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_in
                                xlab(ranked_x_label) +
                                ylab(x_label) +
                                scale_y_log10() +
-                               geom_hline(yintercept=x_left_intercept, color="red") +
                                scale_color_brewer(palette=palette)
-                if (!is.null(x_right_intercept)){ ranked_plot <- ranked_plot + geom_hline(yintercept=x_right_intercept, color="green") }
+                for (i in 1:length(x_left_intercept)){
+                    ranked_plot <- ranked_plot + geom_hline(yintercept=x_left_intercept[i], color="red")
+                }
+                if (!is.null(x_right_intercept)){
+                    for (i in 1:length(x_right_intercept)){
+                        ranked_plot <- ranked_plot +  geom_hline(yintercept=x_right_intercept[i], color="green")
+                    }
+                }
                 plot <- plot / ranked_plot
             }
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
@@ -808,14 +824,21 @@ export_geom_point_plot <- function(data, rootname, x_axis, y_axis, x_left_interc
                         limits=color_limits
                     ) +
                     stat_smooth(method=lm) +
-                    geom_vline(xintercept=x_left_intercept, color="red") +
-                    geom_hline(yintercept=y_low_intercept, color="red") +
                     xlab(x_label) +
                     ylab(y_label) +
                     guides(color=guide_colourbar(legend_title)) +
                     ggtitle(plot_title)
-
-            if (!is.null(y_high_intercept)){ plot <- plot + geom_hline(yintercept=y_high_intercept, color="green") }
+            for (i in 1:length(x_left_intercept)){
+                plot <- plot + geom_vline(xintercept=x_left_intercept[i], color="red")
+            }
+            for (i in 1:length(y_low_intercept)){
+                plot <- plot + geom_hline(yintercept=y_low_intercept[i], color="red")
+            }
+            if (!is.null(y_high_intercept)){
+                for (i in 1:length(y_high_intercept)){
+                    plot <- plot + geom_hline(yintercept=y_high_intercept[i], color="green")
+                }
+            }
             if (scale_x_log10){ plot <- plot + scale_x_log10() }
             if (scale_y_log10){ plot <- plot + scale_y_log10() }
             if (!is.null(facet_by)){ plot <- plot + facet_wrap(as.formula(paste("~", facet_by))) }
@@ -1414,7 +1437,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "umi_dnst_spl_by_cond", sep="_"),
         x_axis="nCount_RNA",
         color_by="new.ident",
-        x_left_intercept=min(args$minumi),
+        x_left_intercept=args$minumi,
         x_label="UMIs per cell",
         y_label="Density",
         legend_title="Identity",
@@ -1429,8 +1452,8 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_dnst_spl_by_cond", sep="_"),
         x_axis="nFeature_RNA",
         color_by="new.ident",
-        x_left_intercept=min(args$minfeatures),
-        x_right_intercept=max(args$maxfeatures),
+        x_left_intercept=args$minfeatures,
+        x_right_intercept=args$maxfeatures,
         x_label="Genes per cell",
         y_label="Density",
         legend_title="Identity",
@@ -1446,9 +1469,9 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_umi_corr_spl_by_ident", sep="_"),
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
-        x_left_intercept=min(args$minumi),
-        y_low_intercept=min(args$minfeatures),
-        y_high_intercept=max(args$maxfeatures),
+        x_left_intercept=args$minumi,
+        y_low_intercept=args$minfeatures,
+        y_high_intercept=args$maxfeatures,
         color_by="mito_percentage",
         colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
@@ -1481,7 +1504,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "nvlt_score_dnst_spl_by_cond", sep="_"),
         x_axis="log10_gene_per_log10_umi",
         color_by="new.ident",
-        x_left_intercept=min(args$minnovelty),
+        x_left_intercept=args$minnovelty,
         x_label="log10 Genes / log10 UMIs per cell",
         y_label="Density",
         legend_title="Identity",
