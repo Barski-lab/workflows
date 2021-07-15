@@ -9,6 +9,20 @@ suppressMessages(library(argparse))
 suppressMessages(library(tidyverse))
 
 
+load_training_data <- function(args) {
+    tryCatch(
+        expr = {
+            training_data <<- UpdateSeuratObject(readRDS(args$rds))
+        },
+        error = function(e){
+            load(args$rds, verbose=TRUE)
+            training_data <<- UpdateSeuratObject(eval(as.name(args$objname)))
+        }
+    )
+    return (training_data)
+}
+
+
 export_formatted_cell_markers_data <- function(data, location){
     file.create(location)
     for(i in 1:nrow(data)) {
@@ -113,9 +127,10 @@ export_markers_plot <- function(data, rootname, pdf=FALSE, width=800, height=800
 
 get_args <- function(){
     parser <- ArgumentParser(description="Trains Garnett classifier")
-    parser$add_argument("--raw",     help="Path to the raw file from http://biocc.hrbmu.edu.cn/CellMarker/download.jsp", type="character", required="True")
-    parser$add_argument("--rds",     help="Path to the Seurat rds file", type="character", required="True")
-    parser$add_argument("--species", help="Select species from --raw for training", type="character", choices=c("Human", "Mouse"), required="True")
+    parser$add_argument("--markers", help="Path to the Garnett marker genes file", type="character", required="True")
+    parser$add_argument("--rds",     help="Path to the Seurat training data file in rds or Robj format", type="character", required="True")
+    parser$add_argument("--objname", help="Object name to load Seurat training data from when provided through --rds file is in Robj format", type="character", default="tiss")
+    parser$add_argument("--pdf",     help="Export plots in PDF. Default: false", action="store_true")
     parser$add_argument("--output",  help="Output prefix. Default: ./garnett", type="character", default="./garnett")
     args <- parser$parse_args(commandArgs(trailingOnly = TRUE))
     return (args)
@@ -124,32 +139,28 @@ get_args <- function(){
 
 args <- get_args()
 
-print("Loading cell markers data")
-raw_cell_markers_data <- load_raw_cell_markers_data(args$raw, args$species)
+print("Loading Seurat training data")
+training_data <- load_training_data(args)
 
-print("Loading Seurat data")
-seurat_data <- readRDS(args$rds)
+print(training_data)
+print(head(training_data@meta.data))
 
-print("Convereting Seurat data to Monocle3")
-monocle_data <- get_monocle_data(seurat_data, rownames(seurat_data))
+print("Convereting Seurat training data to Monocle3")
+monocle_data <- get_monocle_data(training_data, rownames(training_data))
 
-print("Exporting formatted cell markers data")
-formatted_cell_markers_location <- paste(args$output, tolower(args$species), "formatted_markers.tsv", sep="_")
-export_formatted_cell_markers_data(raw_cell_markers_data, formatted_cell_markers_location)
+# print("Checking markers")
+# marker_check <- check_markers(
+#     monocle_data,
+#     args$markers,
+#     db="none"
+# )
 
-print("Checking markers")
-marker_check <- check_markers(
-    monocle_data,
-    formatted_cell_markers_location,
-    db="none"
-)
+# export_markers_plot(marker_check, paste(args$output, "markers", sep="_"), args$pdf)
 
-export_markers_plot(marker_check, paste(args$output, tolower(args$species), "formatted_markers", sep="_"))
+# classifier <- train_cell_classifier(
+#     cds=monocle_data,
+#     marker_file=args$markers,
+#     db="none"
+# )
 
-classifier <- train_cell_classifier(
-    cds=monocle_data,
-    marker_file=formatted_cell_markers_location,
-    db="none"
-)
-
-export_rds(classifier,  paste(args$output, tolower(args$species), "classifier.rds", sep="_"))
+# export_rds(classifier,  paste(args$output, "classifier.rds", sep="_"))
