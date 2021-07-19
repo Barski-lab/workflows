@@ -642,15 +642,17 @@ get_conserved_markers <- function(cluster, seurat_data, grouping_var, resolution
 }
 
 
-assign_cell_types <- function (seurat_data, classifier, args){
+assign_cell_types <- function (seurat_data, classifier, assay, matrix_slot, args){
     for (i in 1:length(args$resolution)) {
         resolution <- args$resolution[i]
         tryCatch(
             expr = {
-                monocle_data <- get_monocle_data(                                     # inside uses "RNA" assay
+                monocle_data <- get_monocle_data(
                     seurat_data,
-                    features=VariableFeatures(seurat_data, assay="integrated"),
-                    cluster_field=paste("integrated_snn_res", resolution, sep=".")
+                    features=rownames(seurat_data),                                   # get all features, may not work well for other than "RNA" assays
+                    cluster_field=paste("integrated_snn_res", resolution, sep="."),
+                    assay=assay,
+                    matrix_slot=matrix_slot
                 )
                 monocle_data <- classify_cells(
                     monocle_data,
@@ -670,7 +672,7 @@ assign_cell_types <- function (seurat_data, classifier, args){
 }
 
 
-get_monocle_data <- function (seurat_data, features, cluster_field, assay="RNA", matrix_slot="data") {
+get_monocle_data <- function (seurat_data, features, cluster_field, assay="RNA", matrix_slot="counts") {
     backup_assay <- DefaultAssay(seurat_data)
     DefaultAssay(seurat_data) <- assay
     gene_metadata <- data.frame(
@@ -926,7 +928,7 @@ export_dot_plot <- function(data, features, rootname, plot_title, x_label, y_lab
                     ylab(y_label) +
                     theme_gray() +
                     ggtitle(plot_title) +
-                    scale_color_gradient2(low="black", mid="yellow", high="red", midpoint=0, limits=c(col_min, col_max))
+                    scale_color_gradient2(low="blue", mid="white", high="red", midpoint=0, limits=c(col_min, col_max))
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             suppressMessages(print(plot))
@@ -1286,6 +1288,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             plot_title="Log normalized gene expression per cell of clustered filtered integrated datasets",
             label=TRUE,
             order=TRUE,
+            max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
             rootname=paste(args$output, suffix, "per_clst_cell_res", current_resolution, sep="_"),
             combine_guides="keep",
             pdf=args$pdf
@@ -1331,6 +1334,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
                 plot_title="Log normalized gene expression per cell of clustered filtered integrated datasets with predicted cell types",
                 label=TRUE,
                 order=TRUE,
+                max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
                 rootname=paste(args$output, suffix, "per_ctype_cell_res", current_resolution, sep="_"),
                 combine_guides="keep",
                 pdf=args$pdf
@@ -1705,7 +1709,7 @@ print(paste("Clustering integrated data using", args$ndim, "principal components
 seurat_data <- FindNeighbors(seurat_data, reduction="pca", dims=1:args$ndim, verbose=FALSE)                    # runs on "integrated" assay
 seurat_data <- FindClusters(seurat_data, resolution=args$resolution)
 print("Assigning cell types for all clusters and all resolutions using only highly variable genes")
-seurat_data <- assign_cell_types(seurat_data, classifier, args)                                                # uses variable features from "integrated" assay, but gene expression from "RNA" assay
+seurat_data <- assign_cell_types(seurat_data, classifier, "RNA", "counts", args)                               # uses all features from "counts" slot of "RNA" assay
 export_all_clustering_plots(seurat_data, "clst", args)                                                         # <--- clst
 export_all_expression_plots(seurat_data, "expr", args)                                                         # <--- expr
 
