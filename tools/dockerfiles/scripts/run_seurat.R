@@ -11,6 +11,7 @@ suppressMessages(library(DESeq2))
 suppressMessages(library(tibble))
 suppressMessages(library(scales))
 suppressMessages(library(ggplot2))
+suppressMessages(library(ggrepel))
 suppressMessages(library(garnett))
 suppressMessages(library(argparse))
 suppressMessages(library(patchwork))
@@ -239,6 +240,8 @@ load_cell_identity_data <- function (location) {
         check.names=FALSE,
         stringsAsFactors=FALSE
     )
+    # prepend with LETTERS, otherwise the order on the plot will be arbitrary sorted
+    cell_identity_data <- cell_identity_data %>% mutate("library_id"=paste(LETTERS[1:nrow(cell_identity_data)], .$library_id))
     return (cell_identity_data)
 }
 
@@ -258,11 +261,13 @@ load_condition_data <- function(location, cell_identity_data) {
             check.names=FALSE,
             stringsAsFactors=FALSE
         )
-        if (all(is.element(cell_identity_data$library_id, condition_data$library_id))){
+        # prepend with LETTERS to correspond to the library_id from the cell_identity_data
+        condition_data <- condition_data %>% mutate("library_id"=paste(LETTERS[1:nrow(condition_data)], .$library_id))
+        if ( (nrow(condition_data) == nrow(cell_identity_data)) && all(is.element(cell_identity_data$library_id, condition_data$library_id)) ){
             print(paste("Condition data is successfully loaded from ", location))
             return (condition_data)
         } else {
-            print(paste("Applying defaults - failed to load condition data from ", location))
+            print(paste("Applying defaults - condition data loaded from", location, "is malformed"))
             return (default_condition_data)
         }
     }
@@ -290,33 +295,53 @@ load_barcodes_data <- function(location, seurat_data) {
 
 
 load_seurat_data <- function(locations, mincells, cell_identity_data, condition_data) {
-    if (length(locations) == 1){
+    if (length(locations) == 1){  # Cell Ranger Aggr or single Cell Ranger Count experiments
         current_location <- locations
-        print(paste("Read aggregated 10x data from", current_location, "using the original barcode suffixes"))
+        if (length(as.vector(cell_identity_data$library_id)) > 1) {
+            print(paste("Read aggregated 10x data from", current_location, "using the original barcode suffixes"))
+        } else {
+            print(paste("Read not aggregated 10x data from", current_location, "using the original barcode suffixes"))
+        }
+        print(paste("  applying --mincells filtering parameter", mincells))
         seurat_data <- CreateSeuratObject(
             counts=Read10X(data.dir=current_location),
             min.cells=mincells,
-            names.delim="-",  # to get cell identity index from Cellranger aggr output
+            names.delim="-",  # to get cell identity index from Cell Ranger Aggr or Count output
             names.field=2
         )
         idents <- as.numeric(as.character(Idents(seurat_data)))              # need to properly convert factor to numeric vector
-        seurat_data[["new.ident"]] <- cell_identity_data$library_id[idents]
+        new_ident <- cell_identity_data$library_id[idents]
+        if (sum(is.na(new_ident)) > 0){
+            print("Identity file includes less than expected number of rows. Exiting.")
+            quit(save="no", status=1, runLast=FALSE)
+        }
+        seurat_data[["new.ident"]] <- new_ident
         seurat_data[["condition"]] <- condition_data$condition[match(seurat_data$new.ident, condition_data$library_id)]
         Idents(seurat_data) <- "new.ident"
+        if ( nrow(cell_identity_data) > length(unique(as.vector(as.character(Idents(seurat_data))))) ){
+            print("Identity file includes more than expected number of rows. Exiting.")
+            quit(save="no", status=1, runLast=FALSE)
+        }
         return (seurat_data)
-    } else {
+    } else {                      # multiple Cell Ranger Count experiments
         merged_seurat_data <- NULL
         for (i in 1:length(locations)){
             current_location <- locations[i]
             print(paste("Read not aggregated 10x data from", current_location, "replacing the original barcode suffixes with", i))
-            print(paste("ignoring --mincells filtering parameter as it can't be applied for individual datasets due to influence on genes number"))
+            print(paste(
+                "  ignoring --mincells filtering parameter as it can't be applied for individual datasets",
+                "due to its influence on the genes number"
+            ))
             seurat_data <- CreateSeuratObject(
                 counts=Read10X(data.dir=current_location, strip.suffix=TRUE),  # removes suffix from barcode
-                names.delim="-",
-                names.field=2
             )
             idents <- i
-            seurat_data[["new.ident"]] <- cell_identity_data$library_id[idents]
+            new_ident <- cell_identity_data$library_id[idents]
+            if (sum(is.na(new_ident)) > 0){
+                print("Identity file includes less than expected number of rows. Exiting.")
+                quit(save="no", status=1, runLast=FALSE)
+            }
+            seurat_data[["new.ident"]] <- new_ident
             seurat_data[["condition"]] <- condition_data$condition[match(seurat_data$new.ident, condition_data$library_id)]
             Idents(seurat_data) <- "new.ident"
             seurat_data <- RenameCells(seurat_data, new.names=paste0(Cells(seurat_data), "-", idents))  # to add new barcode suffix
@@ -325,6 +350,10 @@ load_seurat_data <- function(locations, mincells, cell_identity_data, condition_
             } else {
                 merged_seurat_data <- merge(merged_seurat_data, y=seurat_data)
             }
+        }
+        if ( nrow(cell_identity_data) > length(unique(as.vector(as.character(Idents(merged_seurat_data))))) ){
+            print("Identity file includes more than expected number of rows. Exiting.")
+            quit(save="no", status=1, runLast=FALSE)
         }
         return (merged_seurat_data)
     }
@@ -360,47 +389,43 @@ add_qc_metrics <- function(seurat_data, mitopattern) {
 
 
 apply_qc_filters <- function(seurat_data, cell_identity_data, args) {
-    if (length(args$minfeatures) == 1){
-        print("Filtering all datasets at once")
-        filtered_seurat_data <- subset(
-            seurat_data,
-            subset = (nFeature_RNA >= args$minfeatures) &
-                    (nFeature_RNA <= args$maxfeatures) &
-                    (nCount_RNA >= args$minumi) &
-                    (log10_gene_per_log10_umi >= args$minnovelty) &
-                    (mito_percentage <= args$maxmt)
-        )
-        return (filtered_seurat_data)
-    } else {
-        merged_seurat_data <- NULL
-        for (i in 1:length(args$minfeatures)){
-            identity <- cell_identity_data$library_id[i]
-            minfeatures <- args$minfeatures[i]
-            maxfeatures <- args$maxfeatures[i]
-            minumi <- args$minumi[i]
-            minnovelty <- args$minnovelty[i]
-            print(paste("Filtering", identity))
-            print(paste(" ", minfeatures, "<= Genes per cell <=", maxfeatures))
-            print(paste(" ", "UMIs per cell >=", minumi))
-            print(paste(" ", "Novelty score >=", minnovelty))
-            print(paste(" ", "Mitochondrial gene expression <=", args$maxmt))
-            filtered_seurat_data <- subset(
-                seurat_data,
-                idents=identity,
-                subset=(nFeature_RNA >= minfeatures) &
-                    (nFeature_RNA <= maxfeatures) &
-                    (nCount_RNA >= minumi) &
-                    (log10_gene_per_log10_umi >= minnovelty) &
-                    (mito_percentage <= args$maxmt)
-            )
-            if (is.null(merged_seurat_data)){
-                merged_seurat_data <- filtered_seurat_data
-            } else {
-                merged_seurat_data <- merge(merged_seurat_data, y=filtered_seurat_data)
+    merged_seurat_data <- NULL
+    for (i in 1:length(args$minfeatures)){
+        identity <- cell_identity_data$library_id[i]
+        minfeatures <- args$minfeatures[i]
+        maxfeatures <- args$maxfeatures[i]
+        minumi <- args$minumi[i]
+        minnovelty <- args$minnovelty[i]
+        print(paste("Filtering", identity))
+        print(paste(" ", minfeatures, "<= Genes per cell <=", maxfeatures))
+        print(paste(" ", "UMIs per cell >=", minumi))
+        print(paste(" ", "Novelty score >=", minnovelty))
+        print(paste(" ", "Mitochondrial gene expression <=", args$maxmt))
+        filtered_seurat_data <- NULL
+        tryCatch(
+            expr = {
+                filtered_seurat_data <- subset(
+                    seurat_data,
+                    idents=identity,
+                    subset=(nFeature_RNA >= minfeatures) &
+                        (nFeature_RNA <= maxfeatures) &
+                        (nCount_RNA >= minumi) &
+                        (log10_gene_per_log10_umi >= minnovelty) &
+                        (mito_percentage <= args$maxmt)
+                )
+            },
+            error = function(e){
+                print(paste(" ", "Failed to apply QC filters for", identity, "due to", e))
             }
+        )
+        if (is.null(filtered_seurat_data)){ next }
+        if (is.null(merged_seurat_data)){
+            merged_seurat_data <- filtered_seurat_data
+        } else {
+            merged_seurat_data <- merge(merged_seurat_data, y=filtered_seurat_data)
         }
-        return (merged_seurat_data)
     }
+    return (merged_seurat_data)
 }
 
 
@@ -445,7 +470,7 @@ explore_unwanted_variation <- function(seurat_data, cell_cycle_data, args) {
     export_dim_plot(
         data=temp_seurat_data,
         reduction="pca",
-        plot_title="Split by cell cycle phase PCA of filtered unintegrated datasets",
+        plot_title="Split by cell cycle phase PCA of filtered unintegrated/scaled datasets",
         legend_title="Cell cycle phase",
         split_by="Phase",
         group_by="Phase",
@@ -456,7 +481,7 @@ explore_unwanted_variation <- function(seurat_data, cell_cycle_data, args) {
     export_dim_plot(
         data=temp_seurat_data,
         reduction="pca",
-        plot_title="Split by level of mitochondrial gene expression PCA of filtered unintegrated datasets",
+        plot_title="Split by level of mitochondrial gene expression PCA of filtered unintegrated/scaled datasets",
         legend_title="Expression level",
         split_by="mito_factor",
         group_by="mito_factor",
@@ -467,7 +492,7 @@ explore_unwanted_variation <- function(seurat_data, cell_cycle_data, args) {
     export_dim_plot(
         data=temp_seurat_data,
         reduction="umap",
-        plot_title="Split by identity UMAP projected PCA of filtered unintegrated datasets",
+        plot_title="Split by identity UMAP projected PCA of filtered unintegrated/scaled datasets",
         legend_title="Identity",
         split_by="new.ident",
         rootname=paste(args$output, "_fltr_umap_spl_by_idnt", sep=""),
@@ -479,89 +504,129 @@ explore_unwanted_variation <- function(seurat_data, cell_cycle_data, args) {
 
 integrate_seurat_data <- function(seurat_data, cell_cycle_data, args) {
     splitted_seurat_data <- SplitObject(seurat_data, split.by="new.ident")
-    for (i in 1:length(splitted_seurat_data)) {
-        vars_to_regress <- NULL
-        if (args$regressmt){
-            vars_to_regress <- c("mito_percentage")
-        }
-        splitted_seurat_data[[i]] <- SCTransform(
-            splitted_seurat_data[[i]],
-            assay="RNA",
-            new.assay.name="SCT",
-            variable.features.n=args$highvarcount,
-            vars.to.regress=vars_to_regress,
-            verbose=FALSE
-        )
+    if (length(splitted_seurat_data) == 1){
+        print(paste(
+            "Skipping datasets integration as only one identity is present.",
+            "Running log-normalization and scalling instead."
+        ))
+        scaled_norm_seurat_data <- NormalizeData(splitted_seurat_data[[1]], verbose=FALSE)
         tryCatch(
             expr = {
-                splitted_seurat_data[[i]] <- CellCycleScoring(
-                    splitted_seurat_data[[i]],
+                scaled_norm_seurat_data <- CellCycleScoring(
+                    scaled_norm_seurat_data,
                     s.features=as.vector(cell_cycle_data[tolower(cell_cycle_data$phase)=="s", "gene_id"]),
                     g2m.features=as.vector(cell_cycle_data[tolower(cell_cycle_data$phase)=="g2/m", "gene_id"]),
-                    assay="SCT",
                     verbose=FALSE
                 )
             },
             error = function(e){
-                print(paste("Failed to run cell cycle scoring on SCT normalized data for", Idents(splitted_seurat_data[[i]])[1]))
+                print("Failed to run cell cycle scoring on log-normalized data")
             }
         )
-        if (args$regresscellcycle){
-            if (!is.null(vars_to_regress)) {
-                vars_to_regress <- append(vars_to_regress, c("S.Score", "G2M.Score"))
-            } else {
-                vars_to_regress <- c("S.Score", "G2M.Score")
+        scaled_norm_seurat_data <- FindVariableFeatures(
+            scaled_norm_seurat_data,
+            nfeatures=args$highvarcount,
+            verbose=FALSE
+        )
+        vars_to_regress <- NULL
+        if (args$regressmt){ vars_to_regress <- c("mito_percentage") }
+        if (args$regresscellcycle){ vars_to_regress <- c("S.Score", "G2M.Score") }
+        if (args$regressmt && args$regresscellcycle){ vars_to_regress <- c("mito_percentage", "S.Score", "G2M.Score") }
+        scaled_norm_seurat_data <- ScaleData(
+            scaled_norm_seurat_data,
+            vars.to.regress=vars_to_regress,
+            verbose=FALSE
+        )
+        return (scaled_norm_seurat_data)
+    } else {
+        for (i in 1:length(splitted_seurat_data)) {
+            vars_to_regress <- NULL
+            if (args$regressmt){
+                vars_to_regress <- c("mito_percentage")
             }
+            splitted_seurat_data[[i]] <- SCTransform(
+                splitted_seurat_data[[i]],
+                assay="RNA",
+                new.assay.name="SCT",
+                variable.features.n=args$highvarcount,
+                vars.to.regress=vars_to_regress,
+                verbose=FALSE
+            )
             tryCatch(
                 expr = {
-                    splitted_seurat_data[[i]] <- SCTransform(
+                    splitted_seurat_data[[i]] <- CellCycleScoring(
                         splitted_seurat_data[[i]],
-                        assay="RNA",
-                        new.assay.name="SCT",
-                        variable.features.n=args$highvarcount,
-                        vars.to.regress=vars_to_regress,
+                        s.features=as.vector(cell_cycle_data[tolower(cell_cycle_data$phase)=="s", "gene_id"]),
+                        g2m.features=as.vector(cell_cycle_data[tolower(cell_cycle_data$phase)=="g2/m", "gene_id"]),
+                        assay="SCT",
                         verbose=FALSE
                     )
                 },
                 error = function(e){
-                    print(paste("Failed to regress cell cycle phase as a confounding source of variation for", Idents(splitted_seurat_data[[i]])[1]))
+                    print(paste("Failed to run cell cycle scoring on SCT normalized data for", Idents(splitted_seurat_data[[i]])[1]))
                 }
             )
+            if (args$regresscellcycle){
+                if (!is.null(vars_to_regress)) {
+                    vars_to_regress <- append(vars_to_regress, c("S.Score", "G2M.Score"))
+                } else {
+                    vars_to_regress <- c("S.Score", "G2M.Score")
+                }
+                tryCatch(
+                    expr = {
+                        splitted_seurat_data[[i]] <- SCTransform(
+                            splitted_seurat_data[[i]],
+                            assay="RNA",
+                            new.assay.name="SCT",
+                            variable.features.n=args$highvarcount,
+                            vars.to.regress=vars_to_regress,
+                            verbose=FALSE
+                        )
+                    },
+                    error = function(e){
+                        print(paste("Failed to regress cell cycle phase as a confounding source of variation for", Idents(splitted_seurat_data[[i]])[1]))
+                    }
+                )
+            }
         }
+        set_threads(1)  # need to use one thread, otherwise gets stuck
+        integration_features <- SelectIntegrationFeatures(splitted_seurat_data, nfeatures=args$highvarcount)
+        splitted_seurat_data <- PrepSCTIntegration(
+            splitted_seurat_data, 
+            anchor.features=integration_features,
+            verbose=FALSE
+        )
+        integration_anchors <- FindIntegrationAnchors(
+            splitted_seurat_data,
+            normalization.method="SCT",
+            anchor.features=integration_features,
+            verbose=FALSE
+        )
+        integrated_seurat_data <- IntegrateData(
+            integration_anchors, 
+            new.assay.name="integrated",
+            normalization.method="SCT",
+            k.weight=min(min(table(Idents(seurat_data))), 100),  # 100 by default, but shouldn't be bigger than the min number of cells among all identities after filtering
+            verbose=FALSE
+        )
+        DefaultAssay(integrated_seurat_data) <- "integrated"
+        set_threads(args$threads)
+        return (integrated_seurat_data)
     }
-    set_threads(1)  # need to use one thread, otherwise gets stuck
-    integration_features <- SelectIntegrationFeatures(splitted_seurat_data, nfeatures=args$highvarcount)
-    splitted_seurat_data <- PrepSCTIntegration(
-        splitted_seurat_data, 
-        anchor.features=integration_features,
-        verbose=FALSE
-    )
-    integration_anchors <- FindIntegrationAnchors(
-        splitted_seurat_data,
-        normalization.method="SCT",
-        anchor.features=integration_features,
-        verbose=FALSE
-    )
-    integrated_seurat_data <- IntegrateData(
-        integration_anchors, 
-        new.assay.name="integrated",
-        normalization.method="SCT",
-        k.weight=min(min(table(Idents(seurat_data))), 100),  # 100 by default, but shouldn't be bigger than the min number of cells among all identities after filtering
-        verbose=FALSE
-    )
-    DefaultAssay(integrated_seurat_data) <- "integrated"
-    set_threads(args$threads)
-    return (integrated_seurat_data)
 }
 
 
 get_all_putative_markers <- function(seurat_data, args, assay="RNA", min_diff_pct=-Inf){
     backup_assay <- DefaultAssay(seurat_data)
     DefaultAssay(seurat_data) <- assay
+    cluster_prefix <- "RNA"
+    if ("integrated" %in% names(seurat_data@assays)) {
+        cluster_prefix <- "integrated"
+    }
     all_putative_markers <- NULL
     for (i in 1:length(args$resolution)) {
         resolution <- args$resolution[i]
-        Idents(seurat_data) <- paste("integrated_snn_res", resolution, sep=".")
+        Idents(seurat_data) <- paste(paste(cluster_prefix, "snn_res", sep="_"), resolution, sep=".")
         markers <- FindAllMarkers(
             seurat_data,
             logfc.threshold=args$logfc,
@@ -591,10 +656,14 @@ get_all_putative_markers <- function(seurat_data, args, assay="RNA", min_diff_pc
 get_all_conserved_markers <- function(seurat_data, args, assay="RNA", min_diff_pct=-Inf){
     backup_assay <- DefaultAssay(seurat_data)
     DefaultAssay(seurat_data) <- "RNA"
+    cluster_prefix <- "RNA"
+    if ("integrated" %in% names(seurat_data@assays)) {
+        cluster_prefix <- "integrated"
+    }
     all_conserved_markers <- NULL
     for (i in 1:length(args$resolution)) {
         resolution <- args$resolution[i]
-        clustering_by <- paste("integrated_snn_res", resolution, sep=".")
+        clustering_by <- paste(paste(cluster_prefix, "snn_res", sep="_"), resolution, sep=".")
         Idents(seurat_data) <- clustering_by
         conserved_markers <- map_dfr(
             sort(unique(seurat_data@meta.data[, clustering_by])),
@@ -643,6 +712,10 @@ get_conserved_markers <- function(cluster, seurat_data, grouping_var, resolution
 
 
 assign_cell_types <- function (seurat_data, classifier, assay, matrix_slot, args){
+    cluster_prefix <- "RNA"
+    if ("integrated" %in% names(seurat_data@assays)) {
+        cluster_prefix <- "integrated"
+    }
     for (i in 1:length(args$resolution)) {
         resolution <- args$resolution[i]
         tryCatch(
@@ -650,7 +723,7 @@ assign_cell_types <- function (seurat_data, classifier, assay, matrix_slot, args
                 monocle_data <- get_monocle_data(
                     seurat_data,
                     features=rownames(seurat_data),                                   # get all features, may not work well for other than "RNA" assays
-                    cluster_field=paste("integrated_snn_res", resolution, sep="."),
+                    cluster_field=paste(paste(cluster_prefix, "snn_res", sep="_"), resolution, sep="."),
                     assay=assay,
                     matrix_slot=matrix_slot
                 )
@@ -731,50 +804,74 @@ export_geom_bar_plot <- function(data, rootname, x_axis, color_by, x_label, y_la
 }
 
 
-export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_intercept, x_label, y_label, legend_title, plot_title, x_right_intercept=NULL,  scale_x_log10=FALSE, scale_y_log10=FALSE, zoom_on_intercept=FALSE, facet_by=NULL, alpha=0.9, show_ranked=FALSE, ranked_x_label="Ranked cells", palette="Paired", pdf=FALSE, width=1200, height=800, resolution=100){
+export_geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left_intercept, x_label, y_label, legend_title, plot_title, x_right_intercept=NULL,  scale_x_log10=FALSE, scale_y_log10=FALSE, zoom_on_intercept=FALSE, alpha=0.9, show_ranked=FALSE, ranked_x_label="Ranked cells", palette="Paired", pdf=FALSE, width=1200, height=800, resolution=100){
     tryCatch(
         expr = {
+            palette_colors <- RColorBrewer::brewer.pal(99, palette)  # use 99 to get all available colors. As we added LETTERS, the order will be correct
+            intercept_data <- data %>%
+                              dplyr::select(all_of(color_by), all_of(facet_by)) %>%
+                              distinct() %>%
+                              arrange(all_of(color_by)) %>%
+                              add_column(color=palette_colors[1:nrow(.)],x_left=x_left_intercept)
+
             plot <- ggplot(data, aes_string(x=x_axis, fill=color_by)) +
                     geom_density(alpha=alpha) +
                     xlab(x_label) +
                     ylab(y_label) +
                     guides(fill=guide_legend(legend_title)) +
                     ggtitle(plot_title) +
-                    scale_fill_brewer(palette=palette)
+                    facet_wrap(as.formula(paste("~", facet_by))) +
+                    scale_fill_brewer(palette=palette) +
+                    geom_vline(intercept_data, mapping=aes(xintercept=x_left), color=intercept_data$color, alpha=0.7) +
+                    geom_label_repel(
+                        intercept_data, mapping=aes(x=x_left, y=Inf, label=x_left),
+                        color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
+                        show.legend=FALSE
+                    )
 
-            for (i in 1:length(x_left_intercept)){
-                plot <- plot + geom_vline(xintercept=x_left_intercept[i], color="red")
-            }
             if (!is.null(x_right_intercept)){
-                for (i in 1:length(x_right_intercept)){
-                    plot <- plot + geom_vline(xintercept=x_right_intercept[i], color="green")
-                }
+                intercept_data <- intercept_data %>% add_column(x_right=x_right_intercept)
+                plot <- plot +
+                        geom_vline(intercept_data, mapping=aes(xintercept=x_right), color=intercept_data$color, alpha=0.7) +
+                        geom_label_repel(
+                            intercept_data, mapping=aes(x=x_right, y=Inf, label=x_right),
+                            color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
+                            show.legend=FALSE
+                        )
             }
+
             if (scale_x_log10){ plot <- plot + scale_x_log10() }
             if (scale_y_log10){ plot <- plot + scale_y_log10() }
-            if (!is.null(facet_by)){ plot <- plot + facet_wrap(as.formula(paste("~", facet_by))) }
+
             if (zoom_on_intercept) {
                 zoomed_plot <- ggplot(data, aes_string(x=x_axis, color=color_by)) +
-                               geom_density(show.legend=FALSE, size=1) +
+                               geom_density(show.legend=FALSE, size=2) +
                                xlab(x_label) +
                                ylab(y_label) +
-                               scale_color_brewer(palette=palette)
-                for (i in 1:length(x_left_intercept)){
-                    zoomed_plot <- zoomed_plot + geom_vline(xintercept=x_left_intercept[i], color="red")
-                }
-                if (!is.null(x_right_intercept)) {
+                               scale_color_brewer(palette=palette) +
+                               geom_vline(intercept_data, mapping=aes(xintercept=x_left), color=intercept_data$color, alpha=0.7) +
+                               geom_label_repel(
+                                   intercept_data, mapping=aes(x=x_left, y=Inf, label=x_left),
+                                   color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
+                                   show.legend=FALSE
+                               )
+                if (!is.null(x_right_intercept)){
                     zoomed_plot <- zoomed_plot +
-                                   coord_cartesian(xlim=c(min(x_left_intercept), max(x_right_intercept)))
-                    for (i in 1:length(x_right_intercept)){
-                        zoomed_plot <- zoomed_plot + geom_vline(xintercept=x_right_intercept[i], color="green")
-                    }
+                                   coord_cartesian(xlim=c(min(intercept_data$x_left), max(intercept_data$x_right))) +
+                                   geom_vline(intercept_data, mapping=aes(xintercept=x_right), color=intercept_data$color, alpha=0.7) +
+                                   geom_label_repel(
+                                       intercept_data, mapping=aes(x=x_right, y=Inf, label=x_right),
+                                       color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
+                                       show.legend=FALSE
+                                   )
                 } else {
-                    zoomed_plot <- zoomed_plot + coord_cartesian(xlim=c(NA, max(x_left_intercept)))
+                    zoomed_plot <- zoomed_plot + coord_cartesian(xlim=c(NA, max(intercept_data$x_left)))
                 }
                 if (scale_x_log10){ zoomed_plot <- zoomed_plot + scale_x_log10() }
                 if (scale_y_log10){ zoomed_plot <- zoomed_plot + scale_y_log10() }
                 plot <- plot / zoomed_plot
             }
+
             if (show_ranked) {
                 ranked_plot <- data %>%
                                arrange(get(color_by), get(x_axis)) %>%
@@ -783,17 +880,25 @@ export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_in
                                xlab(ranked_x_label) +
                                ylab(x_label) +
                                scale_y_log10() +
-                               scale_color_brewer(palette=palette)
-                for (i in 1:length(x_left_intercept)){
-                    ranked_plot <- ranked_plot + geom_hline(yintercept=x_left_intercept[i], color="red")
-                }
+                               scale_color_brewer(palette=palette) +
+                               geom_hline(intercept_data, mapping=aes(yintercept=x_left), color=intercept_data$color, alpha=0.7) +
+                               geom_label_repel(
+                                   intercept_data, mapping=aes(x=Inf, y=x_left, label=x_left),
+                                   color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="x", size=3,
+                                   show.legend=FALSE
+                               )
                 if (!is.null(x_right_intercept)){
-                    for (i in 1:length(x_right_intercept)){
-                        ranked_plot <- ranked_plot +  geom_hline(yintercept=x_right_intercept[i], color="green")
-                    }
+                    ranked_plot <- ranked_plot +
+                                   geom_hline(intercept_data, mapping=aes(yintercept=x_right), color=intercept_data$color, alpha=0.7) +
+                                   geom_label_repel(
+                                       intercept_data, mapping=aes(x=-Inf, y=x_right, label=x_right),
+                                       color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="x", size=3,
+                                       show.legend=FALSE
+                                   )
                 }
                 plot <- plot / ranked_plot
             }
+
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             suppressMessages(print(plot))
             dev.off()
@@ -814,9 +919,16 @@ export_geom_density_plot <- function(data, rootname, x_axis, color_by, x_left_in
 }
 
 
-export_geom_point_plot <- function(data, rootname, x_axis, y_axis, x_left_intercept, y_low_intercept, color_by, colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, facet_by=NULL, alpha=0.2, pdf=FALSE, width=1200, height=800, resolution=100){
+export_geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, y_high_intercept, color_by, colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, scale_x_log10=FALSE, scale_y_log10=FALSE, alpha=0.2, palette="Paired", pdf=FALSE, width=1200, height=800, resolution=100){
     tryCatch(
         expr = {
+            palette_colors <- RColorBrewer::brewer.pal(99, palette)  # use 99 to get all available colors. As we added LETTERS, the order will be correct
+            intercept_data <- data %>%
+                              dplyr::select(all_of(facet_by)) %>%
+                              distinct() %>%
+                              arrange(all_of(facet_by)) %>%
+                              add_column(color=palette_colors[1:nrow(.)], x_left=x_left_intercept, y_low=y_low_intercept, y_high=y_high_intercept)
+
             plot <- ggplot(data, aes_string(x=x_axis, y=y_axis, color=color_by)) +
                     geom_point(alpha=alpha) +
                     scale_colour_gradientn(
@@ -829,21 +941,29 @@ export_geom_point_plot <- function(data, rootname, x_axis, y_axis, x_left_interc
                     xlab(x_label) +
                     ylab(y_label) +
                     guides(color=guide_colourbar(legend_title)) +
-                    ggtitle(plot_title)
-            for (i in 1:length(x_left_intercept)){
-                plot <- plot + geom_vline(xintercept=x_left_intercept[i], color="red")
-            }
-            for (i in 1:length(y_low_intercept)){
-                plot <- plot + geom_hline(yintercept=y_low_intercept[i], color="red")
-            }
-            if (!is.null(y_high_intercept)){
-                for (i in 1:length(y_high_intercept)){
-                    plot <- plot + geom_hline(yintercept=y_high_intercept[i], color="green")
-                }
-            }
+                    ggtitle(plot_title) +
+                    facet_wrap(as.formula(paste("~", facet_by))) +
+                    geom_vline(intercept_data, mapping=aes(xintercept=x_left), color=intercept_data$color, alpha=0.5) +
+                    geom_hline(intercept_data, mapping=aes(yintercept=y_low), color=intercept_data$color, alpha=0.5) +
+                    geom_hline(intercept_data, mapping=aes(yintercept=y_high), color=intercept_data$color, alpha=0.5) +
+                    geom_label_repel(
+                        intercept_data, mapping=aes(x=x_left, y=Inf, label=x_left),
+                        color="black", fill=intercept_data$color, alpha=0.5, direction="y", size=3,
+                        show.legend=FALSE
+                    ) +
+                    geom_label_repel(
+                        intercept_data, mapping=aes(x=Inf, y=y_low, label=y_low),
+                        color="black", fill=intercept_data$color, alpha=0.5, direction="x", size=3,
+                        show.legend=FALSE
+                    ) +
+                    geom_label_repel(
+                        intercept_data, mapping=aes(x=Inf, y=y_high, label=y_high),
+                        color="black", fill=intercept_data$color, alpha=0.5, direction="x", size=3,
+                        show.legend=FALSE
+                    )
+
             if (scale_x_log10){ plot <- plot + scale_x_log10() }
             if (scale_y_log10){ plot <- plot + scale_y_log10() }
-            if (!is.null(facet_by)){ plot <- plot + facet_wrap(as.formula(paste("~", facet_by))) }
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             suppressMessages(print(plot))
@@ -927,7 +1047,8 @@ export_dot_plot <- function(data, features, rootname, plot_title, x_label, y_lab
                     xlab(x_label) +
                     ylab(y_label) +
                     theme_gray() +
-                    ggtitle(plot_title)
+                    ggtitle(plot_title) +
+                    RotatedAxis()
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             suppressMessages(print(plot))
@@ -1201,14 +1322,18 @@ export_elbow_plot <- function(data, rootname, plot_title, ndims=NULL, pdf=FALSE,
 
 
 export_all_clustering_plots <- function(seurat_data, suffix, args) {
+    cluster_prefix <- "RNA"
+    if ("integrated" %in% names(seurat_data@assays)) {
+        cluster_prefix <- "integrated"
+    }
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
         export_dim_plot(
             data=seurat_data,
             reduction="umap",
-            plot_title="Clustered UMAP projected PCA of filtered integrated datasets",
+            plot_title="Clustered UMAP projected PCA of filtered integrated/scaled datasets",
             legend_title="Cluster",
-            group_by=paste("integrated_snn_res", current_resolution, sep="."),
+            group_by=paste(paste(cluster_prefix, "snn_res", sep="_"), current_resolution, sep="."),
             label=TRUE,
             rootname=paste(args$output, suffix, "umap_res", current_resolution, sep="_"),
             pdf=args$pdf
@@ -1216,10 +1341,10 @@ export_all_clustering_plots <- function(seurat_data, suffix, args) {
         export_dim_plot(
             data=seurat_data,
             reduction="umap",
-            plot_title="Split by condition clustered UMAP projected PCA of filtered integrated datasets",
+            plot_title="Split by condition clustered UMAP projected PCA of filtered integrated/scaled datasets",
             legend_title="Cluster",
             split_by="condition",
-            group_by=paste("integrated_snn_res", current_resolution, sep="."),
+            group_by=paste(paste(cluster_prefix, "snn_res", sep="_"), current_resolution, sep="."),
             label=TRUE,
             rootname=paste(args$output, suffix, "umap_spl_by_cond_res", current_resolution, sep="_"),
             pdf=args$pdf
@@ -1227,7 +1352,7 @@ export_all_clustering_plots <- function(seurat_data, suffix, args) {
         export_dim_plot(
             data=seurat_data,
             reduction="umap",
-            plot_title="Grouped by predicted cell types UMAP projected PCA of filtered integrated datasets",
+            plot_title="Grouped by predicted cell types UMAP projected PCA of filtered integrated/scaled datasets",
             legend_title="Cell type prediction",
             group_by=paste("cluster_ext_type_res", current_resolution, sep="."),
             label=TRUE,
@@ -1237,21 +1362,21 @@ export_all_clustering_plots <- function(seurat_data, suffix, args) {
         export_dim_plot(
             data=seurat_data,
             reduction="umap",
-            plot_title="Split by cell cycle phase clustered UMAP projected PCA of filtered integrated datasets",
+            plot_title="Split by cell cycle phase clustered UMAP projected PCA of filtered integrated/scaled datasets",
             legend_title="Cluster",
             split_by="Phase",
-            group_by=paste("integrated_snn_res", current_resolution, sep="."),
+            group_by=paste(paste(cluster_prefix, "snn_res", sep="_"), current_resolution, sep="."),
             label=TRUE,
             rootname=paste(args$output, suffix, "umap_spl_by_ph_res", current_resolution, sep="_"),
             pdf=args$pdf
         )
-        Idents(seurat_data) <- paste("integrated_snn_res", current_resolution, sep=".")
+        Idents(seurat_data) <- paste(paste(cluster_prefix, "snn_res", sep="_"), current_resolution, sep=".")
         export_feature_plot(
             data=seurat_data,
             features=c("nCount_RNA", "nFeature_RNA", "S.Score", "G2M.Score", "mito_percentage", "log10_gene_per_log10_umi"),
             labels=c("UMIs", "Genes", "S score", "G to M score", "Mitochondrial %", "Novelty score"),
             reduction="umap",
-            plot_title="QC metrics for clustered UMAP projected PCA of filtered integrated datasets",
+            plot_title="QC metrics for clustered UMAP projected PCA of filtered integrated/scaled datasets",
             label=TRUE,
             alpha=0.4,
             rootname=paste(args$output, suffix, "qc_mtrcs_res", current_resolution, sep="_"),
@@ -1266,13 +1391,17 @@ export_all_clustering_plots <- function(seurat_data, suffix, args) {
 export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") {
     backup_assay <- DefaultAssay(seurat_data)
     DefaultAssay(seurat_data) <- assay
+    cluster_prefix <- "RNA"
+    if ("integrated" %in% names(seurat_data@assays)) {
+        cluster_prefix <- "integrated"
+    }
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
-        Idents(seurat_data) <- paste("integrated_snn_res", current_resolution, sep=".")
+        Idents(seurat_data) <- paste(paste(cluster_prefix, "snn_res", sep="_"), current_resolution, sep=".")
         export_dot_plot(
             data=seurat_data,
             features=args$features,
-            plot_title="Scaled average gene expression per cluster of filtered integrated datasets",
+            plot_title="Scaled average gene expression per cluster of filtered integrated/scaled datasets",
             x_label="Genes",
             y_label="Clusters",
             cluster_idents=FALSE,
@@ -1284,7 +1413,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             features=args$features,
             labels=args$features,
             reduction="umap",
-            plot_title="Log normalized gene expression per cell of clustered filtered integrated datasets",
+            plot_title="Log normalized gene expression per cell of clustered filtered integrated/scaled datasets",
             label=TRUE,
             order=TRUE,
             max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
@@ -1295,7 +1424,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
         export_expr_heatmap(
             data=seurat_data,
             features=args$features,
-            plot_title="Log normalized gene expression heatmap of clustered filtered integrated datasets",
+            plot_title="Log normalized gene expression heatmap of clustered filtered integrated/scaled datasets",
             matrix_slot="data",  # LogNormalized version of the raw counts
             palette=c("black", "orange"),
             rootname=paste(args$output, suffix, "clst_heatmap_res", current_resolution, sep="_"),
@@ -1305,7 +1434,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             data=seurat_data,
             features=args$features,
             labels=args$features,
-            plot_title="Log normalized gene expression densities per cluster of filtered integrated datasets",
+            plot_title="Log normalized gene expression densities per cluster of filtered integrated/scaled datasets",
             legend_title="Cluster",
             log=TRUE,
             pt_size=0,
@@ -1318,7 +1447,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             export_dot_plot(
                 data=seurat_data,
                 features=args$features,
-                plot_title="Scaled average gene expression per predicted cell type of filtered integrated datasets",
+                plot_title="Scaled average gene expression per predicted cell type of filtered integrated/scaled datasets",
                 x_label="Genes",
                 y_label="Cell types",
                 cluster_idents=FALSE,  # no need to cluster cell types together
@@ -1330,10 +1459,10 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
                 features=args$features,
                 labels=args$features,
                 reduction="umap",
-                plot_title="Log normalized gene expression per cell of clustered filtered integrated datasets with predicted cell types",
+                plot_title="Log normalized gene expression per cell of clustered filtered integrated/scaled datasets with predicted cell types",
                 label=TRUE,
                 order=TRUE,
-                max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
+                max_cutoff="q99",  # to prevent cells with overexpressed gene from distorting the color bar
                 rootname=paste(args$output, suffix, "per_ctype_cell_res", current_resolution, sep="_"),
                 combine_guides="keep",
                 pdf=args$pdf
@@ -1341,7 +1470,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             export_expr_heatmap(
                 data=seurat_data,
                 features=args$features,
-                plot_title="Log normalized gene expression heatmap of clustered filtered integrated datasets with predicted cell types",
+                plot_title="Log normalized gene expression heatmap of clustered filtered integrated/scaled datasets with predicted cell types",
                 matrix_slot="data",  # LogNormalized version of the raw counts
                 palette=c("black", "orange"),
                 rootname=paste(args$output, suffix, "ctype_heatmap_res", current_resolution, sep="_"),
@@ -1351,7 +1480,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
                 data=seurat_data,
                 features=args$features,
                 labels=args$features,
-                plot_title="Log normalized gene expression densities per predicted cell type of filtered integrated datasets",
+                plot_title="Log normalized gene expression densities per predicted cell type of filtered integrated/scaled datasets",
                 legend_title="Cell type",
                 log=TRUE,
                 pt_size=0,
@@ -1371,13 +1500,13 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
         data=seurat_data,
         ndims=50,
         rootname=paste(args$output, suffix, "elbow", sep="_"),
-        plot_title="Elbow plot from PCA of filtered integrated datasets",
+        plot_title="Elbow plot from PCA of filtered integrated/scaled datasets",
         pdf=args$pdf
     )
     export_dim_plot(
         data=seurat_data,
         reduction="pca",
-        plot_title="PCA of filtered integrated datasets",
+        plot_title="PCA of filtered integrated/scaled datasets",
         legend_title="Identity",
         rootname=paste(args$output, suffix, "pca", sep="_"),
         palette="Paired",
@@ -1387,7 +1516,7 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
         data=seurat_data,
         dims=1:50,
         rootname=paste(args$output, suffix, "pca_heatmap", sep="_"),
-        plot_title="Genes per cells expression heatmap sorted by their PC scores from PCA of filtered integrated datasets",
+        plot_title="Genes per cells expression heatmap sorted by their PC scores from PCA of filtered integrated/scaled datasets",
         x_label="Cells",
         y_label="Genes",
         cells=500,
@@ -1401,7 +1530,7 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
         data=seurat_data,
         dims=1:50,
         rootname=paste(args$output, suffix, "pca_loadings", sep="_"),
-        plot_title="PC scores of the most variant genes from PCA of filtered integrated datasets",
+        plot_title="PC scores of the most variant genes from PCA of filtered integrated/scaled datasets",
         x_label="PC scores",
         y_label="Genes",
         nfeatures=30,
@@ -1413,7 +1542,7 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
     export_dim_plot(
         data=seurat_data,
         reduction="umap",
-        plot_title="Split by identity UMAP projected PCA of filtered integrated datasets",
+        plot_title="Split by identity UMAP projected PCA of filtered integrated/scaled datasets",
         legend_title="Identity",
         split_by="new.ident",
         rootname=paste(args$output, suffix, "umap_spl_by_idnt", sep="_"),
@@ -1440,6 +1569,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "umi_dnst_spl_by_cond", sep="_"),
         x_axis="nCount_RNA",
         color_by="new.ident",
+        facet_by="condition",
         x_left_intercept=args$minumi,
         x_label="UMIs per cell",
         y_label="Density",
@@ -1447,7 +1577,6 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         plot_title=paste("Split by condition UMI density per cell (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
-        facet_by="condition",
         pdf=args$pdf
     )
     export_geom_density_plot(
@@ -1455,6 +1584,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_dnst_spl_by_cond", sep="_"),
         x_axis="nFeature_RNA",
         color_by="new.ident",
+        facet_by="condition",
         x_left_intercept=args$minfeatures,
         x_right_intercept=args$maxfeatures,
         x_label="Genes per cell",
@@ -1464,7 +1594,6 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         show_ranked=TRUE,
-        facet_by="condition",
         pdf=args$pdf
     )
     export_geom_point_plot(
@@ -1472,6 +1601,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "gene_umi_corr_spl_by_ident", sep="_"),
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
+        facet_by="new.ident",
         x_left_intercept=args$minumi,
         y_low_intercept=args$minfeatures,
         y_high_intercept=args$maxfeatures,
@@ -1485,7 +1615,6 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         plot_title=paste("Split by identity genes vs UMIs per cell correlation (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
-        facet_by="new.ident",
         pdf=args$pdf
     )
     export_geom_density_plot(
@@ -1493,13 +1622,13 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "mito_perc_dnst_spl_by_cond", sep="_"),
         x_axis="mito_percentage",
         color_by="new.ident",
+        facet_by="condition",
         x_left_intercept=args$maxmt,
-        x_label="Mitochondrial gene percentage per cell",
+        x_label="Percentage of transcripts mapped to mitochondrial genes per cell",
         y_label="Density",
         legend_title="Identity",
-        plot_title=paste("Split by condition mitochondrial gene percentage density per cell (", suffix, ")", sep=""),
+        plot_title=paste("Split by condition density of transcripts mapped to mitochondrial genes per cell (", suffix, ")", sep=""),
         zoom_on_intercept=TRUE,
-        facet_by="condition",
         pdf=args$pdf
     )
     export_geom_density_plot(
@@ -1507,13 +1636,13 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "nvlt_score_dnst_spl_by_cond", sep="_"),
         x_axis="log10_gene_per_log10_umi",
         color_by="new.ident",
+        facet_by="condition",
         x_left_intercept=args$minnovelty,
         x_label="log10 Genes / log10 UMIs per cell",
         y_label="Density",
         legend_title="Identity",
         plot_title=paste("Split by condition novelty score density per cell (", suffix, ")", sep=""),
         zoom_on_intercept=TRUE,
-        facet_by="condition",
         pdf=args$pdf
     )
     export_vln_plot(
@@ -1551,22 +1680,34 @@ export_cellbrowser_data <- function(seurat_data, assay, matrix_slot, resolution,
         expr = {
             backup_assay <- DefaultAssay(seurat_data)
             DefaultAssay(seurat_data) <- assay
+            meta_fields <- c("nCount_RNA", "nFeature_RNA", "log10_gene_per_log10_umi", "mito_percentage", "Phase", "S.Score", "G2M.Score")
+            meta_fields_names <- c("UMIs", "Genes", "Novelty score", "Mitochondrial %", "Cell cycle phase", "S score", "G to M score")
+            cluster_field <- paste("Clustering (", resolution, ")", sep="")[1]
+            cluster_prefix <- "RNA"
+            if ("integrated" %in% names(seurat_data@assays)) {
+                cluster_prefix <- "integrated"
+                cluster_field <- "Identity"
+                meta_fields <- c(c("new.ident", "condition"), meta_fields)
+                meta_fields_names <- c(c("Identity", "Condition"), meta_fields_names)
+            }
+            meta_fields <- c(
+                meta_fields,
+                paste(paste(cluster_prefix, "snn_res", sep="_"), resolution, sep="."),
+                paste("cluster_ext_type_res", resolution, sep=".")
+            )
+            meta_fields_names <- c(
+                meta_fields_names,
+                paste("Clustering (", resolution, ")", sep=""),
+                paste("Cell Type Prediction (", resolution, ")", sep="")
+            )
             ExportToCellbrowser(
                 seurat_data,
                 matrix.slot=matrix_slot,
                 dir=rootname,
-                cluster.field="Identity",
+                cluster.field=cluster_field,
                 features=features,
-                meta.fields=c(
-                    c("new.ident", "condition", "nCount_RNA", "nFeature_RNA", "log10_gene_per_log10_umi", "mito_percentage", "Phase", "S.Score", "G2M.Score"),
-                    paste("integrated_snn_res", resolution, sep="."),
-                    paste("cluster_ext_type_res", resolution, sep=".")
-                ),
-                meta.fields.names=c(
-                    c("Identity", "Condition", "UMIs", "Genes", "Novelty score", "Mitochondrial %", "Cell cycle phase", "S score", "G to M score"),
-                    paste("Clustering (", resolution, ")", sep=""),
-                    paste("Cell Type Prediction (", resolution, ")", sep="")
-                )
+                meta.fields=meta_fields,
+                meta.fields.names=meta_fields_names
             )
             print(paste("Export UCSC Cellbrowser data to", rootname, sep=" "))
         },
@@ -1615,39 +1756,228 @@ export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=F
 
 get_args <- function(){
     parser <- ArgumentParser(description='Runs Seurat for comparative scRNA-seq analysis of across experimental conditions')
-    # Import data from Cellranger Aggregate results
-    parser$add_argument("--mex",           help="Path to the folder with not normalized aggregated feature-barcode matrices in MEX format (if multiple locations provided data is assumed to be not aggregated and will be merged)", type="character", required="True", nargs="+")
-    parser$add_argument("--identity",      help="Path to the aggregation CSV file to set the initial cell identity classes", type="character", required="True")
-    parser$add_argument("--condition",     help="Path to the TSV/CSV file to define datasets conditions for grouping. First column - 'library_id' with values from the --identity file, second column 'condition'. Default: each dataset is assigned to its own biological condition", type="character")
-    parser$add_argument("--classifier",    help="Path to the Garnett classifier rds file for cell type prediction. Default: skip cell type prediction", type="character")
-    parser$add_argument("--cellcycle",     help="Path to the TSV/CSV file with cell cycle data. First column - 'phase', second column 'gene_id'. Default: skip cell cycle score assignment", type="character")
-    parser$add_argument("--barcodes",      help="Path to the headerless TSV/CSV file with selected barcodes (one per line) to prefilter input feature-barcode matrices. Default: use all cells", type="character")
+
+    # Import aggregated MEX data from Cell Ranger Aggregate or from multiple Cell Ranger Count runs
+    parser$add_argument(
+        "--mex",
+        help=paste(
+            "Path to the folder with not normalized aggregated feature-barcode matrix",
+            "from Cell Ranger Aggregate in MEX format. If multiple locations provided",
+            "data is assumed to be not aggregated (outputs from multiple Cell Ranger",
+            "Count runs) and will be merged."
+        ),
+        type="character", required="True", nargs="+"
+    )
+    parser$add_argument(
+        "--identity",
+        help=paste(
+            "Path to the metadata TSV/CSV file to set the datasets identities.",
+            "If --mex points to the Cell Ranger Aggregate outputs, the aggregation.csv",
+            "file can be used as well. If multiple locations were provided through --mex,",
+            "the file should include at least one column - 'library_id', and be sorted",
+            "based on the the order of locations provided in --mex."
+        ),
+        type="character", required="True"
+    )
+    parser$add_argument(
+        "--condition",
+        help=paste(
+            "Path to the TSV/CSV file to define datasets grouping. First column -",
+            "'library_id' with the values provided in the correspondent column of the",
+            "--identity file, second column 'condition'. Default: each dataset is",
+            "assigned to a separate group."
+        ),
+        type="character"
+    )
+    parser$add_argument(
+        "--classifier",
+        help=paste(
+            "Path to the Garnett classifier RDS file for cell type prediction.",
+            "Default: skip cell type prediction."
+        ),
+        type="character"
+    )
+    parser$add_argument(
+        "--cellcycle",
+        help=paste(
+            "Path to the TSV/CSV file with cell cycle data. First column - 'phase',",
+            "second column 'gene_id'. Default: skip cell cycle score assignment."
+        ),
+        type="character"
+    )
+    parser$add_argument(
+        "--barcodes",
+        help=paste(
+            "Path to the headerless TSV/CSV file with the list of barcodes to select",
+            "cells of interest (one barcode per line). Prefilters input feature-barcode",
+            "matrix to include only selected cells. Default: use all cells."
+        ),
+        type="character"
+    )
+
     # Apply QC filters
-    parser$add_argument("--mincells",      help="Include features detected in at least this many cells (applied to thoughout all datasets together, ignored when --mex points to multiple locations). Default: 10", type="integer", default=10)
-    parser$add_argument("--minfeatures",   help="Include cells where at least this many features are detected (if multiple values provided each identity will be filtered separately). Default: 250", type="integer", default=250, nargs="*")
-    parser$add_argument("--maxfeatures",   help="Include cells with the number of features not bigger than this value (if multiple values provided each identity will be filtered separately). Default: 5000", type="integer", default=5000, nargs="*")
-    parser$add_argument("--minumi",        help="Include cells where at least this many UMI are detected (if multiple values provided each identity will be filtered separately). Default: 500", type="integer", default=500, nargs="*")
-    parser$add_argument("--minnovelty",    help="Include cells with the novelty score not lower than this value, calculated as log10(genes)/log10(UMIs) (if multiple values provided each identity will be filtered separately). Default: 0.8", type="double", default=0.8, nargs="*")
-    parser$add_argument("--maxmt",         help="Include cells with the mitochondrial contamination percentage not bigger than this value. Default: 5", type="double", default=5)
-    parser$add_argument("--mitopattern",   help="Regex pattern to identify mitochondrial reads. Default: ^Mt-", type="character", default="^Mt-")
-    # Integration, clustering, and cell types and marker genes identification parameters
-    parser$add_argument("--features",      help="Features to explore in the clustered filtered integrated datasets. Default: do not highlight any features", type="character", nargs="*")
-    parser$add_argument("--regresscellcycle", help="Regress cell cycle as a confounding source of variation. Default: false", action="store_true")
-    parser$add_argument("--regressmt",     help="Regress mitochondrial gene expression as a confounding source of variation. Default: false", action="store_true")
-    parser$add_argument("--highvarcount",  help="Number of higly variable features to detect. Default: 3000", type="integer", default=3000)
-    parser$add_argument("--ndim",          help="Number of principal components to use in clustering (1:50). Use Elbow plot to adjust this parameter. Default: 10", type="integer", default=10)
-    parser$add_argument("--resolution",    help="Clustering resolution. Can be set as array. Default: 0.4 0.6 0.8 1.0 1.4", type="double", default=c(0.4, 0.6, 0.8, 1.0, 1.4), nargs="*")
-    parser$add_argument("--logfc",         help="Log fold change threshold for conserved gene markers identification. Default: 0.25", type="double", default=0.25)
-    parser$add_argument("--minpct",        help="Minimum fraction of cells where genes used for conserved gene markers identification should be detected in either of two tested clusters. Default: 0.1", type="double", default=0.1)
-    parser$add_argument("--onlypos",       help="Return only positive markers when running conserved gene markers identification. Default: false", action="store_true")
-    parser$add_argument("--testuse",       help="Set test type to use for putative and conserved gene marker identification. Default: wilcox", type="character", default="wilcox", choices=c("wilcox", "bimod", "roc", "t", "negbinom", "poisson", "LR", "MAST", "DESeq2"))
-    parser$add_argument("--species",       help="Select species for gene name conversion when running cell type prediction with Garnett classifier. Default: do not convert gene names", type="character", choices=names(SPECIES_DATA), default="none")
+    parser$add_argument(
+        "--mincells",
+        help=paste(
+            "Include only features detected in at least this many cells. Applied to",
+            "aggregated feature-barcode matrix from Cell Ranger Aggregate. Ignored",
+            "when --mex points to the locations of multiple Cell Ranger Count runs.",
+            "Default: 5"
+        ),
+        type="integer", default=5
+    )
+    parser$add_argument(                                                                        # array
+        "--minfeatures",
+        help=paste(
+            "Include cells where at least this many features are detected. If multiple",
+            "values provided each of them will be applied to the correspondent dataset",
+            "from the --mex input. Default: 250 (applied to all datasets)"
+        ),
+        type="integer", default=250, nargs="*"
+    )
+    parser$add_argument(                                                                        # array
+        "--maxfeatures",
+        help=paste(
+            "Include cells with the number of features not bigger than this value. If",
+            "multiple values provided each of them will be applied to the correspondent",
+            "dataset from the --mex input. Default: 5000 (applied to all datasets)"
+        ),
+        type="integer", default=5000, nargs="*"
+    )
+    parser$add_argument(                                                                        # array
+        "--minumi",
+        help=paste(
+            "Include cells where at least this many UMIs (transcripts) are detected. If",
+            "multiple values provided each of them will be applied to the correspondent",
+            "dataset from the --mex input. Default: 500 (applied to all datasets)"
+        ),
+        type="integer", default=500, nargs="*"
+    )
+    parser$add_argument(                                                                        # array
+        "--minnovelty",
+        help=paste(
+            "Include cells with the novelty score not lower than this value, calculated as",
+            "log10(genes)/log10(UMIs). If multiple values provided each of them will be",
+            "applied to the correspondent dataset from the --mex input. Default: 0.8 (applied",
+            "to all datasets)"
+        ),
+        type="double", default=0.8, nargs="*"
+    )
+    parser$add_argument(
+        "--maxmt",
+        help=paste(
+            "Include cells with the percentage of transcripts mapped to mitochondrial genes",
+            "not bigger than this value. Default: 5"
+        ),
+        type="double", default=5
+    )
+    parser$add_argument(
+        "--mitopattern",
+        help="Regex pattern to identify mitochondrial genes. Default: '^Mt-'",
+        type="character", default="^Mt-"
+    )
+
+    # Integration, clustering, cell types and marker genes identification parameters
+    parser$add_argument(
+        "--features",
+        help="Features of interest to evaluate expression. Default: None",
+        type="character", nargs="*"
+    )
+    parser$add_argument(
+        "--regresscellcycle",
+        help="Regress cell cycle as a confounding source of variation. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
+        "--regressmt",
+        help=paste(
+            "Regress mitochondrial genes expression as a confounding source of variation.",
+            "Default: false"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--highvarcount",
+        help=paste(
+            "Number of highly variable features to detect. Used for datasets integration,",
+            "scaling, and dimensional reduction. Default: 3000"
+        ),
+        type="integer", default=3000
+    )
+    parser$add_argument(
+        "--ndim",
+        help=paste(
+            "Number of principal components to use in UMAP projection and clustering",
+            "(from 1 to 50). Use Elbow plot to adjust this parameter. Default: 10"
+        ),
+        type="integer", default=10
+    )
+    parser$add_argument(
+        "--resolution",
+        help="Clustering resolution. Can be set as an array. Default: 0.4 0.6 0.8 1.0 1.4",
+        type="double", default=c(0.4, 0.6, 0.8, 1.0, 1.4), nargs="*"
+    )
+    parser$add_argument(
+        "--logfc",
+        help=paste(
+            "Include only those genes that on average have log fold change difference in",
+            "expression between every tested pair of clusters not lower than this value.",
+            "Default: 0.25"
+        ),
+        type="double", default=0.25
+    )
+    parser$add_argument(
+        "--minpct",
+        help=paste(
+            "Include only those features that are detected in not lower than this fraction",
+            "of cells in either of the two tested clusters. Default: 0.1"
+        ),
+        type="double", default=0.1
+    )
+    parser$add_argument(
+        "--onlypos",
+        help="Return only positive markers when running gene markers identification. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
+        "--testuse",
+        help="Statistical test to use for gene markers identification. Default: wilcox",
+        type="character", default="wilcox",
+        choices=c("wilcox", "bimod", "roc", "t", "negbinom", "poisson", "LR", "MAST", "DESeq2")
+    )
+    parser$add_argument(
+        "--species",
+        help=paste(
+            "Select species for gene name conversion when running cell type prediction",
+            "with Garnett classifier. Default: do not convert gene names"
+        ),
+        type="character", choices=names(SPECIES_DATA), default="none"
+    )
+
     # Export results
-    parser$add_argument("--pdf",           help="Export plots in PDF. Default: false", action="store_true")
-    parser$add_argument("--rds",           help="Save Seurat data to RDS file. Default: false", action="store_true")
-    parser$add_argument("--output",        help="Output prefix. Default: ./seurat", type="character", default="./seurat")
+    parser$add_argument(
+        "--pdf",
+        help="Export plots in PDF. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
+        "--rds",
+        help="Save Seurat data to RDS file. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
+        "--output",
+        help="Output prefix. Default: ./seurat",
+        type="character", default="./seurat"
+    )
+
     # Performance parameters
-    parser$add_argument("--threads",       help="Threads. Default: 1", type="integer", default=1)
+    parser$add_argument(
+        "--threads",
+        help="Threads. Default: 1",
+        type="integer", default=1
+    )
+
     args <- parser$parse_args(commandArgs(trailingOnly = TRUE))
     return (args)
 }
@@ -1663,14 +1993,31 @@ set_threads(args$threads)
 
 cat("\n\nStep 1: Loading raw datasets\n")
 
-print(paste("Loading cell identity data from Cellranger aggregation metadata file", args$identity))
-cell_identity_data <- load_cell_identity_data (args$identity)
+print(paste("Loading datasets identity data from", args$identity))
+cell_identity_data <- load_cell_identity_data(args$identity)
 print("Trying to load cell cycle data")
 cell_cycle_data <- load_cell_cycle_data(args$cellcycle)
 print("Trying to load condition data")
 condition_data <- load_condition_data(args$condition, cell_identity_data)
 print("Loading feature-barcode matrices")
 seurat_data <- load_seurat_data(args$mex, args$mincells, cell_identity_data, condition_data)
+
+print("Validating filtering thresholds")
+# if we put it in a function, args will be passed by value
+idents_count <- length(unique(as.vector(as.character(Idents(seurat_data)))))
+for (key in names(args)){
+    if (key %in% c("minfeatures", "maxfeatures", "minumi", "minnovelty")){
+        if (length(args[[key]]) != 1 && length(args[[key]]) != idents_count){
+            print(paste("Filtering parameter", key, "has an ambiguous size. Exiting"))
+            quit(save="no", status=1, runLast=FALSE)
+        }
+        if (length(args[[key]]) == 1){
+            print(paste("Extending filtering parameter", key, "to have a proper size"))
+            args[[key]] <- rep(args[[key]][1], idents_count)
+        }
+    }
+}
+
 print("Trying to load barcodes of interest to prefilter feature-barcode matrices by cells")
 barcodes_data <- load_barcodes_data(args$barcodes, seurat_data)
 print("Prefiltering feature-barcode matrices by cells of interest")
@@ -1691,26 +2038,29 @@ explore_unwanted_variation(seurat_data, cell_cycle_data, args)
 
 cat("\n\nStep 3: Integrating filtered datasets\n")
 
-print("Running dataset integration")
-seurat_data <- integrate_seurat_data(seurat_data, cell_cycle_data, args)                                       # sets "integrated" as a default assay
+print("Running dataset integration/scaling")
+seurat_data <- integrate_seurat_data(seurat_data, cell_cycle_data, args)                                       # sets "integrated" as a default assay for integrated data, and "RNA" for scaled data
 
-cat("\n\nStep 4: Reducing dimensionality of intergrated datasets\n")
+cat("\n\nStep 4: Reducing dimensionality of intergrated/scaled datasets\n")
 
-print("Performing PCA reduction of integrated data. Use all 50 principal components")
-seurat_data <- RunPCA(seurat_data, npcs=50, verbose=FALSE)                                                     # runs on "integrated" assay
-print(paste("Performing UMAP reduction of integrated data using", args$ndim, "principal components"))
-seurat_data <- RunUMAP(seurat_data, reduction="pca", dims=1:args$ndim, verbose=FALSE)                          # runs on "integrated" assay
+print("Performing PCA reduction of integrated/scaled data. Use all 50 principal components")
+seurat_data <- RunPCA(seurat_data, npcs=50, verbose=FALSE)                                                     # runs on "integrated" assay for integrated data, and on "RNA" assay for scaled data
+print(paste("Performing UMAP reduction of integrated/scaled data using", args$ndim, "principal components"))
+seurat_data <- RunUMAP(seurat_data, reduction="pca", dims=1:args$ndim, verbose=FALSE)                          # runs on "integrated" assay for integrated data, and on "RNA" assay for scaled data
 export_all_dimensionality_plots(seurat_data, "ntgr", args)                                                     # <--- ntgr
 
-cat("\n\nStep 5: Clustering and cell type assignment of intergrated datasets with reduced dimensionality\n")
+cat("\n\nStep 5: Clustering and cell type assignment of intergrated/scaled datasets with reduced dimensionality\n")
 
-print(paste("Clustering integrated data using", args$ndim, "principal components"))
-seurat_data <- FindNeighbors(seurat_data, reduction="pca", dims=1:args$ndim, verbose=FALSE)                    # runs on "integrated" assay
+print(paste("Clustering integrated/scaled data using", args$ndim, "principal components"))
+seurat_data <- FindNeighbors(seurat_data, reduction="pca", dims=1:args$ndim, verbose=FALSE)                    # runs on "integrated" assay for integrated data, and on "RNA" assay for scaled data
 seurat_data <- FindClusters(seurat_data, resolution=args$resolution)
 print("Assigning cell types for all clusters and all resolutions using only highly variable genes")
 seurat_data <- assign_cell_types(seurat_data, classifier, "RNA", "counts", args)                               # uses all features from "counts" slot of "RNA" assay
 export_all_clustering_plots(seurat_data, "clst", args)                                                         # <--- clst
-export_all_expression_plots(seurat_data, "expr", args)                                                         # <--- expr
+
+if (!is.null(args$feature)){
+    export_all_expression_plots(seurat_data, "expr", args)                                                     # <--- expr
+}
 
 cat("\n\nStep 6: Identifying gene markers\n")
 
