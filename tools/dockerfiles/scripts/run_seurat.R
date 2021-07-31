@@ -1401,7 +1401,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
         export_dot_plot(
             data=seurat_data,
             features=args$features,
-            plot_title="Scaled average gene expression per cluster of filtered integrated/scaled datasets",
+            plot_title="Scaled average log normalized gene expression per cluster of filtered integrated/scaled datasets",
             x_label="Genes",
             y_label="Clusters",
             cluster_idents=FALSE,
@@ -1447,7 +1447,7 @@ export_all_expression_plots <- function(seurat_data, suffix, args, assay="RNA") 
             export_dot_plot(
                 data=seurat_data,
                 features=args$features,
-                plot_title="Scaled average gene expression per predicted cell type of filtered integrated/scaled datasets",
+                plot_title="Scaled average log normalized gene expression per predicted cell type of filtered integrated/scaled datasets",
                 x_label="Genes",
                 y_label="Cell types",
                 cluster_idents=FALSE,  # no need to cluster cell types together
@@ -2058,26 +2058,26 @@ print("Assigning cell types for all clusters and all resolutions using only high
 seurat_data <- assign_cell_types(seurat_data, classifier, "RNA", "counts", args)                               # uses all features from "counts" slot of "RNA" assay
 export_all_clustering_plots(seurat_data, "clst", args)                                                         # <--- clst
 
-if (!is.null(args$feature)){
-    export_all_expression_plots(seurat_data, "expr", args)                                                     # <--- expr
+cat("\n\nStep 6: Running gene expression analysis\n")
+
+if ("integrated" %in% names(seurat_data@assays)) {                                                             # if we run integration, our counts and data slots in RNA assay remain the same, so we need to normalize counts first
+    print("Normalizing counts in RNA assay")
+    backup_assay <- DefaultAssay(seurat_data)
+    DefaultAssay(seurat_data) <- "RNA"
+    seurat_data <- NormalizeData(seurat_data, verbose=FALSE)
+    DefaultAssay(seurat_data) <- backup_assay
 }
-
-cat("\n\nStep 6: Identifying gene markers\n")
-
+if (args$rds){ export_rds(seurat_data, paste(args$output, "_clst_data.rds", sep="")) }
+if (!is.null(args$feature)){ export_all_expression_plots(seurat_data, "expr", args, assay="RNA") }             # <--- expr
 print("Identifying putative gene markers for all clusters and all resolutions")
 all_putative_markers <- get_all_putative_markers(seurat_data, args)
+export_data(all_putative_markers, paste(args$output, "_clst_pttv_gene_markers.tsv", sep=""))
 print("Identifying conserved gene markers for all clusters and all resolutions")
 all_conserved_markers <- get_all_conserved_markers(seurat_data, args)
-
-cat("\n\nStep 7: Exporting results\n")
-
-print("Exporting putative gene markers")
-export_data(all_putative_markers, paste(args$output, "_clst_pttv_gene_markers.tsv", sep=""))
-print("Exporting conserved gene markers")
 export_data(all_conserved_markers, paste(args$output, "_clst_csrvd_gene_markers.tsv", sep=""))
 print("Exporting UCSC Cellbrowser data")
-export_cellbrowser_data(seurat_data, assay="RNA", matrix_slot="data", resolution=args$resolution, features=args$features, rootname=paste(args$output, "_cellbrowser", sep=""))
-if (args$rds){
-    print("Exporting Seurat object into RDS file")
-    export_rds(seurat_data, paste(args$output, "_clst_data.rds", sep=""))
-}
+export_cellbrowser_data(
+    seurat_data, assay="RNA", matrix_slot="data",
+    resolution=args$resolution, features=args$features,
+    rootname=paste(args$output, "_cellbrowser", sep="")
+)
