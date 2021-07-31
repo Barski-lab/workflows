@@ -2017,7 +2017,14 @@ for (key in names(args)){
         }
     }
 }
-
+if (!is.null(args$features)){
+    print("Check genes of interest to include only those that are present in the datasets")
+    backup_assay <- DefaultAssay(seurat_data)
+    DefaultAssay(seurat_data) <- "RNA"
+    args$features <- args$features[args$features %in% as.vector(as.character(rownames(seurat_data)))]
+    print(args$features)
+    DefaultAssay(seurat_data) <- backup_assay
+}
 print("Trying to load barcodes of interest to prefilter feature-barcode matrices by cells")
 barcodes_data <- load_barcodes_data(args$barcodes, seurat_data)
 print("Prefiltering feature-barcode matrices by cells of interest")
@@ -2068,7 +2075,7 @@ if ("integrated" %in% names(seurat_data@assays)) {                              
     DefaultAssay(seurat_data) <- backup_assay
 }
 if (args$rds){ export_rds(seurat_data, paste(args$output, "_clst_data.rds", sep="")) }
-if (!is.null(args$feature)){ export_all_expression_plots(seurat_data, "expr", args, assay="RNA") }             # <--- expr
+if (!is.null(args$features)){ export_all_expression_plots(seurat_data, "expr", args, assay="RNA") }            # <--- expr
 print("Identifying putative gene markers for all clusters and all resolutions")
 all_putative_markers <- get_all_putative_markers(seurat_data, args)
 export_data(all_putative_markers, paste(args$output, "_clst_pttv_gene_markers.tsv", sep=""))
