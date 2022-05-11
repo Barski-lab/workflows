@@ -13,7 +13,8 @@ export(
     "add_rna_qc_metrics",
     "add_atac_qc_metrics",
     "add_peak_qc_metrics",
-    "quartile_qc_metrics"
+    "quartile_qc_metrics",
+    "add_gene_expr_percentage"
 )
 
 
@@ -131,6 +132,21 @@ add_peak_qc_metrics <- function(seurat_data, blacklist_data, args){
     return (seurat_data)
 }
 
+add_gene_expr_percentage <- function(seurat_data, target_genes){
+    backup_assay <- SeuratObject::DefaultAssay(seurat_data)
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"
+    for (i in 1:length(target_genes)){
+        current_gene <- target_genes[i]
+        seurat_data[[base::paste("perc", current_gene, sep="_")]] <- Seurat::PercentageFeatureSet(
+            seurat_data,
+            pattern=base::paste0("^", current_gene, "$")
+        )
+    }
+    SeuratObject::DefaultAssay(seurat_data) <- backup_assay
+    base::gc(verbose=FALSE)
+    return (seurat_data)
+}
+
 # DEPRECATED as we now use standard Signac::GetTSSPositions function with biotypes=NULL when all gene_biotype are NA
 get_tss_positions <- function(annotation_ranges){
     # Based on GetTSSPositions function from signac/R/utilities.R
@@ -171,7 +187,7 @@ quartile_qc_metrics <- function(seurat_data, features, prefix="quartile"){
                 seurat_data <- SeuratObject::AddMetaData(
                     object=seurat_data,
                     metadata=base::cut(
-                        seurat_data@meta.data[, current_feature], 
+                        seurat_data@meta.data[, current_feature],
                         breaks=c(-Inf, quartiles[1], quartiles[2], quartiles[3], Inf), 
                         labels=c("Low", "Medium", "Medium high", "High")
                     ),

@@ -2,16 +2,22 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.4
+# Software Version: v0.0.5
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.0.6
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.4 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.4
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.4 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.5 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.5
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.5 /bin/bash
 ##########################################################################################################
+#
+# v0.0.5
+# - updated sc_[rna/wnn]_cluster.R script to use densoty plots
+#   from Nebulosa
+# - removed --regressrnaumi from sc_rna_reduce.R
+# - made --regressgenesin sc_rna_reduce.R to use list of genes
 #
 # v0.0.4
 # - add/update scripts
@@ -76,7 +82,7 @@ RUN apt-get update && \
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("tidyverse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("modules", repo = "https://cloud.r-project.org/")' && \
-    R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', 'glmGamPoi'))" && \
+    R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', 'glmGamPoi', 'Nebulosa'))" && \
     R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/")' && \
 ### Installing R scripts

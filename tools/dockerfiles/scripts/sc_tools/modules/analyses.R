@@ -24,8 +24,8 @@ export(
 
 get_vars_to_regress <- function(seurat_data, args, exclude_columns=NULL) {
     vars_to_regress <- NULL
-    arguments <- c(args$regressmt, args$regressrnaumi,  args$regressgenes, args$regresscellcycle)   # any of then can be also NULL
-    metadata_columns <- c("mito_percentage", "nCount_RNA", "nFeature_RNA", "S.Score&G2M.Score")
+    arguments <- c(args$regressmt, args$regresscellcycle)   # any of then can be also NULL
+    metadata_columns <- c("mito_percentage", "S.Score&G2M.Score")
     for (i in 1:length(arguments)) {
         current_argument <- arguments[i]
         current_column <- metadata_columns[i]
@@ -33,10 +33,20 @@ get_vars_to_regress <- function(seurat_data, args, exclude_columns=NULL) {
             next
         }
         current_column <- base::unlist(base::strsplit(metadata_columns[i], "&"))
-        if ( !all(current_column %in% base::colnames(seurat_data@meta.data)) ){                            # the column doesn't exists in metadata
+        if ( !all(current_column %in% base::colnames(seurat_data@meta.data)) ){             # the column doesn't exists in metadata
             next
         }
         if (current_argument) {
+            if (is.null(vars_to_regress)) {
+                vars_to_regress <- current_column
+            } else {
+                vars_to_regress <- base::append(vars_to_regress, current_column)
+            }
+        }
+    }
+    if (!is.null(args$regressgenes) && length(args$regressgenes) > 0){                      # easier to process regressgenes separately
+        for (i in 1:length(args$regressgenes)){
+            current_column <- base::paste("perc", args$regressgenes[i], sep="_")
             if (is.null(vars_to_regress)) {
                 vars_to_regress <- current_column
             } else {

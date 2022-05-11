@@ -227,6 +227,17 @@ export_all_expression_plots <- function(seurat_data, args) {
                     rootname=paste(args$output, "xpr_per_cell_res", current_resolution, current_gene, sep="_"),
                     pdf=args$pdf
                 )
+                graphics$expression_density_plot(
+                    data=seurat_data,
+                    features=current_gene,
+                    reduction="rnaumap",
+                    plot_title=paste("Log normalized gene expression density on cells UMAP. Resolution", current_resolution),
+                    joint=FALSE,
+                    width=800,
+                    height=800,
+                    rootname=paste(args$output, "xpr_per_cell_sgnl_res", current_resolution, current_gene, sep="_"),
+                    pdf=args$pdf
+                )
                 graphics$vln_plot(
                     data=seurat_data,
                     features=current_gene,

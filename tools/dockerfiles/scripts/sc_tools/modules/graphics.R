@@ -9,6 +9,7 @@ import("ggplot2", attach=FALSE)
 import("ggrepel", attach=FALSE)
 import("cluster", attach=FALSE)
 import("reshape2", attach=FALSE)
+import("Nebulosa", attach=FALSE)
 import("patchwork", attach=FALSE)
 import("RColorBrewer", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
@@ -27,6 +28,7 @@ export(
     "pca_plot",
     "dot_plot",
     "feature_plot",
+    "expression_density_plot",
     "dim_heatmap",
     "dim_loadings_plot",
     "silhouette_plot",
@@ -807,6 +809,54 @@ dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, clu
         }
     )
 }
+
+
+expression_density_plot <- function(data, features, rootname, reduction, plot_title, joint=FALSE, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+    base::tryCatch(
+        expr = {
+
+            plots <- Nebulosa::plot_density(
+                        data,
+                        features=features,
+                        reduction=reduction,
+                        joint=joint,              # show joint expression density for all features
+                        combine=FALSE
+                    )
+            if (length(features) == 1){
+                plots <- list(plots)
+                features <- list(features)
+            }
+            if (joint){
+                plots <- list(plots[[length(plots)]])               # get only the joint expression plot
+                features <- base::paste(features, collapse="+")
+            }
+            plots <- base::lapply(seq_along(plots), function(i){
+                plots[[i]] <- plots[[i]] + ggplot2::ggtitle(features[i]) + ggplot2::theme_gray()
+                if (!is.null(alpha)) { plots[[i]]$layers[[1]]$aes_params$alpha <- alpha }
+                return (plots[[i]])
+            })
+
+            combined_plots <- patchwork::wrap_plots(plots, guides="keep") + patchwork::plot_annotation(title=plot_title)
+
+            grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
+            base::suppressMessages(base::print(combined_plots))
+            grDevices::dev.off()
+
+            if (!is.null(pdf) && pdf) {
+                grDevices::pdf(file=base::paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
+                base::suppressMessages(base::print(combined_plots))
+                grDevices::dev.off()
+            }
+
+            base::print(base::paste("Exporting expression density plot to ", rootname, ".(png/pdf)", sep=""))
+        },
+        error = function(e){
+            base::tryCatch(expr={grDevices::dev.off()}, error=function(e){})
+            base::print(base::paste("Failed to export expression density plot to ", rootname, ".(png/pdf) with error - ", e, sep=""))
+        }
+    )
+}
+
 
 feature_plot <- function(data, features, labels, rootname, reduction, plot_title, from_meta=FALSE, split_by=NULL, label=FALSE, order=FALSE, min_cutoff=NA, max_cutoff=NA, pt_size=NULL, combine_guides=NULL, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(

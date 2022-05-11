@@ -298,20 +298,12 @@ get_args <- function(){
         action="store_true"
     )
     parser$add_argument(
-        "--regressrnaumi",
-        help=paste(
-            "Regress UMI per cell counts as a confounding source of variation.",
-            "Default: false"
-        ),
-        action="store_true"
-    )
-    parser$add_argument(
         "--regressgenes",
         help=paste(
-            "Regress genes per cell counts as a confounding source of variation.",
-            "Default: false"
+            "Genes which expression should be regressed as a confounding source of variation.",
+            "Default: None"
         ),
-        action="store_true"
+        type="character", nargs="*"
     )
     parser$add_argument(
         "--regresscellcycle",
@@ -485,6 +477,21 @@ barcodes_data <- io$load_barcodes_data(args$barcodes, seurat_data)
 print("Applying cell filters based on the loaded barcodes of interest")
 seurat_data <- filter$apply_cell_filters(seurat_data, barcodes_data)
 debug$print_info(seurat_data, args)
+
+if (!is.null(args$regressgenes)){
+    print("Adjusting genes to be regressed to include only those that are present in the loaded Seurat object")
+    args$regressgenes <- unique(args$regressgenes)
+    args$regressgenes <- args$regressgenes[args$regressgenes %in% as.vector(as.character(rownames(seurat_data)))]     # with RNA assay set as default the rownames should be genes
+    print(args$regressgenes)
+    if (!is.null(args$regressgenes) && length(args$regressgenes) > 0){
+        print("Calculating the percentage of transcripts mapped to the genes that should be regressed out")
+        seurat_data <- qc$add_gene_expr_percentage(
+            seurat_data=seurat_data,
+            target_genes=args$regressgenes
+        )
+        debug$print_info(seurat_data, args)
+    }
+}
 
 print("Running RNA analysis")
 seurat_data <- analyses$rna_analyze(seurat_data, args, cell_cycle_data)   # adds "pca" and "rnaumap" reductions
