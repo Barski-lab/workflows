@@ -74,7 +74,7 @@ COPY ./scripts/sc_tools/modules/*.R /usr/local/bin/modules/
 RUN apt-get update && \
     apt-get install libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev \
                     libssl-dev pandoc libudunits2-dev libgdal-dev libcairo2-dev libharfbuzz-dev \
-                    libfribidi-dev libbz2-dev -y && \
+                    libfribidi-dev libbz2-dev tk -y && \
     pip3 install scipy numpy && \
     pip3 install cellbrowser==${CB_VERSION} && \
     pip3 install -U numba && \
