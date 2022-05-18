@@ -12,7 +12,7 @@ requirements:
       Experiment
 - class: EnvVarRequirement
   envDef:
-    R_MAX_VSIZE: $(inputs.vector_memory_limit * 1000000000)
+    R_MAX_VSIZE: $((inputs.vector_memory_limit * 1000000000).toString())
 
 
 hints:
