@@ -14,7 +14,8 @@ export(
     "export_data",
     "export_rds",
     "load_cell_identity_data",
-    "extend_metadata",
+    # "extend_metadata_by_barcode",
+    "extend_metadata_by_cluster",
     "load_grouping_data",
     "load_blacklist_data",
     "assign_identities",
@@ -134,37 +135,57 @@ load_cell_identity_data <- function(location) {
     return (cell_identity_data)
 }
 
-extend_metadata <- function(seurat_data, location){
-    base::tryCatch(
-        expr = {
-            extra_metadata <- utils::read.table(
-                location,
-                sep=get_file_type(location),
-                header=TRUE,
-                check.names=FALSE,
-                stringsAsFactors=FALSE
-            )
-            base::print(base::paste("Extra metadata is successfully loaded from ", location))
-            refactored_metadata <- base::data.frame(SeuratObject::Cells(seurat_data)) %>%      # create a dataframe with only one column
-                                   dplyr::rename("barcode"=1) %>%                        # rename that column to barcode
-                                   dplyr::left_join(extra_metadata, by="barcode") %>%    # intersect with loaded extra metadata by "barcode"
-                                   tibble::remove_rownames() %>%
-                                   tibble::column_to_rownames("barcode") %>%
-                                   replace(is.na(.), "Unknown") %>%             # in case an extra metadata had less barcodes than we had in our Seurat object
-                                   dplyr::rename_with(~base::paste0("custom_", .x))          # add prefix to all extra metadata columns
-            seurat_data <- SeuratObject::AddMetaData(
-                seurat_data,
-                refactored_metadata[Cells(seurat_data), , drop=FALSE]           # to guarantee the proper cells order
-            )
-        },
-        error = function(e){
-            base::print(base::paste("Failed to add extra cells metadata due to", e))
-        },
-        finally = {
-            return (seurat_data)
-        }
+extend_metadata_by_cluster <- function(seurat_data, location, source_column, target_column){
+    metadata <- utils::read.table(
+        location,
+        sep=get_file_type(location),
+        header=TRUE,
+        check.names=FALSE,
+        stringsAsFactors=FALSE
     )
+    base::print(base::paste("Extra metadata is successfully loaded from", location))
+    metadata_clusters <- base::as.vector(as.character(metadata$cluster))
+    seurat_data_clusters <- base::as.vector(as.character(seurat_data@meta.data[, source_column]))
+    if (!all(base::sort(metadata_clusters) == base::sort(base::unique(seurat_data_clusters)))){
+        base::print("Extra metadata file is malformed. Exiting.")
+        base::quit(save="no", status=1, runLast=FALSE)
+    }
+    seurat_data[[target_column]] <- metadata$type[base::match(seurat_data_clusters, metadata_clusters)]
+    base::rm(metadata, metadata_clusters, seurat_data_clusters)
+    return (seurat_data)
 }
+
+# extend_metadata_by_barcode <- function(seurat_data, location){
+#     base::tryCatch(
+#         expr = {
+#             extra_metadata <- utils::read.table(
+#                 location,
+#                 sep=get_file_type(location),
+#                 header=TRUE,
+#                 check.names=FALSE,
+#                 stringsAsFactors=FALSE
+#             )
+#             base::print(base::paste("Extra metadata is successfully loaded from ", location))
+#             refactored_metadata <- base::data.frame(SeuratObject::Cells(seurat_data)) %>%      # create a dataframe with only one column
+#                                    dplyr::rename("barcode"=1) %>%                        # rename that column to barcode
+#                                    dplyr::left_join(extra_metadata, by="barcode") %>%    # intersect with loaded extra metadata by "barcode"
+#                                    tibble::remove_rownames() %>%
+#                                    tibble::column_to_rownames("barcode") %>%
+#                                    replace(is.na(.), "Unknown") %>%             # in case an extra metadata had less barcodes than we had in our Seurat object
+#                                    dplyr::rename_with(~base::paste0("custom_", .x))          # add prefix to all extra metadata columns
+#             seurat_data <- SeuratObject::AddMetaData(
+#                 seurat_data,
+#                 refactored_metadata[Cells(seurat_data), , drop=FALSE]           # to guarantee the proper cells order
+#             )
+#         },
+#         error = function(e){
+#             base::print(base::paste("Failed to add extra cells metadata due to", e))
+#         },
+#         finally = {
+#             return (seurat_data)
+#         }
+#     )
+# }
 
 load_grouping_data <- function(location, cell_identity_data) {
     default_grouping_data <- base::data.frame(

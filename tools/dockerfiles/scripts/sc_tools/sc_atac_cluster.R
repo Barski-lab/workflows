@@ -146,7 +146,7 @@ export_all_clustering_plots <- function(seurat_data, args){
 }
 
 
-export_all_coverage_plots <- function(seurat_data, show_expression, args) {
+export_all_coverage_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                                          # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                                           # safety measure
 
@@ -170,11 +170,11 @@ export_all_coverage_plots <- function(seurat_data, show_expression, args) {
                     "Tn5 insertion frequency plot around", current_gene, "gene.",
                     "Resolution", current_resolution
                 ),
-                idents=NULL,                                                   # to include all values from the default "new.ident" column
-                cells=colnames(seurat_data),                                   # limit to only those cells that are in out seurat_data
-                features=if(show_expression) current_gene else NULL,           # otherwise will fail if features are set but RNA assay is not present
+                idents=NULL,                                                               # to include all values from the default "new.ident" column
+                cells=colnames(seurat_data),                                               # limit to only those cells that are in out seurat_data
+                features=if("RNA" %in% names(seurat_data@assays)) current_gene else NULL,  # will fail if features are provided without "RNA" assay
                 expression_assay="RNA",
-                expression_slot="data",                                        # use scaled counts
+                expression_slot="data",                                                    # use scaled counts
                 extend_upstream=2500,
                 extend_downstream=2500,
                 show_annotation=TRUE,
@@ -416,17 +416,14 @@ if(args$cbbuild){
 }
 
 if (!is.null(args$genes) && !is.null(args$fragments)){
-    show_expression <- FALSE
     if ("RNA" %in% names(seurat_data@assays)){
         print("Normalizing counts in RNA assay to show average gene expression alongside the coverage plots")
         DefaultAssay(seurat_data) <- "RNA"                         # for now we will always use RNA even if SCT can be present
         seurat_data <- NormalizeData(seurat_data, verbose=FALSE)
         DefaultAssay(seurat_data) <- "ATAC"                        # safety measure
-        show_expression <- TRUE
     }
     export_all_coverage_plots(
         seurat_data=seurat_data,
-        show_expression=show_expression,
         args=args
     )
 }
