@@ -3,6 +3,7 @@ import("Signac")
 
 export(
     "apply_cell_filters",
+    "apply_metadata_filters",
     "apply_rna_qc_filters",
     "apply_atac_qc_filters",
     "apply_peak_qc_filters",
@@ -54,6 +55,21 @@ collapse_fragments_list <- function(seurat_data){
 apply_cell_filters <- function(seurat_data, barcodes_data) {
     filtered_seurat_data <- base::subset(seurat_data, cells=barcodes_data)
     return (filtered_seurat_data)
+}
+
+apply_metadata_filters <- function(seurat_data, target_column, target_values){
+    base::print(
+        base::paste(
+            "Include only", base::paste(target_values, collapse=", "),
+            "values from the", target_column, "metadata column."
+        )
+    )
+    base::print(base::paste("Cells before filtering", base::nrow(seurat_data@meta.data)))
+    SeuratObject::Idents(seurat_data) <- target_column
+    seurat_data <- base::subset(seurat_data, idents=target_values)
+    SeuratObject::Idents(seurat_data) <- "new.ident"
+    base::print(base::paste("Cells after filtering", base::nrow(seurat_data@meta.data)))
+    return (seurat_data)
 }
 
 apply_rna_qc_filters <- function(seurat_data, cell_identity_data, args) {

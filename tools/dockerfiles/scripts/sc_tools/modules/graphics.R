@@ -13,6 +13,7 @@ import("Nebulosa", attach=FALSE)
 import("patchwork", attach=FALSE)
 import("RColorBrewer", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
+import("EnhancedVolcano", attach=FALSE)
 
 export(
     "geom_bar_plot",
@@ -34,6 +35,8 @@ export(
     "silhouette_plot",
     "composition_plot",
     "coverage_plot",
+    "volcano_plot",
+    "feature_heatmap",
     "D40_COLORS"
 )
 
@@ -308,7 +311,7 @@ feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_labe
     )
 }
 
-vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, split_by=NULL, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -337,6 +340,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
                          features=features_corrected,
                          pt.size=pt_size,
                          group.by=group_by,
+                         split.by=split_by,
                          log=log,
                          combine=FALSE       # to return a list of gglots
                      )
@@ -374,14 +378,24 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
     )
 }
 
-dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_by=NULL, group_by=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
+            highlight_cells <- NULL
+            if (!is.null(group_by) && !is.null(highlight_group)){
+                SeuratObject::Idents(data) <- group_by
+                highlight_cells <- SeuratObject::WhichCells(
+                    data,
+                    idents=highlight_group                               # highlight_group can be also set as a vector
+                )
+                SeuratObject::Idents(data) <- "new.ident"                # need to set back to our default identity
+            }
             plot <- Seurat::DimPlot(
                         data,
                         reduction=reduction,
                         split.by=split_by,
                         group.by=group_by,
+                        cells.highlight=if(is.null(highlight_cells)) NULL else list(Selected=highlight_cells),  # need to use this trick because ifelse doesn't return NULL, 'Selected' is just a name to display on the plot
                         label=label,
                         label.color=label_color,
                         label.size=label_size
@@ -726,7 +740,7 @@ fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=
     )
 }
 
-pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by="label", label_size=5, pt_size=8, pt_shape=19, alpha=0.75, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=1200, resolution=100){
+pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by="label", label_size=5, pt_size=8, pt_shape=19, alpha=0.75, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             x_score_column <- base::paste0("PC", pcs[1])
@@ -881,7 +895,27 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
                     }
                 }
             }
-
+            if (!is.null(split_by)){
+                labels_corrected <- rep(      # if splitting, need to repeat labels so we don't display NA
+                    labels_corrected,
+                    each=length(
+                        base::unique(
+                            base::as.vector(as.character(data@meta.data[, split_by]))
+                        )
+                    )
+                )
+                # avoiding bug of different scales when using split.by https://github.com/satijalab/seurat/issues/5243
+                # current fix works only when features_corrected includes only one gene
+                if(length(features_corrected) == 1){                 # length of string is always 1
+                    feature_expr_data <- SeuratObject::FetchData(
+                        object=data,
+                        vars=features_corrected,
+                        slot="data"                                  # this is the default slot for FeaturePlot
+                    )
+                    min_feature_value <- min(feature_expr_data)
+                    max_feature_value <- max(feature_expr_data)
+                }
+            }
             plots <- Seurat::FeaturePlot(
                         data,
                         features=features_corrected,
@@ -897,6 +931,13 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
             plots <- base::lapply(seq_along(plots), function(i){
                 plots[[i]] <- plots[[i]] + ggplot2::ggtitle(labels_corrected[i]) + ggplot2::theme_gray()
                 if (!is.null(alpha)) { plots[[i]]$layers[[1]]$aes_params$alpha <- alpha }
+                if (!is.null(split_by) && (length(features_corrected) == 1)){                # applying bug fix - redefining gradient limits
+                    plots[[i]] <- plots[[i]] +
+                                  ggplot2::scale_color_gradientn(
+                                      colors=c("lightgrey", "blue"),
+                                      limits=c(min_feature_value, max_feature_value)
+                                  )
+                }
                 return (plots[[i]])
             })
             combined_plots <- patchwork::wrap_plots(plots, guides=combine_guides) + patchwork::plot_annotation(title=plot_title)
@@ -1041,6 +1082,89 @@ coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, i
         error = function(e){
             base::tryCatch(expr={grDevices::dev.off()}, error=function(e){})
             base::print(base::paste("Failed to export genome coverage plot to ", rootname, ".(png/pdf) with error - ", e, sep=""))
+        }
+    )
+}
+
+volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_label, y_label, plot_title, plot_subtitle, caption, features=NULL, label_column="gene", pdf=FALSE, width=1200, height=800, resolution=100){
+    base::tryCatch(
+        expr = {
+            plot <- EnhancedVolcano::EnhancedVolcano(
+                        data,
+                        x=x_axis,
+                        y=y_axis,
+                        lab=data[,label_column],
+                        FCcutoff=x_cutoff,
+                        pCutoff=y_cutoff,
+                        xlab=x_label,
+                        ylab=y_label,
+                        selectLab=features,
+                        title=plot_title,
+                        subtitle=plot_subtitle,
+                        caption=caption,
+                        labSize=4,
+                        labFace="bold",
+                        labCol="red4",
+                        colAlpha=0.6,
+                        col=c("grey30", "forestgreen", "royalblue", "red"),
+                        drawConnectors=TRUE,
+                        widthConnectors=0.75
+                    ) +
+                    ggplot2::scale_y_log10() +
+                    ggplot2::theme_gray() +
+                    ggplot2::theme(legend.position="none", plot.subtitle=ggplot2::element_text(size=8, face="italic", color="gray30"))
+
+            grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
+            base::suppressMessages(base::print(plot))
+            grDevices::dev.off()
+
+            if (pdf) {
+                grDevices::pdf(file=base::paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
+                base::suppressMessages(base::print(plot))
+                grDevices::dev.off()
+            }
+
+            base::print(base::paste("Export volcano plot to ", rootname, ".(png/pdf)", sep=""))
+        },
+        error = function(e){
+            base::tryCatch(expr={grDevices::dev.off()}, error=function(e){})
+            base::print(base::paste("Failed to export volcano plot to ", rootname, ".(png/pdf) with error - ", e, sep=""))
+        }
+    )
+}
+
+feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", slot="scale.data", cells=NULL, group_by="ident", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+    base::tryCatch(
+        expr = {
+            plot <- Seurat::DoHeatmap(
+                        data,
+                        features=features,
+                        cells=cells,
+                        assay=assay,
+                        slot=slot,
+                        group.by=group_by,
+                        group.colors=palette_colors,
+                        label=TRUE,
+                        combine=TRUE
+                    ) +
+                    ggplot2::ggtitle(plot_title) +
+                    ggplot2::scale_color_manual(values=palette_colors)
+
+            grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
+            base::suppressMessages(base::print(plot))
+            grDevices::dev.off()
+
+            if (!is.null(pdf) && pdf) {
+                grDevices::pdf(file=base::paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
+                base::suppressMessages(base::print(plot))
+                grDevices::dev.off()
+            }
+
+            base::print(base::paste("Exporting feature expression heatmap to ", rootname, ".(png/pdf)", sep=""))
+        },
+        error = function(e){
+            base::tryCatch(expr={grDevices::dev.off()}, error=function(e){})
+            base::print(base::paste("Failed to export feature expression  heatmap to ", rootname, ".(png/pdf) with error - ", e, sep=""))
         }
     )
 }

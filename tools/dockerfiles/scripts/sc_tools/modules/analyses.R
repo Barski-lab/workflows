@@ -1,9 +1,13 @@
 import("dplyr", attach=FALSE)
+import("limma", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
+import("DESeq2", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
+import("S4Vectors", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
+import("SummarizedExperiment", attach=FALSE)
 
 export(
     "rna_analyze",
@@ -19,7 +23,10 @@ export(
     "get_putative_markers",
     "atac_preprocess",
     "atac_analyze",
-    "add_wnn_clusters"
+    "add_wnn_clusters",
+    "rna_de_analyze",
+    "get_de_sample_data",
+    "get_aggregated_expession"
 )
 
 get_vars_to_regress <- function(seurat_data, args, exclude_columns=NULL) {
@@ -704,4 +711,152 @@ atac_analyze <- function(seurat_data, args){
         verbose=FALSE
     )
     return (seurat_data)
+}
+
+get_aggregated_expession <- function(seurat_data, group_by, selected_genes=NULL, slot="counts"){
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"        # safety measure
+    SeuratObject::Idents(seurat_data) <- group_by           # will be used by AggregateExpression because by default it's called with group.by="ident"
+    aggregated_seurat_data <- Seurat::AggregateExpression(
+        seurat_data,
+        assays="RNA",                                       # need only RNA assay
+        slot=slot,                                          # for slot="counts" no exponentiation is performed prior to aggregating
+        features=selected_genes,                            # if NULL use all genes
+        return.seurat=TRUE,                                 # summed values are saved in "counts", log-normalized - in "data", and scaled - in "scale.data"
+        verbose=FALSE
+    )
+    SeuratObject::Idents(seurat_data) <- "new.ident"
+    return (aggregated_seurat_data)
+}
+
+get_de_sample_data <- function(seurat_data, samples_order, args){
+    sample_data <- seurat_data@meta.data %>%
+                   dplyr::select(
+                       new.ident,
+                       tidyselect::all_of(args$splitby),
+                       tidyselect::any_of(args$batchby)                                           # use any_of(args$batchby) because it can be NULL
+                   ) %>%
+                   dplyr::distinct() %>%
+                   dplyr::mutate(new.ident=base::factor(new.ident, levels=samples_order)) %>%     # setting levels for new.ident from samples_order
+                   dplyr::arrange(new.ident) %>%                                                  # sorting by levels defined from samples_order
+                   tibble::remove_rownames() %>%
+                   tibble::column_to_rownames("new.ident") %>%
+                   dplyr::mutate_at(colnames(.), base::factor)                                    # DEseq prefers factors
+    sample_data[[args$splitby]] <- stats::relevel(sample_data[[args$splitby]], args$first)        # relevel to have args$first as a base for DESeq comparison
+    base::print(sample_data)
+    return (sample_data)
+}
+
+rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"                                # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                                # safety measure
+    base::print(base::paste("Aggregating gene expression per sample"))
+    selected_genes <- base::as.vector(as.character(base::rownames(seurat_data)))    # all available genes
+    if (!is.null(excluded_genes) && length(excluded_genes) > 0){
+        base::print(base::paste("Excluding", length(excluded_genes), "genes"))
+        selected_genes <- selected_genes[!(selected_genes %in% excluded_genes)]
+    }
+    aggregated_seurat_data <- get_aggregated_expession(
+        seurat_data,
+        group_by="new.ident",                                                       # aggregating by sample
+        selected_genes=selected_genes,
+        slot="counts"                                                               # use not normalized counts
+    )
+    raw_counts <- SeuratObject::GetAssayData(                                       # dgCMatrix
+        aggregated_seurat_data,
+        assay="RNA",                                                                # set assay in case GetAssayData won't take the default value
+        slot="counts"                                                               # we need not normalized counts
+    )
+    sample_data <- get_de_sample_data(                                              # rows will be sorted by columns from raw_counts
+        seurat_data=seurat_data,
+        samples_order=base::unname(raw_counts@Dimnames[[2]]),                       # column names from dgCMatrix
+        args=args
+    )
+    design_formula <- stats::as.formula(
+        base::paste0(
+            "~",
+            base::ifelse(
+                is.null(args$batchby),
+                "",
+                base::paste0(args$batchby, "+")
+            ),
+            args$splitby                                                            # safer to have the condition of interest on the last position
+        )
+    )
+    deseq_data <- DESeq2::DESeqDataSetFromMatrix(
+        countData=raw_counts,
+        colData=sample_data,
+        design=design_formula
+    )
+    if (args$lrt){
+        reduced_formula <- stats::as.formula("~1")
+        if(!is.null(args$batchby)){
+            reduced_formula <- stats::as.formula(base::paste0("~", args$batchby))
+        }
+        base::print(                                                               # see this post for details https://support.bioconductor.org/p/95493/#95572
+            base::paste(
+                "Using LRT test with the design formula", base::paste(design_formula, collapse=" "),
+                "and the reduced formula", base::paste(reduced_formula, collapse=" "),
+                "to calculate p-values."
+            )
+        )
+        deseq_data <- DESeq2::DESeq(
+            deseq_data,
+            test="LRT",
+            reduced=reduced_formula,
+            quiet=TRUE,
+            parallel=TRUE
+        )
+    } else {
+        base::print(
+            base::paste(
+                "Using Wald test with the design formula", base::paste(design_formula, collapse=" "),
+                "to calculate p-values."
+            )
+        )
+        deseq_data <- DESeq2::DESeq(
+            deseq_data,
+            quiet=TRUE,
+            parallel=TRUE
+        )
+    }
+    base::print(DESeq2::resultsNames(deseq_data))
+    de_genes <- DESeq2::results(
+        deseq_data,
+        contrast=c(args$splitby, args$second, args$first),            # we are interested in seconds vs first fold change values
+        alpha=base::ifelse(is.null(args$alpha), 0.1, args$alpha),     # recommended to set to our FDR threshold https://master.bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html
+        parallel=TRUE
+    )
+    base::print(S4Vectors::mcols(de_genes))
+    de_genes <- base::as.data.frame(de_genes) %>%
+                stats::na.omit() %>%                           # exclude all rows where NA is found in any column. See http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#pvaluesNA
+                tibble::rownames_to_column(var="gene")
+    base::print(
+        base::paste(
+            "Number of DE genes after excluding 'NA':", base::nrow(de_genes)
+        )
+    )
+
+    vsd <- DESeq2::vst(deseq_data)
+    vst_counts <- SummarizedExperiment::assay(vsd)[de_genes$gene, ]
+    if(!is.null(args$batchby)){
+        base::print("Removing batch effect from the vst normalized counts")
+        vst_counts <- limma::removeBatchEffect(
+            vst_counts,
+            batch=vsd[[args$batchby]],
+            design=stats::model.matrix(stats::as.formula(base::paste("~",args$splitby)), sample_data)  # should include only splitby
+        )[de_genes$gene, ]
+    }
+    base::print("VST normalized counts data for DE genes")
+    base::print(utils::head(vst_counts))
+
+    base::rm(raw_counts, aggregated_seurat_data, selected_genes, vsd)                       # remove unused data
+    base::gc(verbose=FALSE)
+    return (
+        list(
+            de_genes=de_genes,
+            de_data=deseq_data,
+            sample_data=sample_data,  # return sample_data even if we can get the same as colData(de_data)
+            vst_counts=vst_counts     # with remove by limma batch effect if args$batchby was provided
+        )
+    )
 }

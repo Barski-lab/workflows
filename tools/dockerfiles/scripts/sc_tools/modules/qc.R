@@ -3,6 +3,7 @@ import("purrr", attach=FALSE)
 import("tidyr", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
+import("tibble", attach=FALSE)
 import("data.table", attach=FALSE)
 import("bestNormalize", attach=FALSE)
 import("GenomicRanges", attach=FALSE)
@@ -10,6 +11,7 @@ import("magrittr", `%>%`, attach=TRUE)
 
 export(
     "qc_metrics_pca",
+    "counts_pca",
     "add_rna_qc_metrics",
     "add_atac_qc_metrics",
     "add_peak_qc_metrics",
@@ -65,6 +67,30 @@ qc_metrics_pca <- function(seurat_data, qc_columns, qc_labels, orq_transform=FAL
         },
         error = function(e){
             base::print(base::paste("Failed to compute PCA for QC metrics due to", e))
+        }
+    )
+}
+
+counts_pca <- function(counts_data){
+    base::tryCatch(
+        expr = {
+            base::print("Computing PCA for counts data")
+            target_data <- base::as.data.frame(counts_data) %>%
+                           tidyr::drop_na() %>%
+                           dplyr::filter_all(dplyr::all_vars(!is.infinite(.))) %>%
+                           dplyr::filter_all(dplyr::any_vars(. != 0))                       # remove rows with only zeros, otherwise prcomp fails
+            pca_raw <- stats::prcomp(
+                base::t(target_data),
+                center=TRUE,
+                scale.=TRUE
+            )
+            pca_scores <- base::as.data.frame(pca_raw$x) %>%
+                          tibble::rownames_to_column(var="group")
+            pca_variance <- round(pca_raw$sdev / sum(pca_raw$sdev) * 100, 2)
+            return (list(scores=pca_scores, variance=pca_variance))
+        },
+        error = function(e){
+            base::print(base::paste("Failed to compute PCA for counts data due to", e))
         }
     )
 }

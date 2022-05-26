@@ -321,7 +321,7 @@ get_args <- function(){
         "--celltypes",
         help=paste(
             "Path to the TSV/CSV file for manual cell type assignment for each of the clusters.",
-            "First column - 'cluster', second column 'type'."
+            "First column - 'cluster', second column may have arbitrary name."
         ),
         type="character", required="True"
     )
@@ -443,7 +443,13 @@ if (!any(c("RNA", "ATAC") %in% names(seurat_data@assays))){
     quit(save="no", status=1, runLast=FALSE)
 }
 
-seurat_data <- io$extend_metadata_by_cluster(seurat_data, args$celltypes, args$source, args$target)
+seurat_data <- io$extend_metadata(
+    seurat_data=seurat_data,
+    location=args$celltypes,
+    seurat_ref_column=args$source,
+    meta_ref_column="cluster",
+    seurat_target_columns=args$target
+)
 debug$print_info(seurat_data, args)
 
 if ( (!is.null(args$fragments)) && ("ATAC" %in% names(seurat_data@assays)) ){
