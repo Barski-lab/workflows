@@ -109,8 +109,9 @@ export_all_clustering_plots <- function(seurat_data, args){
             group_by=args$target,
             split_by="new.ident",
             x_label="Dataset",
-            y_label="Cells percentage",
+            y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
+            bar_position="dodge",
             rootname=paste(args$output, "cmp_gr_ctyp_spl_idnt", sep="_"),
             pdf=args$pdf
         )
@@ -124,8 +125,9 @@ export_all_clustering_plots <- function(seurat_data, args){
             group_by="new.ident",
             split_by=args$target,
             x_label="Cell type",
-            y_label="Cells percentage",
+            y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
+            bar_position="dodge",
             rootname=paste(args$output, "cmp_gr_idnt_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
@@ -140,8 +142,9 @@ export_all_clustering_plots <- function(seurat_data, args){
                 group_by="Phase",
                 split_by="new.ident",
                 x_label="Dataset",
-                y_label="Cells percentage",
+                y_label="Cells counts",
                 palette_colors=graphics$D40_COLORS,
+                bar_position="dodge",
                 rootname=paste(args$output, "cmp_gr_ph_spl_idnt", sep="_"),
                 pdf=args$pdf
             )
@@ -159,8 +162,9 @@ export_all_clustering_plots <- function(seurat_data, args){
             group_by=args$target,
             split_by="condition",
             x_label="Condition",
-            y_label="Cells percentage",
+            y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
+            bar_position="dodge",
             rootname=paste(args$output, "cmp_gr_ctyp_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -174,8 +178,9 @@ export_all_clustering_plots <- function(seurat_data, args){
             group_by="condition",
             split_by=args$target,
             x_label="Cell type",
-            y_label="Cells percentage",
+            y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
+            bar_position="dodge",
             rootname=paste(args$output, "cmp_gr_cnd_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
@@ -192,8 +197,9 @@ export_all_clustering_plots <- function(seurat_data, args){
             group_by="Phase",
             split_by=args$target,
             x_label="Cell type",
-            y_label="Cells percentage",
+            y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
+            bar_position="dodge",
             rootname=paste(args$output, "cmp_gr_ph_spl_ctyp", sep="_"),
             pdf=args$pdf
         )

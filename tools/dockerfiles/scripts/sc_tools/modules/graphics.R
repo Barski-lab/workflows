@@ -533,7 +533,10 @@ silhouette_plot <- function(data, rootname, plot_title, legend_title, group_by, 
     )
 }
 
-composition_plot <- function(data, rootname, plot_title, legend_title, x_label, y_label, split_by, group_by, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+composition_plot <- function(data, rootname, plot_title, legend_title, x_label, y_label, split_by, group_by, bar_position="fill", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+    # bar_position can be one of the following
+    #   fill  - stacked, percents are diplayed (default)
+    #   dodge - grouped, values are displayed
     base::tryCatch(
         expr = {
             counts_data <- data@meta.data %>%
@@ -554,21 +557,22 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
                     dplyr::select(-c("total_counts")) %>%                                               # removes "total_counts" column
                     reshape2::melt(id.vars=split_by) %>%                                                # creates "variable" and "value" columns
                     ggplot2::ggplot(ggplot2::aes_string(x=split_by, y="value")) +
-                    ggplot2::geom_bar(ggplot2::aes(fill=variable), position="fill", stat="identity") +
+                    ggplot2::geom_bar(ggplot2::aes(fill=variable), position=bar_position, stat="identity") +
                     ggrepel::geom_label_repel(
                         label_data, mapping=ggplot2::aes_string(x=split_by, y="-Inf", label="n"),
                         color="black", fill="white", segment.colour=NA,
                         direction="y", size=3, show.legend=FALSE
                     ) +
                     ggplot2::scale_fill_manual(values=palette_colors) +
-                    ggplot2::scale_y_continuous(labels=scales::percent_format(), expand=c(0.01, 0)) +
                     ggplot2::xlab(x_label) +
                     ggplot2::ylab(y_label) +
                     ggplot2::theme_gray() +
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::guides(fill=ggplot2::guide_legend(legend_title)) +
                     Seurat::RotatedAxis()
-
+            if (bar_position == "fill"){
+                plot <- plot + ggplot2::scale_y_continuous(labels=scales::percent_format(), expand=c(0.01, 0))
+            }
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))
             grDevices::dev.off()
