@@ -17,7 +17,6 @@ suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R"))
 suppressMessages(io <- modules::use(file.path(HERE, "modules/io.R")))
 suppressMessages(qc <- modules::use(file.path(HERE, "modules/qc.R")))
 suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
-suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 
 export_raw_plots <- function(seurat_data, args){
