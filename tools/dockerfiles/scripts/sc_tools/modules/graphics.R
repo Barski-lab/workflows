@@ -378,7 +378,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
     )
 }
 
-dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             highlight_cells <- NULL
@@ -395,6 +395,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_
                         reduction=reduction,
                         split.by=split_by,
                         group.by=group_by,
+                        label.box=label_box,
                         cells.highlight=if(is.null(highlight_cells)) NULL else list(Selected=highlight_cells),  # need to use this trick because ifelse doesn't return NULL, 'Selected' is just a name to display on the plot
                         label=label,
                         label.color=label_color,
@@ -404,7 +405,11 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::guides(color=ggplot2::guide_legend(legend_title, override.aes=list(size=3)))
 
-            if (!is.null(palette_colors)){ plot <- plot + ggplot2::scale_color_manual(values=palette_colors) }
+            if (!is.null(palette_colors)){
+                plot <- plot +
+                        ggplot2::scale_color_manual(values=palette_colors) +
+                        ggplot2::scale_fill_manual(values=palette_colors)     # need it for proper label box background
+            }
             if (!is.null(alpha)) { plot$layers[[1]]$aes_params$alpha <- alpha }
 
             if(!is.null(perc_split_by) && !is.null(perc_group_by)){

@@ -163,7 +163,9 @@ extend_metadata <- function(seurat_data, location, seurat_ref_column, meta_ref_c
         current_meta_source_column <- meta_source_columns[i]
         current_seurat_target_column <- seurat_target_columns[i]
         base::print(base::paste("Adding", current_meta_source_column, "as", current_seurat_target_column, "column"))
-        seurat_data[[current_seurat_target_column]] <- metadata[[current_meta_source_column]][base::match(seurat_ref_values, meta_ref_values)]
+        seurat_data[[current_seurat_target_column]] <- base::as.factor(                                  # need as.factor, otherwise the order on the plots might be mismatched
+            metadata[[current_meta_source_column]][base::match(seurat_ref_values, meta_ref_values)]
+        )
     }
     base::rm(metadata, seurat_ref_values, meta_ref_values)
     return (seurat_data)
