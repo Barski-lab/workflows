@@ -2,16 +2,20 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.7
+# Software Version: v0.0.8
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.0.6
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.7 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.7
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.7 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.8 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.8
+# Run Cmd:          docker run --rm -ti c:v0.0.8 /bin/bash
 ##########################################################################################################
+#
+# v0.0.8
+# - rename sc_de_pseudobulk.R to sc_rna_de_pseudobulk.R
+#   added more UMAPs to plot
 #
 # v0.0.7
 # - added sc_de_pseudobulk.R script for pseudobulk DE analysis
@@ -77,7 +81,7 @@ COPY ./scripts/sc_tools/sc_rna_cluster.R /usr/local/bin/sc_rna_cluster.R
 COPY ./scripts/sc_tools/sc_atac_cluster.R /usr/local/bin/sc_atac_cluster.R
 COPY ./scripts/sc_tools/sc_wnn_cluster.R /usr/local/bin/sc_wnn_cluster.R
 COPY ./scripts/sc_tools/sc_ctype_assign.R /usr/local/bin/sc_ctype_assign.R
-COPY ./scripts/sc_tools/sc_de_pseudobulk.R /usr/local/bin/sc_de_pseudobulk.R
+COPY ./scripts/sc_tools/sc_rna_de_pseudobulk.R /usr/local/bin/sc_rna_de_pseudobulk.R
 COPY ./scripts/sc_tools/modules/*.R /usr/local/bin/modules/
 
 ### Installing dependencies
@@ -104,7 +108,7 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_atac_cluster.R && \
     chmod +x /usr/local/bin/sc_wnn_cluster.R && \
     chmod +x /usr/local/bin/sc_ctype_assign.R && \
-    chmod +x /usr/local/bin/sc_de_pseudobulk.R && \
+    chmod +x /usr/local/bin/sc_rna_de_pseudobulk.R && \
 ### Cleaning
     apt-get clean && \
     apt-get purge && \

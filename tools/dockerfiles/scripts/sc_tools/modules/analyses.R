@@ -1,5 +1,6 @@
 import("dplyr", attach=FALSE)
 import("limma", attach=FALSE)
+# import("DAseq", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("DESeq2", attach=FALSE)
@@ -25,6 +26,7 @@ export(
     "atac_analyze",
     "add_wnn_clusters",
     "rna_de_analyze",
+    # "da_analyze",
     "get_de_sample_data",
     "get_aggregated_expession"
 )
@@ -860,3 +862,37 @@ rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
         )
     )
 }
+
+# da_analyze <- function(seurat_data, args){
+#     SeuratObject::Idents(seurat_data) <- "new.ident"                                        # safety measure
+#     base::print("Defining experimental design")
+#     idents <- base::as.vector(as.character(SeuratObject::Idents(seurat_data)))
+#     sample_data <- get_de_sample_data(
+#         seurat_data=seurat_data,
+#         samples_order=unique(idents),                                                       # we don't really care about idents order here
+#         args=args
+#     )
+#     first_group <- base::as.vector(as.character(rownames(sample_data[sample_data[[args$splitby]] == args$first, , drop=FALSE])))
+#     second_group <- base::as.vector(as.character(rownames(sample_data[sample_data[[args$splitby]] == args$second, , drop=FALSE])))
+#     base::print(base::paste("First group of cells identities:", base::paste(first_group, collapse=", ")))
+#     base::print(base::paste("Second group of cells identities:", base::paste(second_group, collapse=", ")))
+#     embeddings <- SeuratObject::Embeddings(
+#         seurat_data,
+#         reduction=args$reduction
+#     )
+#     embeddings <- embeddings[, args$dimensions]                 # subset to only specific dimensions if provided
+#     base::print("Selected embeddings")
+#     base::print(utils::head(embeddings))
+#     da_cells <- DAseq::getDAcells(
+#         X=embeddings,
+#         cell.labels=idents,
+#         labels.1=first_group,
+#         labels.2=second_group,
+#         k.vector=args$knn,
+#         do.plot=FALSE
+#     )
+#     seurat_data[[base::paste("custom_", args$splitby, args$second, "vs", args$first, sep="_")]] <- da_cells$da.pred
+#     base::rm(idents, sample_data, first_group, second_group, embeddings, da_cells)         # remove unused data
+#     base::gc(verbose=FALSE)
+#     return (seurat_data)
+# }

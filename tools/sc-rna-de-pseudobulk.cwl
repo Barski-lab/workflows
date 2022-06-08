@@ -11,7 +11,7 @@ requirements:
 
 hints:
 - class: DockerRequirement
-  dockerPull: biowardrobe2/sc-tools:v0.0.7
+  dockerPull: biowardrobe2/sc-tools:v0.0.8
 
 
 inputs:
@@ -22,8 +22,8 @@ inputs:
       prefix: "--query"
     doc: |
       Path to the RDS file to load Seurat object from. This file should include genes
-      expression information stored in the RNA assay. Certain plots require 'rnaumap'
-      dimensionality reduction to be present.
+      expression information stored in the RNA assay. Additionally, 'rnaumap', and/or
+      'atacumap', and/or 'wnnumap' dimensionality reductions should be present.
 
   datasets_metadata:
     type: File?
@@ -199,22 +199,64 @@ inputs:
 
 outputs:
 
-  umap_plot_png:
+  umap_rd_rnaumap_plot_png:
     type: File?
     outputBinding:
-      glob: "*_umap.png"
+      glob: "*_umap_rd_rnaumap.png"
     doc: |
       Cells UMAP split by selected biological condition, optionally
-      subsetted to the specific cluster or cell type.
+      subsetted to the specific cluster or cell type (rnaumap dim.
+      reduction).
       PNG format
 
-  umap_plot_pdf:
+  umap_rd_rnaumap_plot_pdf:
     type: File?
     outputBinding:
-      glob: "*_umap.pdf"
+      glob: "*_umap_rd_rnaumap.pdf"
     doc: |
       Cells UMAP split by selected biological condition, optionally
-      subsetted to the specific cluster or cell type.
+      subsetted to the specific cluster or cell type (rnaumap dim.
+      reduction).
+      PDF format
+
+  umap_rd_atacumap_plot_png:
+    type: File?
+    outputBinding:
+      glob: "*_umap_rd_atacumap.png"
+    doc: |
+      Cells UMAP split by selected biological condition, optionally
+      subsetted to the specific cluster or cell type (atacumap dim.
+      reduction).
+      PNG format
+
+  umap_rd_atacumap_plot_pdf:
+    type: File?
+    outputBinding:
+      glob: "*_umap_rd_atacumap.pdf"
+    doc: |
+      Cells UMAP split by selected biological condition, optionally
+      subsetted to the specific cluster or cell type (atacumap dim.
+      reduction).
+      PDF format
+
+  umap_rd_wnnumap_plot_png:
+    type: File?
+    outputBinding:
+      glob: "*_umap_rd_wnnumap.png"
+    doc: |
+      Cells UMAP split by selected biological condition, optionally
+      subsetted to the specific cluster or cell type (wnnumap dim.
+      reduction).
+      PNG format
+
+  umap_rd_wnnumap_plot_pdf:
+    type: File?
+    outputBinding:
+      glob: "*_umap_rd_wnnumap.pdf"
+    doc: |
+      Cells UMAP split by selected biological condition, optionally
+      subsetted to the specific cluster or cell type (wnnumap dim.
+      reduction).
       PDF format
 
   vst_pca_1_2_plot_png:
@@ -301,28 +343,76 @@ outputs:
       specific cluster or cell type.
       PDF format
 
-  xpr_per_cell_plot_png:
+  xpr_per_cell_rd_rnaumap_plot_png:
     type:
     - "null"
     - type: array
       items: File
     outputBinding:
-      glob: "*_xpr_per_cell_*.png"
+      glob: "*_xpr_per_cell_rd_rnaumap_*.png"
     doc: |
       Log normalized gene expression on cells UMAP per dataset optionally subsetted
-      to the specific cluster or cell type.
+      to the specific cluster or cell type (rnaumap dim. reduction).
       PNG format
 
-  xpr_per_cell_plot_pdf:
+  xpr_per_cell_rd_rnaumap_plot_pdf:
     type:
     - "null"
     - type: array
       items: File
     outputBinding:
-      glob: "*_xpr_per_cell_*.pdf"
+      glob: "*_xpr_per_cell_rd_rnaumap_*.pdf"
     doc: |
       Log normalized gene expression on cells UMAP per dataset optionally subsetted
-      to the specific cluster or cell type.
+      to the specific cluster or cell type (rnaumap dim. reduction).
+      PDF format
+
+  xpr_per_cell_rd_atacumap_plot_png:
+    type:
+    - "null"
+    - type: array
+      items: File
+    outputBinding:
+      glob: "*_xpr_per_cell_rd_atacumap_*.png"
+    doc: |
+      Log normalized gene expression on cells UMAP per dataset optionally subsetted
+      to the specific cluster or cell type (atacumap dim. reduction).
+      PNG format
+
+  xpr_per_cell_rd_atacumap_plot_pdf:
+    type:
+    - "null"
+    - type: array
+      items: File
+    outputBinding:
+      glob: "*_xpr_per_cell_rd_atacumap_*.pdf"
+    doc: |
+      Log normalized gene expression on cells UMAP per dataset optionally subsetted
+      to the specific cluster or cell type (atacumap dim. reduction).
+      PDF format
+
+  xpr_per_cell_rd_wnnumap_plot_png:
+    type:
+    - "null"
+    - type: array
+      items: File
+    outputBinding:
+      glob: "*_xpr_per_cell_rd_wnnumap_*.png"
+    doc: |
+      Log normalized gene expression on cells UMAP per dataset optionally subsetted
+      to the specific cluster or cell type (wnnumap dim. reduction).
+      PNG format
+
+  xpr_per_cell_rd_wnnumap_plot_pdf:
+    type:
+    - "null"
+    - type: array
+      items: File
+    outputBinding:
+      glob: "*_xpr_per_cell_rd_wnnumap_*.pdf"
+    doc: |
+      Log normalized gene expression on cells UMAP per dataset optionally subsetted
+      to the specific cluster or cell type (wnnumap dim. reduction).
       PDF format
 
   xpr_htmp_plot_png:
@@ -375,10 +465,10 @@ outputs:
     type: stderr
 
 
-baseCommand: ["sc_de_pseudobulk.R"]
+baseCommand: ["sc_rna_de_pseudobulk.R"]
 
-stdout: sc_de_pseudobulk_stdout.log
-stderr: sc_de_pseudobulk_stderr.log
+stdout: sc_rna_de_pseudobulk_stdout.log
+stderr: sc_rna_de_pseudobulk_stderr.log
 
 
 $namespaces:
@@ -392,7 +482,7 @@ label: "Single-cell Pseudobulk Differential Expression Analysis"
 s:name: "Single-cell Pseudobulk Differential Expression Analysis"
 s:alternateName: "Identifies differentially expressed genes between groups of cells coerced to pseudobulk datasets"
 
-s:downloadUrl: https://raw.githubusercontent.com/Barski-lab/workflows/master/tools/sc-de-pseudobulk.cwl
+s:downloadUrl: https://raw.githubusercontent.com/Barski-lab/workflows/master/tools/sc-rna-de-pseudobulk.cwl
 s:codeRepository: https://github.com/Barski-lab/workflows
 s:license: http://www.apache.org/licenses/LICENSE-2.0
 
@@ -435,7 +525,7 @@ doc: |
 
 
 s:about: |
-  usage: sc_de_pseudobulk.R
+  usage: sc_rna_de_pseudobulk.R
         [-h] --query QUERY [--metadata METADATA] --splitby SPLITBY --first
         FIRST --second SECOND [--batchby BATCHBY] [--groupby GROUPBY]
         [--subset [SUBSET ...]] [--lrt] [--alpha ALPHA] [--genes [GENES ...]]
@@ -448,8 +538,9 @@ s:about: |
     -h, --help            show this help message and exit
     --query QUERY         Path to the RDS file to load Seurat object from. This
                           file should include genes expression information
-                          stored in the RNA assay. Certain plots require
-                          'rnaumap' dimensionality reduction to be present.
+                          stored in the RNA assay. Additionally, 'rnaumap',
+                          and/or 'atacumap', and/or 'wnnumap' dimensionality
+                          reductions should be present.
     --metadata METADATA   Path to the TSV/CSV file to optionally extend Seurat
                           object metadata with categorical values using samples
                           identities. First column - 'library_id' should

@@ -881,7 +881,7 @@ expression_density_plot <- function(data, features, rootname, reduction, plot_ti
 }
 
 
-feature_plot <- function(data, features, labels, rootname, reduction, plot_title, from_meta=FALSE, split_by=NULL, label=FALSE, order=FALSE, min_cutoff=NA, max_cutoff=NA, pt_size=NULL, combine_guides=NULL, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+feature_plot <- function(data, features, labels, rootname, reduction, plot_title, from_meta=FALSE, split_by=NULL, label=FALSE, order=FALSE, gradient_colors=c("lightgrey", "blue"), min_cutoff=NA, max_cutoff=NA, pt_size=NULL, combine_guides=NULL, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -930,6 +930,7 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
                         features=features_corrected,
                         pt.size=pt_size,
                         order=order,
+                        cols=gradient_colors,
                         min.cutoff=min_cutoff,
                         max.cutoff=max_cutoff,
                         reduction=reduction,
