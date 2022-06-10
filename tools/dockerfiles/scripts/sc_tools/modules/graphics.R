@@ -378,7 +378,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
     )
 }
 
-dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=NULL, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             highlight_cells <- NULL
@@ -393,6 +393,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, split_
             plot <- Seurat::DimPlot(
                         data,
                         reduction=reduction,
+                        cells=cells,
                         split.by=split_by,
                         group.by=group_by,
                         label.box=label_box,
