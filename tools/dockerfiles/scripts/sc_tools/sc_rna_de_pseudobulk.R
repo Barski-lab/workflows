@@ -472,14 +472,17 @@ if (!is.null(args$genes) && length(args$genes) > 0){
     print(args$genes)
 }
 
-print("Extending Seurat object with the extra metadata fields")
-seurat_data <- io$extend_metadata(
-    seurat_data=seurat_data,
-    location=args$metadata,
-    seurat_ref_column="new.ident",
-    meta_ref_column="library_id"
-)
-debug$print_info(seurat_data, args)
+if (!is.null(args$metadata)){
+    print("Extending Seurat object with the extra metadata fields")
+    seurat_data <- io$extend_metadata(
+        seurat_data=seurat_data,
+        location=args$metadata,
+        seurat_ref_column="new.ident",
+        meta_ref_column="library_id"
+    )
+    debug$print_info(seurat_data, args)
+}
+
 export_raw_plots(seurat_data, args)
 
 print("Filtering Seurat object to include only selected groups of cells")
