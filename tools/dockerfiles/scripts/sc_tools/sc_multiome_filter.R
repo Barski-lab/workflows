@@ -800,6 +800,11 @@ get_args <- function(){
         action="store_true"
     )
     parser$add_argument(
+        "--h5ad",
+        help="Save Seurat data to h5ad file. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
         "--lowmem",
         help=paste(
             "Attempts to minimize RAM usage when integrating multiple datasets",
@@ -968,4 +973,9 @@ io$export_rds(seurat_data, paste(args$output, "_data.rds", sep=""))
 if(args$h5seurat){
     print("Exporting results to h5seurat file")
     io$export_h5seurat(seurat_data, paste(args$output, "_data.h5seurat", sep=""))
+}
+
+if(args$h5ad){
+    print("Exporting results to h5ad file")
+    io$export_h5ad(seurat_data, paste(args$output, "_data.h5ad", sep=""))
 }

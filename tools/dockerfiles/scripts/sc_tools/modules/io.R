@@ -3,6 +3,7 @@ import("purrr", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("tibble", attach=FALSE)
+import("sceasy", attach=FALSE)
 import("SeuratDisk", attach=FALSE)
 import("rtracklayer", attach=FALSE)
 import("GenomicRanges", attach=FALSE)
@@ -23,6 +24,7 @@ export(
     "load_10x_multiome_data",
     "load_10x_rna_data",
     "export_h5seurat",
+    "export_h5ad",
     "load_cell_cycle_data",
     "replace_fragments"
 )
@@ -118,6 +120,18 @@ export_h5seurat <- function(data, location, overwrite=TRUE){
         },
         error = function(e){
             base::print(base::paste("Failed to export data as h5seurat to", location, sep=" "))
+        }
+    )
+}
+
+export_h5ad <- function(data, location){
+    base::tryCatch(
+        expr = {
+            sceasy::convertFormat(data, from="seurat", to="anndata", outFile=location)
+            base::print(base::paste("Exporting data as h5ad to", location, sep=" "))
+        },
+        error = function(e){
+            base::print(base::paste("Failed to export data as h5ad to", location, sep=" "))
         }
     )
 }

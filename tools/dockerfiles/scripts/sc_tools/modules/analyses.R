@@ -1,6 +1,6 @@
 import("dplyr", attach=FALSE)
 import("limma", attach=FALSE)
-# import("DAseq", attach=FALSE)
+import("DAseq", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("DESeq2", attach=FALSE)
@@ -26,7 +26,7 @@ export(
     "atac_analyze",
     "add_wnn_clusters",
     "rna_de_analyze",
-    # "da_analyze",
+    "da_analyze",
     "get_de_sample_data",
     "get_aggregated_expession"
 )
@@ -863,36 +863,86 @@ rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
     )
 }
 
-# da_analyze <- function(seurat_data, args){
-#     SeuratObject::Idents(seurat_data) <- "new.ident"                                        # safety measure
-#     base::print("Defining experimental design")
-#     idents <- base::as.vector(as.character(SeuratObject::Idents(seurat_data)))
-#     sample_data <- get_de_sample_data(
-#         seurat_data=seurat_data,
-#         samples_order=unique(idents),                                                       # we don't really care about idents order here
-#         args=args
-#     )
-#     first_group <- base::as.vector(as.character(rownames(sample_data[sample_data[[args$splitby]] == args$first, , drop=FALSE])))
-#     second_group <- base::as.vector(as.character(rownames(sample_data[sample_data[[args$splitby]] == args$second, , drop=FALSE])))
-#     base::print(base::paste("First group of cells identities:", base::paste(first_group, collapse=", ")))
-#     base::print(base::paste("Second group of cells identities:", base::paste(second_group, collapse=", ")))
-#     embeddings <- SeuratObject::Embeddings(
-#         seurat_data,
-#         reduction=args$reduction
-#     )
-#     embeddings <- embeddings[, args$dimensions]                 # subset to only specific dimensions if provided
-#     base::print("Selected embeddings")
-#     base::print(utils::head(embeddings))
-#     da_cells <- DAseq::getDAcells(
-#         X=embeddings,
-#         cell.labels=idents,
-#         labels.1=first_group,
-#         labels.2=second_group,
-#         k.vector=args$knn,
-#         do.plot=FALSE
-#     )
-#     seurat_data[[base::paste("custom_", args$splitby, args$second, "vs", args$first, sep="_")]] <- da_cells$da.pred
-#     base::rm(idents, sample_data, first_group, second_group, embeddings, da_cells)         # remove unused data
-#     base::gc(verbose=FALSE)
-#     return (seurat_data)
-# }
+da_analyze <- function(seurat_data, args){
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"                                # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                                # safety measure
+    base::print("Defining experimental design")
+    idents <- base::as.vector(as.character(SeuratObject::Idents(seurat_data)))
+    sample_data <- get_de_sample_data(
+        seurat_data=seurat_data,
+        samples_order=unique(idents),                                               # we don't really care about idents order here
+        args=args
+    )
+    first_group <- base::as.vector(
+        as.character(
+            rownames(sample_data[sample_data[[args$splitby]] == args$first, , drop=FALSE])
+        )
+    )
+    second_group <- base::as.vector(
+        as.character(
+            rownames(sample_data[sample_data[[args$splitby]] == args$second, , drop=FALSE])
+        )
+    )
+    base::print(
+        base::paste(
+            "First group of cells identities:", base::paste(first_group, collapse=", ")
+        )
+    )
+    base::print(
+        base::paste(
+            "Second group of cells identities:", base::paste(second_group, collapse=", ")
+        )
+    )
+    embeddings <- SeuratObject::Embeddings(
+        seurat_data,
+        reduction=args$reduction
+    )
+    embeddings <- embeddings[, args$dimensions]   # subset to specific dimensions
+    base::print("Selected embeddings")
+    base::print(utils::head(embeddings))
+
+    da_cells <- DAseq::getDAcells(
+        X=embeddings,
+        cell.labels=idents,
+        labels.1=first_group,
+        labels.2=second_group,
+        pred.thres=args$ranges,                   # if NULL, will be calculated automatically
+        k.vector=args$knn,                        # if NULL, will be calculated based on the cells number
+        n.runs=5,                                 # the same as default value
+        n.rand=5,                                 # instead of default 2
+        do.plot=TRUE                              # will save only rand.plot
+    )
+
+    # DA-seq computes for each cell a score based on the relative prevalence of cells from both biological
+    # states in the cell’s neighborhood. DA score measures of how much a cell’s neighborhood is dominated
+    # by cells from one of the biological states
+    da_sufix <- base::paste0(args$second, "_vs_", args$first)
+    seurat_data[[base::paste("custom", "da_score", da_sufix, sep="_")]] <- da_cells$da.pred
+
+    for (i in 1:length(args$resolution)) {
+        current_resolution <- args$resolution[i]
+        base::print(base::paste("Identifying DA subpopulations using resolution", current_resolution))
+        # DA-seq clusters the cells whose DA measure is above or below a certain threshold
+        da_regions <- DAseq::getDAregion(
+            X=embeddings,
+            da.cells=da_cells,
+            cell.labels=idents,
+            labels.1=first_group,
+            labels.2=second_group,
+            resolution=current_resolution
+        )
+        seurat_data[[base::paste0("da_", da_sufix, "_res.", current_resolution)]] <- da_regions$da.region.label
+        base::print(da_regions$DA.stat)
+        base::rm(da_regions)
+    }
+
+    base::rm(idents, sample_data, first_group, second_group, embeddings)         # remove unused data
+    base::gc(verbose=FALSE)
+    return (
+        list(
+            seurat_data=seurat_data,
+            da_cells=da_cells,
+            thresholds=c(max(unlist(da_cells$rand.pred)), min(unlist(da_cells$rand.pred)))
+        )
+    )
+}
