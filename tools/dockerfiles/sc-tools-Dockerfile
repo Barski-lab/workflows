@@ -105,9 +105,9 @@ RUN apt-get update && \
     R -e 'install.packages("modules", repo = "https://cloud.r-project.org/")' && \
     R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', 'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment'))" && \
     R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/")' && \
-    R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/")' && \
     R -e 'devtools::install_github("cellgeni/sceasy")' && \
     R -e 'devtools::install_github("KlugerLab/DAseq")' && \
+    R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/")' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
     chmod +x /usr/local/bin/sc_multiome_filter.R && \
