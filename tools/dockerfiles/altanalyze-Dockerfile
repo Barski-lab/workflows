@@ -2,28 +2,37 @@
 # Dockerfile
 #
 # Software:         AltAnalyze
-# Software Version: v0.0.6
+# Software Version: v0.0.7
 # Description:      An automated cross-platform workflow for
 #                   RNA-Seq gene, splicing and pathway analysis
 # Website:          http://www.altanalyze.org
-# Provides:         AltAnalyze (ef5eb90215ea0d40327d8d92380abfcde19ab98e)
+# Provides:         AltAnalyze (64f77a77fb3c947bd5eaaaf759bfac2ab0a1b498)
 # Base Image:       python:2.7
-# Build Cmd:        docker build --rm -t biowardrobe2/altanalyze:v0.0.6 -f altanalyze-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/altanalyze:v0.0.6
-# Run Cmd:          docker run --rm -ti biowardrobe2/altanalyze:v0.0.6 /bin/bash
+# Build Cmd:        docker build --rm -t biowardrobe2/altanalyze:v0.0.7 -f altanalyze-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/altanalyze:v0.0.7
+# Run Cmd:          docker run --rm -ti biowardrobe2/altanalyze:v0.0.7 /bin/bash
+#################################################################
+#
+# v0.0.7
+# - Update AltAnalyze to the latest version
+# - Change BiocManager version to 1.30.18
+# - Install Hs and Mm genomes
+# - Do not install monocle
+# - Change maintainer to myself
+#
 #################################################################
 
 
 FROM python:2.7
-LABEL maintainer="haysb91@gmail.com"
+LABEL maintainer="misha.kotliar@gmail.com"
 ENV DEBIAN_FRONTEND noninteractive
 
 WORKDIR /tmp
 
-ENV ALTA_VERSION "77957cd1a59ace5d8a144ce517c8013b4081640e"
+ENV ALTA_VERSION "64f77a77fb3c947bd5eaaaf759bfac2ab0a1b498"
 ENV ALTA_URL "https://github.com/nsalomonis/altanalyze.git"
 
-ENV BIOC_VERSION 1.30.16
+ENV BIOC_VERSION 1.30.18
 ENV BIOC_URL "https://cran.r-project.org/src/contrib/BiocManager_${BIOC_VERSION}.tar.gz"
 
 COPY ./requirements/altanalyze_requirements.txt altanalyze_requirements.txt
@@ -32,12 +41,11 @@ COPY ./scripts/install_from_source.R /tmp/install_from_source.R
 
 ### Installing Ubuntu packages
 RUN apt-get update && \
-    apt-get install -y libcairo2-dev pkg-config r-base && \
+    apt-get install -y libcairo2-dev pkg-config r-base vim && \
 ### Installing Python packages
     pip install -r altanalyze_requirements.txt && \
 ### Installing R packages
     Rscript /tmp/install_from_source.R "${BIOC_URL}" && \
-    R -e "BiocManager::install(c('monocle'))" && \
     R -e "BiocManager::install(c('affy'))" && \
     R -e "BiocManager::install(c('gcrma'))" && \
     R -e "BiocManager::install(c('sva'))" && \
@@ -50,6 +58,9 @@ RUN apt-get update && \
     cd altanalyze && \
     git checkout ${ALTA_VERSION} && \
     rm -rf .git && \
+### Installing set of commonly used genomes
+    python AltAnalyze.py --species Hs --update Official --version EnsMart100 --additional all && \
+    python AltAnalyze.py --species Mm --update Official --version EnsMart72 --additional all && \
 ### Cleaning
     apt-get clean && \
     apt-get purge && \
