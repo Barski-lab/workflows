@@ -488,7 +488,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: merged.fastq
       size: 15415
 
 - job: ./extract-fastq-2.json
@@ -496,7 +496,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: results.fastq
       size: 15415
 
 - job: ./extract-fastq-3.json
@@ -504,7 +504,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: merged.fastq
       size: 15415
 
 - job: ./extract-fastq-4.json
@@ -512,7 +512,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: merged.fastq
       size: 15415
 
 - job: ./extract-fastq-5.json
@@ -520,7 +520,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: merged.fastq
       size: 15415
 
 - job: ./extract-fastq-6.json
@@ -528,7 +528,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream.fastq
+      location: merged.fastq
       size: 15415
 
 - job: ./extract-fastq-7.json
@@ -536,7 +536,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream.fastq
+      location: results.fastq
       size: 30830
 
 - job: ./extract-fastq-8.json
@@ -544,7 +544,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-9.json
@@ -552,7 +552,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-10.json
@@ -560,7 +560,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-11.json
@@ -568,7 +568,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-12.json
@@ -576,7 +576,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_upstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-13.json
@@ -584,7 +584,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_upstream.fastq
+      location: merged.fastq
       size: 30830
 
 - job: ./extract-fastq-14.json
@@ -592,7 +592,7 @@
   output:
     fastq_file:
       class: File
-      location: upstream_downstream_upstream.fastq
+      location: merged.fastq
       size: 46245
 
 # ========================================================
