@@ -94,6 +94,7 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
         data=seurat_data,
         ndims=50,
         plot_title=paste("Elbow plot (from cells PCA) for RNA assay (", suffix, ")", sep=""),
+        theme=args$theme,
         rootname=paste(args$output, suffix, "elbow", sep="_"),
         pdf=args$pdf
     )
@@ -108,6 +109,7 @@ export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
             "(", suffix, ")", sep=""
         ),
         combine_guides="collect",
+        theme=args$theme,
         rootname=paste(args$output, suffix, "qc_dim_corr", sep="_"),
         pdf=args$pdf
     )
@@ -132,6 +134,7 @@ export_all_clustering_plots <- function(seurat_data, suffix, args, cluster_prefi
         group_by=paste(paste(cluster_prefix, "res", sep="_"), args$resolution, sep="."),
         label=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "umap_res", args$resolution, sep="_"),
         pdf=args$pdf
     )
@@ -147,6 +150,7 @@ export_all_clustering_plots <- function(seurat_data, suffix, args, cluster_prefi
         alpha=0.4,
         max_cutoff="q99",                    # to prevent outlier cells to distort coloring
         combine_guides="keep",
+        theme=args$theme,
         rootname=paste(args$output, suffix, "umap_qc_mtrcs_res", args$resolution, sep="_"),
         pdf=args$pdf
     )
@@ -182,6 +186,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         legend_title="QC metrics",
         color_by="labels",
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, paste(c(1, 2) ,collapse="_"), "qc_mtrcs_pca", sep="_"),
         pdf=args$pdf
     )
@@ -198,6 +203,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         legend_title="QC metrics",
         color_by="labels",
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, paste(c(2, 3) ,collapse="_"), "qc_mtrcs_pca", sep="_"),
         pdf=args$pdf
     )
@@ -210,6 +216,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         legend_title="Dataset",
         plot_title=paste("Number of cells per dataset (", suffix, ")", sep=""),
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "cells_count", sep="_"),
         pdf=args$pdf
     )
@@ -227,6 +234,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "rna_umi_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -245,6 +253,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         zoom_on_intercept=TRUE,
         show_ranked=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "gene_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -267,6 +276,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "gene_umi_corr", sep="_"),
         pdf=args$pdf
     )
@@ -282,6 +292,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         plot_title=paste("Percentage of transcripts mapped to mitochondrial genes per cell density (", suffix, ")", sep=""),
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "mito_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -297,6 +308,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         plot_title=paste("Novelty score per cell density for RNA assay (", suffix, ")", sep=""),
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "nvlt_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -313,6 +325,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "atac_umi_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -330,6 +343,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         zoom_on_intercept=TRUE,
         show_ranked=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "peak_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -347,6 +361,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         zoom_on_intercept=TRUE,
         show_ranked=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "blck_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -369,6 +384,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "rna_atac_umi_corr", sep="_"),
         pdf=args$pdf
     )
@@ -383,6 +399,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         pt_size=0,
         combine_guides="collect",
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, suffix, "qc_mtrcs_dnst", sep="_"),
         pdf=args$pdf
     )
@@ -395,6 +412,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         group_by_value=args$mintssenrich,
         combine_guides="collect",
         plot_title=paste("TSS enrichment score (", suffix, ") ", peak_type, sep=""),
+        theme=args$theme,
         rootname=paste(args$output, suffix, "tss_nrch", sep="_"),
         pdf=args$pdf
     )
@@ -404,6 +422,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         group_by_value=args$maxnuclsignal,
         combine_guides="collect",
         plot_title=paste("Fragments length histogram (", suffix, ") ", peak_type, sep=""),
+        theme=args$theme,
         rootname=paste(args$output, suffix, "frgm_hist", sep="_"),
         pdf=args$pdf
     )
@@ -423,6 +442,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             scale_x_log10=TRUE,
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "rna_umi_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -441,6 +461,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             zoom_on_intercept=TRUE,
             show_ranked=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "gene_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -456,6 +477,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             plot_title=paste("Split by grouping condition the percentage of transcripts mapped to mitochondrial genes per cell density (", suffix, ")", sep=""),
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "mito_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -471,6 +493,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             plot_title=paste("Split by grouping condition the novelty score per cell density for RNA assay (", suffix, ")", sep=""),
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "nvlt_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -487,6 +510,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             scale_x_log10=TRUE,
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "atac_umi_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -504,6 +528,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             zoom_on_intercept=TRUE,
             show_ranked=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "peak_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -521,6 +546,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             zoom_on_intercept=TRUE,
             show_ranked=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, suffix, "blck_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -819,6 +845,15 @@ get_args <- function(){
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
+    )
+    parser$add_argument(
+        "--theme",
+        help=paste(
+            "Color theme for all generated plots.",
+            "Default: classic"
+        ),
+        type="character", default="classic",
+        choices=c("gray", "bw", "linedraw", "light", "dark", "minimal", "classic", "void")
     )
     parser$add_argument(
         "--cpus",

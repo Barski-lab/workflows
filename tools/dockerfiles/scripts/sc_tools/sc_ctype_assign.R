@@ -38,6 +38,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             label=TRUE,
             label_color="black",
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "umap_rd", reduction, sep="_"),
             pdf=args$pdf
         )
@@ -55,6 +56,7 @@ export_all_clustering_plots <- function(seurat_data, args){
                 label=TRUE,
                 label_color="black",
                 palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
                 rootname=paste(args$output, "umap_spl_idnt_rd", reduction, sep="_"),
                 pdf=args$pdf
             )
@@ -73,6 +75,7 @@ export_all_clustering_plots <- function(seurat_data, args){
                 label=TRUE,
                 label_color="black",
                 palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
                 rootname=paste(args$output, "umap_spl_cnd_rd", reduction, sep="_"),
                 pdf=args$pdf
             )
@@ -92,6 +95,7 @@ export_all_clustering_plots <- function(seurat_data, args){
                 label_color="black",
                 alpha=0.5,
                 palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
                 rootname=paste(args$output, "umap_spl_ph_rd", reduction, sep="_"),
                 pdf=args$pdf
             )
@@ -112,6 +116,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
             bar_position="dodge",
+            theme=args$theme,
             rootname=paste(args$output, "cmp_gr_ctyp_spl_idnt", sep="_"),
             pdf=args$pdf
         )
@@ -128,6 +133,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
             bar_position="dodge",
+            theme=args$theme,
             rootname=paste(args$output, "cmp_gr_idnt_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
@@ -145,6 +151,7 @@ export_all_clustering_plots <- function(seurat_data, args){
                 y_label="Cells counts",
                 palette_colors=graphics$D40_COLORS,
                 bar_position="dodge",
+                theme=args$theme,
                 rootname=paste(args$output, "cmp_gr_ph_spl_idnt", sep="_"),
                 pdf=args$pdf
             )
@@ -165,6 +172,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
             bar_position="dodge",
+            theme=args$theme,
             rootname=paste(args$output, "cmp_gr_ctyp_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -181,6 +189,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
             bar_position="dodge",
+            theme=args$theme,
             rootname=paste(args$output, "cmp_gr_cnd_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
@@ -200,6 +209,7 @@ export_all_clustering_plots <- function(seurat_data, args){
             y_label="Cells counts",
             palette_colors=graphics$D40_COLORS,
             bar_position="dodge",
+            theme=args$theme,
             rootname=paste(args$output, "cmp_gr_ph_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
@@ -239,6 +249,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
             show_annotation=TRUE,
             show_peaks=TRUE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "cvrg", current_gene, sep="_"),
             pdf=args$pdf
         )
@@ -257,6 +268,7 @@ export_all_expression_plots <- function(seurat_data, args) {
         x_label="Genes",
         y_label="Cell type",
         cluster_idents=FALSE,
+        theme=args$theme,
         rootname=paste(args$output, "xpr_avg", sep="_"),
         pdf=args$pdf
     )
@@ -274,6 +286,7 @@ export_all_expression_plots <- function(seurat_data, args) {
             width=800,
             height=600,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "xpr_dnst", current_gene, sep="_"),
             pdf=args$pdf
         )
@@ -291,6 +304,7 @@ export_all_expression_plots <- function(seurat_data, args) {
                 combine_guides="keep",
                 width=800,
                 height=800,
+                theme=args$theme,
                 rootname=paste(args$output, "xpr_per_cell_rd", reduction, current_gene, sep="_"),
                 pdf=args$pdf
             )
@@ -302,6 +316,7 @@ export_all_expression_plots <- function(seurat_data, args) {
                 joint=FALSE,
                 width=800,
                 height=800,
+                theme=args$theme,
                 rootname=paste(args$output, "xpr_per_cell_sgnl_rd", reduction, current_gene, sep="_"),
                 pdf=args$pdf
             )
@@ -396,6 +411,15 @@ get_args <- function(){
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
+    )
+    parser$add_argument(
+        "--theme",
+        help=paste(
+            "Color theme for all generated plots.",
+            "Default: classic"
+        ),
+        type="character", default="classic",
+        choices=c("gray", "bw", "linedraw", "light", "dark", "minimal", "classic", "void")
     )
     parser$add_argument(
         "--cpus",

@@ -55,6 +55,7 @@ export_raw_plots <- function(seurat_data, args){
             ),
             label_color="black",
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "umap_rd", reduction, sep="_"),
             pdf=args$pdf
         )
@@ -82,6 +83,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
         legend_title="Dataset",
         color_by="group",
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, "vst_pca_1_2", sep="_"),
         pdf=args$pdf
     )
@@ -99,6 +101,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
         legend_title="Dataset",
         color_by="group",
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, "vst_pca_2_3", sep="_"),
         pdf=args$pdf
     )
@@ -137,6 +140,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
         ),
         caption=paste(nrow(de_results$de_genes), "genes"),
         features=genes_to_highlight,
+        theme=args$theme,
         rootname=paste(args$output, "dxpr_vlcn", sep="_"),
         pdf=args$pdf
     )
@@ -169,6 +173,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
                 palette_colors=graphics$D40_COLORS,
                 width=1000,
                 height=400,
+                theme=args$theme,
                 rootname=paste(args$output, "xpr_dnst", current_gene, sep="_"),
                 pdf=args$pdf
             )
@@ -192,6 +197,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
                     order=TRUE,
                     split_by="new.ident",
                     combine_guides="collect",
+                    theme=args$theme,
                     rootname=paste(args$output, "xpr_per_cell_rd", reduction, current_gene, sep="_"),
                     pdf=args$pdf
                 )
@@ -213,6 +219,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
             cells=NULL,
             group_by="new.ident",
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "xpr_htmp", sep="_"),
             pdf=args$pdf
         )
@@ -383,6 +390,15 @@ get_args <- function(){
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
+    )
+    parser$add_argument(
+        "--theme",
+        help=paste(
+            "Color theme for all generated plots.",
+            "Default: classic"
+        ),
+        type="character", default="classic",
+        choices=c("gray", "bw", "linedraw", "light", "dark", "minimal", "classic", "void")
     )
     parser$add_argument(
         "--cpus",

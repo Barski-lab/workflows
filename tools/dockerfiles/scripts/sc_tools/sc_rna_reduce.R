@@ -29,6 +29,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         ndims=50,
         reduction="pca",
         plot_title="Elbow plot (from cells PCA)",
+        theme=args$theme,
         rootname=paste(args$output, "elbow", sep="_"),
         pdf=args$pdf
     )
@@ -40,6 +41,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         qc_labels=selected_labels,
         plot_title="Correlation plots between QC metrics and cells PCA components",
         combine_guides="collect",
+        theme=args$theme,
         rootname=paste(args$output, "qc_dim_corr", sep="_"),
         pdf=args$pdf
     )
@@ -54,6 +56,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         alpha=0.4,
         max_cutoff="q99",                                                                   # to prevent outlier cells to distort coloring
         combine_guides="keep",
+        theme=args$theme,
         rootname=paste(args$output, "umap_qc_mtrcs", sep="_"),
         pdf=args$pdf
     )
@@ -65,6 +68,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         group_by="new.ident",
         label=FALSE,
         palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
         rootname=paste(args$output, "umap", sep="_"),
         pdf=args$pdf
     )
@@ -81,6 +85,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             palette_colors=graphics$D40_COLORS,
             width=1200,
             height=400,
+            theme=args$theme,
             rootname=paste(args$output, "umap_spl_ph", sep="_"),
             pdf=args$pdf
         )
@@ -97,6 +102,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         palette_colors=graphics$D40_COLORS,
         width=1200,
         height=400,
+        theme=args$theme,
         rootname=paste(args$output, "umap_spl_mito", sep="_"),
         pdf=args$pdf
     )
@@ -112,6 +118,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         palette_colors=graphics$D40_COLORS,
         width=1200,
         height=400,
+        theme=args$theme,
         rootname=paste(args$output, "umap_spl_umi", sep="_"),
         pdf=args$pdf
     )
@@ -127,6 +134,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         palette_colors=graphics$D40_COLORS,
         width=1200,
         height=400,
+        theme=args$theme,
         rootname=paste(args$output, "umap_spl_gene", sep="_"),
         pdf=args$pdf
     )
@@ -141,6 +149,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             split_by="new.ident",
             label=FALSE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "umap_spl_idnt", sep="_"),
             pdf=args$pdf
         )
@@ -156,6 +165,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             split_by="condition",
             label=FALSE,
             palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
             rootname=paste(args$output, "umap_spl_cnd", sep="_"),
             pdf=args$pdf
         )
@@ -172,6 +182,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
                 palette_colors=graphics$D40_COLORS,
                 width=1200,
                 height=400,
+                theme=args$theme,
                 rootname=paste(args$output, "umap_gr_cnd_spl_ph", sep="_"),
                 pdf=args$pdf
             )
@@ -188,6 +199,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             palette_colors=graphics$D40_COLORS,
             width=1200,
             height=400,
+            theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_mito", sep="_"),
             pdf=args$pdf
         )
@@ -203,6 +215,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             palette_colors=graphics$D40_COLORS,
             width=1200,
             height=400,
+            theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_umi", sep="_"),
             pdf=args$pdf
         )
@@ -218,6 +231,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             palette_colors=graphics$D40_COLORS,
             width=1200,
             height=400,
+            theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_gene", sep="_"),
             pdf=args$pdf
         )
@@ -446,6 +460,15 @@ get_args <- function(){
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
+    )
+    parser$add_argument(
+        "--theme",
+        help=paste(
+            "Color theme for all generated plots.",
+            "Default: classic"
+        ),
+        type="character", default="classic",
+        choices=c("gray", "bw", "linedraw", "light", "dark", "minimal", "classic", "void")
     )
     parser$add_argument(
         "--cpus",

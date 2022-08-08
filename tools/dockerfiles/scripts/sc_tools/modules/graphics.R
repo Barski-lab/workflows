@@ -46,7 +46,23 @@ export(
 # https://cran.r-project.org/web/packages/Polychrome/vignettes/testgg.html
 D40_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", "#E8B4BD", "#FD00EA", "#0DD1FE", "#FF9B0D", "#0D601C", "#C50D69", "#CACA16", "#722A91", "#00DEBF", "#863B00", "#5D7C91", "#FD84D8", "#C100FB", "#8499FC", "#FD6658", "#83D87A", "#968549", "#DEB6FB", "#832E60", "#A8CAB0", "#FE8F95", "#FE1CBB", "#DF7CF8", "#FF0078", "#F9B781", "#4D493B", "#1C5198", "#7C32CE", "#EFBC16", "#7CD2DE", "#B30DA7", "#9FC0F6", "#7A940D", "#9B0000", "#946D9B", "#C8C2D9", "#94605A")
 
-geom_bar_plot <- function(data, rootname, x_axis, color_by, x_label, y_label, legend_title, plot_title, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+get_theme <- function(theme){
+    return (
+        switch(
+            theme,
+            "gray"     = ggplot2::theme_gray(),
+            "bw"       = ggplot2::theme_bw(),
+            "linedraw" = ggplot2::theme_linedraw(),
+            "light"    = ggplot2::theme_light(),
+            "dark"     = ggplot2::theme_dark(),
+            "minimal"  = ggplot2::theme_minimal(),
+            "classic"  = ggplot2::theme_classic(),
+            "void"     = ggplot2::theme_void()
+        )
+    )
+}
+
+geom_bar_plot <- function(data, rootname, x_axis, color_by, x_label, y_label, legend_title, plot_title, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- ggplot2::ggplot(data, ggplot2::aes_string(x=x_axis, fill=color_by)) +
@@ -56,7 +72,8 @@ geom_bar_plot <- function(data, rootname, x_axis, color_by, x_label, y_label, le
                 ggplot2::ylab(y_label) +
                 ggplot2::guides(fill=ggplot2::guide_legend(legend_title), x=ggplot2::guide_axis(angle=45)) +
                 ggplot2::ggtitle(plot_title) +
-                ggplot2::scale_fill_manual(values=palette_colors)
+                ggplot2::scale_fill_manual(values=palette_colors) +
+                get_theme(theme)
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))
@@ -77,7 +94,7 @@ geom_bar_plot <- function(data, rootname, x_axis, color_by, x_label, y_label, le
     )
 }
 
-geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left_intercept, x_label, y_label, legend_title, plot_title, x_right_intercept=NULL,  scale_x_log10=FALSE, scale_y_log10=FALSE, zoom_on_intercept=FALSE, alpha=0.7, show_ranked=FALSE, ranked_x_label="Ranked cells", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left_intercept, x_label, y_label, legend_title, plot_title, x_right_intercept=NULL,  scale_x_log10=FALSE, scale_y_log10=FALSE, zoom_on_intercept=FALSE, alpha=0.7, show_ranked=FALSE, ranked_x_label="Ranked cells", palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             intercept_data <- data %>%
@@ -99,7 +116,8 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                         intercept_data, mapping=ggplot2::aes(x=x_left, y=Inf, label=x_left),
                         color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
                         show.legend=FALSE
-                    )
+                    ) +
+                    get_theme(theme)
 
             if (!is.null(x_right_intercept)){
                 intercept_data <- intercept_data %>% tibble::add_column(x_right=x_right_intercept)
@@ -126,7 +144,8 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                                    intercept_data, mapping=ggplot2::aes(x=x_left, y=Inf, label=x_left),
                                    color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="y", size=3,
                                    show.legend=FALSE
-                               )
+                               ) +
+                               get_theme(theme)
                 if (!is.null(x_right_intercept)){
                     zoomed_plot <- zoomed_plot +
                                    ggplot2::coord_cartesian(xlim=c(min(intercept_data$x_left), max(intercept_data$x_right))) +
@@ -158,7 +177,8 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                                    intercept_data, mapping=ggplot2::aes(x=Inf, y=x_left, label=x_left),
                                    color="black", fill=intercept_data$color, alpha=0.7, segment.colour=NA, direction="x", size=3,
                                    show.legend=FALSE
-                               )
+                               ) +
+                               get_theme(theme)
                 if (!is.null(x_right_intercept)){
                     ranked_plot <- ranked_plot +
                                    ggplot2::geom_hline(intercept_data, mapping=ggplot2::aes(yintercept=x_right), color=intercept_data$color, alpha=0.7) +
@@ -190,7 +210,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
     )
 }
 
-geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             intercept_data <- data %>%
@@ -228,7 +248,8 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
                         intercept_data, mapping=ggplot2::aes(x=Inf, y=y_low, label=y_low),
                         color="black", fill=intercept_data$color, alpha=alpha_intercept, direction="x", size=3,
                         show.legend=FALSE
-                    )
+                    ) +
+                    get_theme(theme)
 
             if (!is.null(y_high_intercept)){
                 plot <- plot +
@@ -262,7 +283,7 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
     )
 }
 
-feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_label, split_by, color_by, plot_title, legend_title, combine_guides=NULL, palette_colors=NULL, alpha=NULL, jitter=FALSE, pdf=FALSE, width=1200, height=800, resolution=100){
+feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_label, split_by, color_by, plot_title, legend_title, combine_guides=NULL, palette_colors=NULL, alpha=NULL, jitter=FALSE, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             SeuratObject::Idents(data) <- split_by
@@ -287,7 +308,7 @@ feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_labe
                               ggplot2::xlab(x_label) +
                               ggplot2::ylab(y_label) +
                               ggplot2::guides(color=ggplot2::guide_legend(legend_title)) +
-                              ggplot2::theme_gray()
+                              get_theme(theme)
                 if (!is.null(palette_colors)) { plots[[i]] <- plots[[i]] + ggplot2::scale_color_manual(values=palette_colors) }
                 if (!is.null(alpha)) { plots[[i]]$layers[[1]]$aes_params$alpha <- alpha }
                 return (plots[[i]])
@@ -313,7 +334,7 @@ feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_labe
     )
 }
 
-vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, split_by=NULL, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, split_by=NULL, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -349,7 +370,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
             plots <- base::lapply(seq_along(plots), function(i){
                 plots[[i]] <- plots[[i]] +
                               ggplot2::ggtitle(labels_corrected[i]) +
-                              ggplot2::theme_gray() +
+                              get_theme(theme) +
                               ggplot2::theme(axis.title.x=ggplot2::element_blank()) +
                               ggplot2::guides(fill=ggplot2::guide_legend(legend_title)) +
                               ggplot2::stat_boxplot(width=0.15, geom="errorbar") +
@@ -380,7 +401,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
     )
 }
 
-dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=NULL, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, ncol=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=NULL, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, ncol=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             highlight_cells <- NULL
@@ -405,7 +426,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=
                         label.color=label_color,
                         label.size=label_size
                     ) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::guides(color=ggplot2::guide_legend(legend_title, override.aes=list(size=3)))
 
@@ -431,7 +452,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=
                              ggplot2::geom_col(position="dodge", width=0.9, linetype="solid", color="black", show.legend=FALSE) +
                              ggplot2::xlab("") +
                              ggplot2::ylab("Cells percentage") +
-                             ggplot2::theme_gray() +
+                             get_theme(theme) +
                              ggrepel::geom_label_repel(
                                 label_data, mapping=ggplot2::aes(y=-Inf, label=counts),
                                 color="black", fill="white", segment.colour=NA,
@@ -475,7 +496,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=
     )
 }
 
-elbow_plot <- function(data, rootname, plot_title, reduction="pca", ndims=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+elbow_plot <- function(data, rootname, plot_title, reduction="pca", ndims=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- Seurat::ElbowPlot(
@@ -483,7 +504,7 @@ elbow_plot <- function(data, rootname, plot_title, reduction="pca", ndims=NULL, 
                         ndims=ndims,
                         reduction=reduction
                     ) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::ggtitle(plot_title)
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
@@ -505,7 +526,7 @@ elbow_plot <- function(data, rootname, plot_title, reduction="pca", ndims=NULL, 
     )
 }
 
-silhouette_plot <- function(data, rootname, plot_title, legend_title, group_by, dims, downsample=300, reduction="pca", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+silhouette_plot <- function(data, rootname, plot_title, legend_title, group_by, dims, downsample=300, reduction="pca", palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             SeuratObject::Idents(data) <- group_by
@@ -527,7 +548,7 @@ silhouette_plot <- function(data, rootname, plot_title, legend_title, group_by, 
                     ggplot2::scale_x_discrete(name="Cells") +
                     ggplot2::scale_y_continuous(name="Silhouette score") +
                     ggplot2::scale_fill_manual(values=palette_colors) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::theme(
                         axis.text.x=ggplot2::element_blank(),
                         axis.ticks.x=ggplot2::element_blank(),
@@ -556,7 +577,7 @@ silhouette_plot <- function(data, rootname, plot_title, legend_title, group_by, 
     )
 }
 
-composition_plot <- function(data, rootname, plot_title, legend_title, x_label, y_label, split_by, group_by, bar_position="fill", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+composition_plot <- function(data, rootname, plot_title, legend_title, x_label, y_label, split_by, group_by, bar_position="fill", palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     # bar_position can be one of the following
     #   fill  - stacked, percents are diplayed (default)
     #   dodge - grouped, values are displayed
@@ -589,7 +610,7 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
                     ggplot2::scale_fill_manual(values=palette_colors) +
                     ggplot2::xlab(x_label) +
                     ggplot2::ylab(y_label) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::guides(fill=ggplot2::guide_legend(legend_title)) +
                     Seurat::RotatedAxis()
@@ -615,7 +636,7 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
     )
 }
 
-corr_plot <- function(data, reduction, qc_columns, qc_labels, plot_title, rootname, highlight_dims=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+corr_plot <- function(data, reduction, qc_columns, qc_labels, plot_title, rootname, highlight_dims=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             embeddings <- SeuratObject::Embeddings(data[[reduction]])
@@ -647,7 +668,7 @@ corr_plot <- function(data, reduction, qc_columns, qc_labels, plot_title, rootna
                                               ggplot2::ylab("Correlation") +
                                               ggplot2::xlim(c(0, ndims)) +
                                               ggplot2::ylim(c(-1, 1)) +
-                                              ggplot2::theme_gray() +
+                                              get_theme(theme) +
                                               ggplot2::ggtitle(current_qc_label)
             }
             combined_plots <- patchwork::wrap_plots(plots, guides=combine_guides) + patchwork::plot_annotation(title=plot_title)
@@ -671,7 +692,7 @@ corr_plot <- function(data, reduction, qc_columns, qc_labels, plot_title, rootna
     )
 }
 
-tss_plot <- function(data, rootname, plot_title, split_by, group_by_value=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+tss_plot <- function(data, rootname, plot_title, split_by, group_by_value=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             SeuratObject::Idents(data) <- split_by
@@ -694,7 +715,7 @@ tss_plot <- function(data, rootname, plot_title, split_by, group_by_value=NULL, 
                         group.by=group_by
                     ) +
                     ggplot2::ggtitle(current_identity) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     Seurat::NoLegend()
             }
             SeuratObject::Idents(data) <- "new.ident"
@@ -719,7 +740,7 @@ tss_plot <- function(data, rootname, plot_title, split_by, group_by_value=NULL, 
     )
 }
 
-fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             SeuratObject::Idents(data) <- split_by
@@ -741,7 +762,7 @@ fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=
                         filtered_data,
                         group.by=group_by
                     ) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::ggtitle(current_identity) +
                     Seurat::NoLegend()
             }
@@ -767,7 +788,7 @@ fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=
     )
 }
 
-pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by="label", label_size=5, pt_size=8, pt_shape=19, alpha=0.75, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by="label", label_size=5, pt_size=8, pt_shape=19, alpha=0.75, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             x_score_column <- base::paste0("PC", pcs[1])
@@ -792,7 +813,7 @@ pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::guides(color=ggplot2::guide_legend(legend_title)) +
                     ggplot2::scale_color_manual(values=palette_colors) +
-                    ggplot2::theme_gray()
+                    get_theme(theme)
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))
@@ -813,7 +834,7 @@ pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by
     )
 }
 
-dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, cluster_idents=FALSE, min_pct=0.01, col_min=-2.5, col_max=2.5, pdf=FALSE, width=1200, height=800, resolution=100){
+dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, cluster_idents=FALSE, min_pct=0.01, col_min=-2.5, col_max=2.5, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- Seurat::DotPlot(
@@ -828,7 +849,7 @@ dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, clu
                     ) +
                     ggplot2::xlab(x_label) +
                     ggplot2::ylab(y_label) +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::ggtitle(plot_title) +
                     Seurat::RotatedAxis()
 
@@ -852,7 +873,7 @@ dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, clu
 }
 
 
-expression_density_plot <- function(data, features, rootname, reduction, plot_title, joint=FALSE, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+expression_density_plot <- function(data, features, rootname, reduction, plot_title, joint=FALSE, alpha=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -872,7 +893,7 @@ expression_density_plot <- function(data, features, rootname, reduction, plot_ti
                 features <- base::paste(features, collapse="+")
             }
             plots <- base::lapply(seq_along(plots), function(i){
-                plots[[i]] <- plots[[i]] + ggplot2::ggtitle(features[i]) + ggplot2::theme_gray()
+                plots[[i]] <- plots[[i]] + ggplot2::ggtitle(features[i]) + get_theme(theme)
                 if (!is.null(alpha)) { plots[[i]]$layers[[1]]$aes_params$alpha <- alpha }
                 return (plots[[i]])
             })
@@ -899,7 +920,7 @@ expression_density_plot <- function(data, features, rootname, reduction, plot_ti
 }
 
 
-feature_plot <- function(data, features, labels, rootname, reduction, plot_title, from_meta=FALSE, split_by=NULL, label=FALSE, order=FALSE, color_limits=NULL, color_scales=NULL, gradient_colors=c("lightgrey", "blue"), min_cutoff=NA, max_cutoff=NA, pt_size=NULL, combine_guides=NULL, alpha=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+feature_plot <- function(data, features, labels, rootname, reduction, plot_title, from_meta=FALSE, split_by=NULL, label=FALSE, order=FALSE, color_limits=NULL, color_scales=NULL, gradient_colors=c("lightgrey", "blue"), min_cutoff=NA, max_cutoff=NA, pt_size=NULL, combine_guides=NULL, alpha=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -961,7 +982,7 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
                         combine=FALSE       # to return a list of gglots
                     )
             plots <- base::lapply(seq_along(plots), function(i){
-                plots[[i]] <- plots[[i]] + ggplot2::ggtitle(labels_corrected[i]) + ggplot2::theme_gray()
+                plots[[i]] <- plots[[i]] + ggplot2::ggtitle(labels_corrected[i]) + get_theme(theme)
                 if (!is.null(alpha)) { plots[[i]]$layers[[1]]$aes_params$alpha <- alpha }
                 if (!is.null(split_by) && (length(features_corrected) == 1)){                # applying bug fix - redefining gradient limits
                     plots[[i]] <- plots[[i]] +
@@ -1001,7 +1022,7 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
     )
 }
 
-dim_heatmap <- function(data, rootname, plot_title, x_label, y_label, reduction="pca", dims=NULL, cells=500, nfeatures=30, ncol=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_heatmap <- function(data, rootname, plot_title, x_label, y_label, reduction="pca", dims=NULL, cells=500, nfeatures=30, ncol=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plots <- Seurat::DimHeatmap(
@@ -1017,7 +1038,7 @@ dim_heatmap <- function(data, rootname, plot_title, x_label, y_label, reduction=
             plots <- base::lapply(seq_along(plots), function(i){
                 plots[[i]] +
                 ggplot2::ggtitle(paste("PC", i, sep=" ")) +
-                ggplot2::theme_gray() +
+                get_theme(theme) +
                 ggplot2::xlab(x_label) +
                 ggplot2::ylab(y_label) +
                 ggplot2::theme(axis.text.x=ggplot2::element_blank(), axis.ticks=ggplot2::element_blank())
@@ -1043,7 +1064,7 @@ dim_heatmap <- function(data, rootname, plot_title, x_label, y_label, reduction=
     )
 }
 
-dim_loadings_plot <- function(data, rootname, plot_title, x_label, y_label, reduction="pca", dims=NULL, nfeatures=30, ncol=NULL, combine_guides=NULL, pdf=FALSE, width=1200, height=800, resolution=100){
+dim_loadings_plot <- function(data, rootname, plot_title, x_label, y_label, reduction="pca", dims=NULL, nfeatures=30, ncol=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plots <- Seurat::VizDimLoadings(
@@ -1056,7 +1077,7 @@ dim_loadings_plot <- function(data, rootname, plot_title, x_label, y_label, redu
             plots <- base::lapply(seq_along(plots), function(i){
                 plots[[i]] +
                 ggplot2::ggtitle(paste("PC", i, sep=" ")) +
-                ggplot2::theme_gray() +
+                get_theme(theme) +
                 ggplot2::xlab(x_label) +
                 ggplot2::ylab(y_label)
             })
@@ -1081,7 +1102,7 @@ dim_loadings_plot <- function(data, rootname, plot_title, x_label, y_label, redu
     )
 }
 
-coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, idents=NULL, cells=NULL, features=NULL, expression_assay="RNA", expression_slot="data", extend_upstream=0, extend_downstream=0, show_annotation=TRUE, show_peaks=TRUE, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, idents=NULL, cells=NULL, features=NULL, expression_assay="RNA", expression_slot="data", extend_upstream=0, extend_downstream=0, show_annotation=TRUE, show_peaks=TRUE, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -1104,8 +1125,8 @@ coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, i
                 sep=c("-", "-")
             ) + patchwork::plot_annotation(title=plot_title)
 
-            plot[[1]][[1]] <- plot[[1]][[1]] + ggplot2::scale_fill_manual(values=palette_colors)    # for genome coverage plots
-            plot[[1]][[2]] <- plot[[1]][[2]] + ggplot2::scale_fill_manual(values=palette_colors)    # for gene expression plots
+            plot[[1]][[1]] <- plot[[1]][[1]] + get_theme(theme) + ggplot2::scale_fill_manual(values=palette_colors)    # for genome coverage plots
+            plot[[1]][[2]] <- plot[[1]][[2]] + get_theme(theme) + ggplot2::scale_fill_manual(values=palette_colors)    # for gene expression plots
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))
@@ -1126,7 +1147,7 @@ coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, i
     )
 }
 
-volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_label, y_label, plot_title, plot_subtitle, caption, features=NULL, label_column="gene", pdf=FALSE, width=1200, height=800, resolution=100){
+volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_label, y_label, plot_title, plot_subtitle, caption, features=NULL, label_column="gene", theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- EnhancedVolcano::EnhancedVolcano(
@@ -1151,7 +1172,7 @@ volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_l
                         widthConnectors=0.75
                     ) +
                     ggplot2::scale_y_log10() +
-                    ggplot2::theme_gray() +
+                    get_theme(theme) +
                     ggplot2::theme(legend.position="none", plot.subtitle=ggplot2::element_text(size=8, face="italic", color="gray30"))
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
@@ -1173,7 +1194,7 @@ volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_l
     )
 }
 
-feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", slot="scale.data", cells=NULL, group_by="ident", palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", slot="scale.data", cells=NULL, group_by="ident", palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- Seurat::DoHeatmap(
@@ -1187,6 +1208,7 @@ feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", s
                         label=TRUE,
                         combine=TRUE
                     ) +
+                    get_theme(theme) +
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::scale_color_manual(values=palette_colors)
 
@@ -1209,7 +1231,7 @@ feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", s
     )
 }
 
-daseq_permutations <- function(data, rootname, plot_title, x_label, y_label, y_intercepts=NULL, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
+daseq_permutations <- function(data, rootname, plot_title, x_label, y_label, y_intercepts=NULL, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -1217,7 +1239,7 @@ daseq_permutations <- function(data, rootname, plot_title, x_label, y_label, y_i
                     ggplot2::ggtitle(plot_title) +
                     ggplot2::xlab(x_label) +
                     ggplot2::ylab(y_label) +
-                    ggplot2::theme_gray()
+                    get_theme(theme)
 
             if(!is.null(y_intercepts) && length(y_intercepts) > 0){
                 intercept_data <- base::data.frame(y_coordinate=y_intercepts) %>%

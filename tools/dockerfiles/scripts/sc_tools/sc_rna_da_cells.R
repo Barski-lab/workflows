@@ -33,6 +33,7 @@ export_plots <- function(seurat_data, da_cells, da_thresholds, args) {
         y_label="Ranked by DA score cells",
         y_intercepts=if(is.null(args$ranges)) round(da_thresholds, 2) else round(c(da_thresholds, args$ranges), 2),
         palette_colors=if(is.null(args$ranges)) c("black", "black") else c("black", "black", "red", "red"),
+        theme=args$theme,
         rootname=paste(args$output, "da_perm", sep="_"),
         pdf=args$pdf
     )
@@ -55,6 +56,7 @@ export_plots <- function(seurat_data, da_cells, da_thresholds, args) {
                 label=TRUE,
                 label_color="black",
                 palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
                 rootname=paste(args$output, "umap_rd", reduction, "res", current_resolution, sep="_"),
                 pdf=args$pdf
             )
@@ -71,6 +73,7 @@ export_plots <- function(seurat_data, da_cells, da_thresholds, args) {
                 label=TRUE,
                 label_color="black",
                 palette_colors=c("grey", graphics$D40_COLORS),         # adding grey for cluster 0 as we can't use cells and split_by together
+                theme=args$theme,
                 rootname=paste(args$output, "umap_spl_cnd_rd", reduction, "res", current_resolution, sep="_"),
                 pdf=args$pdf
             )
@@ -93,6 +96,7 @@ export_plots <- function(seurat_data, da_cells, da_thresholds, args) {
             color_scales=c(-1, 1),
             color_limits=c(-1, 1),
             combine_guides="collect",
+            theme=args$theme,
             rootname=paste(args$output, "umap_spl_idnt_rd", reduction, "da_scr", sep="_"),
             pdf=args$pdf
         )
@@ -223,6 +227,15 @@ get_args <- function(){
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
+    )
+    parser$add_argument(
+        "--theme",
+        help=paste(
+            "Color theme for all generated plots.",
+            "Default: classic"
+        ),
+        type="character", default="classic",
+        choices=c("gray", "bw", "linedraw", "light", "dark", "minimal", "classic", "void")
     )
     parser$add_argument(
         "--cpus",
