@@ -109,6 +109,20 @@ get_args <- function(){
         type="character", required="True"
     )
     parser$add_argument(
+        "--metadata",
+        help=paste(
+            "Path to the TSV/CSV file to optionally extend Seurat object metadata with",
+            "categorical values using samples identities. First column - 'library_id'",
+            "should correspond to all unique values from the 'new.ident' column of the",
+            "loaded Seurat object. If any of the provided in this file columns are already",
+            "present in the Seurat object metadata, they will be overwritten. When combined",
+            "with --barcodes parameter, first the metadata will be extended, then barcode",
+            "filtering will be applied.",
+            "Default: no extra metadata is added"
+        ),
+        type="character"
+    )
+    parser$add_argument(
         "--barcodes",
         help=paste(
             "Path to the headerless TSV/CSV file with the list of barcodes to select",
@@ -127,7 +141,18 @@ get_args <- function(){
         ),
         type="character",
         default="signac",
-        choices=c("signac", "none")
+        choices=c("signac", "harmony", "none")
+    )
+    parser$add_argument(
+        "--ntgrby",
+        help=paste(
+            "Column(s) from the Seurat object metadata to define the variable(s) that should",
+            "be integrated out when running multiple datasets integration with harmony. May",
+            "include columns from the extra metadata added with --metadata parameter. Ignored",
+            "if --ntgr is not set to harmony.",
+            "Default: new.ident"
+        ),
+        type="character", default=c("new.ident"), nargs="*"
     )
     parser$add_argument(
         "--minvarpeaks",
@@ -145,7 +170,8 @@ get_args <- function(){
         help=paste(
             "Dimensionality to use for datasets integration and UMAP projection (from 2 to 50).",
             "If single value N is provided, use from 2 to N LSI components. If multiple values are",
-            "provided, subset to only selected LSI components.",
+            "provided, subset to only selected LSI components. In combination with --ntgr set to",
+            "harmony, selected principle components will be used in Harmony integration.",
             "Default: from 2 to 10"
         ),
         type="integer", default=10, nargs="*"
@@ -287,6 +313,17 @@ seurat_data <- readRDS(args$query)
 print("Setting default assay to ATAC")
 DefaultAssay(seurat_data) <- "ATAC"
 debug$print_info(seurat_data, args)
+
+if (!is.null(args$metadata)){
+    print("Extending Seurat object with the extra metadata fields")
+    seurat_data <- io$extend_metadata(
+        seurat_data=seurat_data,
+        location=args$metadata,
+        seurat_ref_column="new.ident",
+        meta_ref_column="library_id"
+    )
+    debug$print_info(seurat_data, args)
+}
 
 print(paste("Loading barcodes of interest from", args$barcodes))
 barcodes_data <- io$load_barcodes_data(args$barcodes, seurat_data)

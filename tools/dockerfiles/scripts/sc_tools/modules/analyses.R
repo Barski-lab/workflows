@@ -646,11 +646,12 @@ atac_preprocess <- function(seurat_data, args) {
     )
 
     splitted_seurat_data <- Seurat::SplitObject(seurat_data, split.by="new.ident")              # need to use original seurat_data for possible integration below
-    if (args$ntgr == "none" | length(splitted_seurat_data) == 1){
+    if (args$ntgr == "none" | args$ntgr == "harmony" | length(splitted_seurat_data) == 1){
         base::print(
             base::paste(
-                "Skipping datasets integration (either forced or only one identity",
-                "is present). Using the original not splitted seurat data."
+                "Skipping datasets integration (either forced to skip, or will be attempted",
+                "to run later with harmony, or only one identity is present). Using the",
+                "original not splitted seurat data."
             )
         )
         processed_seurat_data <- Signac::RunSVD(
@@ -659,8 +660,37 @@ atac_preprocess <- function(seurat_data, args) {
             reduction.name="atac_lsi",                                                          # adding "atac_lsi" for consistency
             verbose=FALSE
         )
+        if (args$ntgr == "harmony"){
+            if (is.null(args$ntgrby) || length(splitted_seurat_data) == 1){
+                base::print(
+                    base::paste(
+                        "Skipping datasets integration with Harmony. Either --ntgrby",
+                        "wasn't provided or data included only a single dataset."
+                    )
+                )
+            } else {
+                base::print(
+                    base::paste(
+                        "Running datasets integration with harmony using",
+                        SeuratObject::DefaultAssay(processed_seurat_data), "assay.",
+                        "Integrating over", base::paste(args$ntgrby, collapse=", "),
+                        "covariates. Dimensions used:", base::paste(args$dimensions, collapse=", ")
+                    )
+                )
+                processed_seurat_data <- harmony::RunHarmony(
+                    object=processed_seurat_data,
+                    group.by.vars=args$ntgrby,
+                    reduction="atac_lsi",
+                    reduction.save="atac_lsi",                                    # overwriting old atac_lsi reduction
+                    dims.use=args$dimensions,
+                    assay.use=SeuratObject::DefaultAssay(processed_seurat_data),
+                    project.dim=FALSE,                                            # for ATAC we don't need to project
+                    verbose=FALSE
+                )
+            }
+        }
     } else {
-        base::print("Running datasets integration using splitted seurat data.")
+        base::print("Running datasets integration using Signac on splitted data.")
         processed_seurat_data <- Signac::RunSVD(
             processed_seurat_data,
             n=50,                                                                               # by default computes 50 singular values
