@@ -130,6 +130,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         plot_title=paste("Genes vs UMI per cell correlation (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
+        show_lm=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         rootname=paste(args$output, suffix, "gene_umi_corr", sep="_"),

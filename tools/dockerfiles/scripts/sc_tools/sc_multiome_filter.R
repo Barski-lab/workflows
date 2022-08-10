@@ -275,6 +275,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         plot_title=paste("Genes vs UMI per cell correlation for RNA assay (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
+        show_lm=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         rootname=paste(args$output, suffix, "gene_umi_corr", sep="_"),
@@ -386,6 +387,30 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         rootname=paste(args$output, suffix, "rna_atac_umi_corr", sep="_"),
+        pdf=args$pdf
+    )
+    graphics$geom_point_plot(
+        data=seurat_data@meta.data,
+        facet_by="new.ident",
+        x_axis="nCount_ATAC",
+        x_label="UMI(ATAC) per cell",
+        y_axis="TSS.enrichment",
+        y_label="TSS enrichment score",
+        x_left_intercept=args$atacminumi,
+        y_low_intercept=args$mintssenrich,
+        alpha_intercept=1,
+        color_by="mito_percentage",
+        gradient_colors=c("lightslateblue", "red", "green"),
+        color_limits=c(0, 100),
+        color_break=args$maxmt,
+        legend_title="Mitochondrial %",
+        plot_title=paste("TSS enrichment score vs UMI per cell correlation for ATAC assay (", suffix, ") ", peak_type, sep=""),
+        scale_x_log10=TRUE,
+        scale_y_log10=FALSE,
+        show_density=TRUE,
+        palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
+        rootname=paste(args$output, suffix, "tss_atac_umi_corr", sep="_"),
         pdf=args$pdf
     )
     graphics$vln_plot(

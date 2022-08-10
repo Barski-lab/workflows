@@ -32,6 +32,18 @@ export(
     "get_aggregated_expession"
 )
 
+get_tf_idf_method <- function(method_name){
+    return (
+        switch(
+            method_name,
+            "logtfidf"    = 1,
+            "tflogidf"    = 2,
+            "logtflogidf" = 3,
+            "idf"         = 4
+        )
+    )
+}
+
 get_vars_to_regress <- function(seurat_data, args, exclude_columns=NULL) {
     vars_to_regress <- NULL
     arguments <- c(args$regressmt, args$regresscellcycle)   # any of then can be also NULL
@@ -628,14 +640,15 @@ atac_preprocess <- function(seurat_data, args) {
 
     base::print(
         base::paste(
-            "Applying TF-IDF normalization. Searching for top highly variable",
-            "features using", args$minvarpeaks, "as a lower percentile bound.",
-            "Analyzing all datasets jointly."
+            "Applying TF-IDF normalization using", args$norm, "method.",
+            "Searching for top highly variable features using", args$minvarpeaks,
+            "as a lower percentile bound. Analyzing all datasets jointly."
         )
     )
     processed_seurat_data <- Signac::RunTFIDF(
         seurat_data,
         assay="ATAC",                                                                           # safety measure
+        method=get_tf_idf_method(args$norm),
         verbose=FALSE
     )
     processed_seurat_data <- Signac::FindTopFeatures(
@@ -701,15 +714,16 @@ atac_preprocess <- function(seurat_data, args) {
             SeuratObject::DefaultAssay(splitted_seurat_data[[i]]) <- "ATAC"                     # safety measure
             base::print(
                 base::paste(
-                    "Applying TF-IDF normalization. Searching for top highly variable",
-                    "features using", args$minvarpeaks, "as a lower percentile bound.",
-                    "Analyzing", SeuratObject::Idents(splitted_seurat_data[[i]])[1],
-                    "dataset."
+                    "Applying TF-IDF normalization using", args$norm, "method.",
+                    "Searching for top highly variable features using", args$minvarpeaks,
+                    "as a lower percentile bound. Analyzing",
+                    SeuratObject::Idents(splitted_seurat_data[[i]])[1], "dataset."
                 )
             )
             splitted_seurat_data[[i]] <- Signac::RunTFIDF(
                 splitted_seurat_data[[i]],
                 assay="ATAC",                                                                   # safety measure
+                method=get_tf_idf_method(args$norm),
                 verbose=FALSE
             )
             splitted_seurat_data[[i]] <- Signac::FindTopFeatures(

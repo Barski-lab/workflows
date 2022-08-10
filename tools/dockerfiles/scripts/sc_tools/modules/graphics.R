@@ -210,7 +210,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
     )
 }
 
-geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, show_lm=FALSE, show_density=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             intercept_data <- data %>%
@@ -231,7 +231,6 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
                         breaks=c(color_break),
                         limits=color_limits
                     ) +
-                    ggplot2::stat_smooth(method=stats::lm) +
                     ggplot2::xlab(x_label) +
                     ggplot2::ylab(y_label) +
                     ggplot2::guides(color=ggplot2::guide_colourbar(legend_title)) +
@@ -250,6 +249,9 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
                         show.legend=FALSE
                     ) +
                     get_theme(theme)
+
+            if (show_lm){ plot <- plot + ggplot2::stat_smooth(method=stats::lm) }
+            if (show_density){ plot <- plot + ggplot2::geom_density_2d() }
 
             if (!is.null(y_high_intercept)){
                 plot <- plot +
@@ -420,8 +422,18 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=
                         split.by=split_by,
                         group.by=group_by,
                         label.box=label_box,
-                        cells.highlight=if(is.null(highlight_cells)) NULL else list(Selected=highlight_cells),  # need to use this trick because ifelse doesn't return NULL, 'Selected' is just a name to display on the plot
-                        ncol=ncol,
+                        cells.highlight=if(is.null(highlight_cells))         # need to use this trick because ifelse doesn't return NULL, 'Selected' is just a name to display on the plot
+                                            NULL
+                                        else
+                                            list(Selected=highlight_cells),
+                        ncol=if(!is.null(split_by) && is.null(ncol))         # attempt to arrage all plots in a square
+                                ceiling(
+                                    sqrt(
+                                        length(base::unique(base::as.vector(as.character(data@meta.data[[split_by]]))))
+                                    )
+                                )
+                             else
+                                ncol,
                         label=label,
                         label.color=label_color,
                         label.size=label_size
