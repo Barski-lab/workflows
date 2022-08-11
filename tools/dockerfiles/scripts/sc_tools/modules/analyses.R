@@ -36,9 +36,9 @@ get_tf_idf_method <- function(method_name){
     return (
         switch(
             method_name,
-            "logtfidf"    = 1,
-            "tflogidf"    = 2,
-            "logtflogidf" = 3,
+            "log-tfidf"    = 1,
+            "tf-logidf"    = 2,
+            "logtf-logidf" = 3,
             "idf"         = 4
         )
     )

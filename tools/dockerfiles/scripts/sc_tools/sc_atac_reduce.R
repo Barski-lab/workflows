@@ -136,13 +136,15 @@ get_args <- function(){
         "--norm",
         help=paste(
             "TF-IDF normalization method applied to chromatin accessibility counts.",
-            "logtfidf - Stuart & Butler et al. 2019, tflogidf - Cusanovich & Hill et al. 2018,",
-            "logtflogidf - Andrew Hill, idf - 10x Genomics,",
-            "Default: logtfidf"
+            "log-tfidf - Stuart & Butler et al. 2019,",
+            "tf-logidf - Cusanovich & Hill et al. 2018,",
+            "logtf-logidf - Andrew Hill,",
+            "idf - 10x Genomics,",
+            "Default: log-tfidf"
         ),
         type="character",
-        default="logtfidf",
-        choices=c("logtfidf", "tflogidf", "logtflogidf", "idf")
+        default="log-tfidf",
+        choices=c("log-tfidf", "tf-logidf", "logtf-logidf", "idf")
     )
     parser$add_argument(
         "--ntgr",
