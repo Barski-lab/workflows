@@ -21,141 +21,54 @@ suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
 
 
 call_peaks <- function(seurat_data, args) {
-    print("Calling MACS2 peaks grouping cells by identity")
-    group_by <- "new.ident"
-    if (args$callpeaks == "cluster"){
-        print(
-            paste(
-                "Forced to group cell by RNA cluster identified from PCA",
-                "reduction using", paste(args$dimensions, collapse=", "),
-                "dimensions and", args$resolution, "resolution"
-            )
-        )
-        print("Running RNA analysis before calling peaks by cluster")
-        seurat_data <- analyses$rna_analyze(seurat_data, args)
-        seurat_data <- filter$collapse_fragments_list(seurat_data)                 # collapse repetitive fragments as we could split the datasets before integration
-        debug$print_info(seurat_data, args)
-        group_by <- paste0("peak_calling_res.", args$resolution)
-        seurat_data <- FindNeighbors(
-            seurat_data,
-            reduction="pca",                                                # this is the same reduction we got after running RunPCA on our RNA data, it's bound to the specific assay
-            dims=args$dimensions,
-            graph.name=c("peak_calling_nn", "peak_calling"),
-            verbose=FALSE
-        )
-        seurat_data <- FindClusters(
-            seurat_data,
-            graph.name="peak_calling",
-            resolution=args$resolution,
-            verbose=FALSE
-        )
-    }
-    Idents(seurat_data) <- "new.ident"                                      # safety measure as FindClusters may change identity column
     backup_assay <- DefaultAssay(seurat_data)
-    DefaultAssay(seurat_data) <- "ATAC"
-    macs2_peaks <- CallPeaks(
-        seurat_data,
-        group.by=group_by,
-        verbose=args$verbose
-    )
-    macs2_counts <- FeatureMatrix(
-        fragments=Fragments(seurat_data),
-        sep=c("-", "-"),
-        features=macs2_peaks,
-        cells=colnames(seurat_data),
-        verbose=FALSE
-    )
-    rm(macs2_peaks)                                                         # remove unused data
-    genome_annotation <- rtracklayer::import(args$annotations, format="GFF")
-    if( !("gene_biotype" %in% colnames(GenomicRanges::mcols(genome_annotation))) ){
-        print("Loaded genome annotation doesn't have 'gene_biotype' column. Adding NA")
-        genome_annotation$gene_biotype <- NA
-    }
-    atac_assay <- CreateChromatinAssay(
-        counts=macs2_counts,
-        sep=c("-", "-"),
-        fragments=Fragments(seurat_data),
-        min.cells=0,                                                        # setting something other than 0 will update nCount_ATAC, which bring some discrepancy to the QC plots
-        min.features=-1,                                                    # as they check ncount.cell > min.features and by default it's 0, we will remove cells without peaks and won't be able to add new assay to our seurat_data
-        annotation=genome_annotation
-    )
-    rm(macs2_counts, genome_annotation)                                            # remove unused data
-    seurat_data[["ATAC"]] <- atac_assay
-    rm(atac_assay)                                                          # remove unused data
-    DefaultAssay(seurat_data) <- backup_assay
-    Idents(seurat_data) <- "new.ident"                                      # safety measure
-    gc()
-    return (seurat_data)
-}
-
-export_all_dimensionality_plots <- function(seurat_data, suffix, args) {
-    Idents(seurat_data) <- "new.ident"                                      # safety measure
-    graphics$elbow_plot(
-        data=seurat_data,
-        ndims=50,
-        plot_title=paste("Elbow plot (from cells PCA) for RNA assay (", suffix, ")", sep=""),
-        theme=args$theme,
-        rootname=paste(args$output, suffix, "elbow", sep="_"),
-        pdf=args$pdf
-    )
-    graphics$corr_plot(
-        data=seurat_data,
-        reduction="pca",
-        highlight_dims=args$dimensions,
-        qc_columns=c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi"),
-        qc_labels=c("UMI(RNA)", "Genes", "Mitochondrial %", "Novelty score"),
-        plot_title=paste(
-            "Correlation plots between QC metrics and cells PCA components for RNA assay ",
-            "(", suffix, ")", sep=""
-        ),
-        combine_guides="collect",
-        theme=args$theme,
-        rootname=paste(args$output, suffix, "qc_dim_corr", sep="_"),
-        pdf=args$pdf
+    tryCatch(
+        expr = {
+            print(paste("Calling MACS2 peaks for cells grouped by", args$callby))
+            DefaultAssay(seurat_data) <- "ATAC"
+            macs2_peaks <- CallPeaks(
+                seurat_data,
+                group.by=args$callby,
+                verbose=args$verbose
+            )
+            Idents(seurat_data) <- "new.ident"                                      # safety measure - set identities to something standard
+            macs2_counts <- FeatureMatrix(
+                fragments=Fragments(seurat_data),
+                sep=c("-", "-"),
+                features=macs2_peaks,
+                cells=colnames(seurat_data),
+                verbose=FALSE
+            )
+            rm(macs2_peaks)                                                         # remove unused data
+            genome_annotation <- rtracklayer::import(args$annotations, format="GFF")
+            if( !("gene_biotype" %in% colnames(GenomicRanges::mcols(genome_annotation))) ){
+                print("Loaded genome annotation doesn't have 'gene_biotype' column. Adding NA")
+                genome_annotation$gene_biotype <- NA
+            }
+            atac_assay <- CreateChromatinAssay(
+                counts=macs2_counts,
+                sep=c("-", "-"),
+                fragments=Fragments(seurat_data),
+                min.cells=0,                                                        # setting something other than 0 will update nCount_ATAC, which bring some discrepancy to the QC plots
+                min.features=-1,                                                    # as they check ncount.cell > min.features and by default it's 0, we will remove cells without peaks and won't be able to add new assay to our seurat_data
+                annotation=genome_annotation
+            )
+            rm(macs2_counts, genome_annotation)                                     # remove unused data
+            seurat_data[["ATAC"]] <- atac_assay
+            rm(atac_assay)                                                          # remove unused data
+            gc(verbose=FALSE)
+        },
+        error = function(e){
+            print(paste("Failed to call MACS2 peaks due to", e))
+        },
+        finally = {
+            DefaultAssay(seurat_data) <- backup_assay
+            Idents(seurat_data) <- "new.ident"                                      # safety measure
+            return (seurat_data)
+        }
     )
 }
 
-export_all_clustering_plots <- function(seurat_data, suffix, args, cluster_prefix, macs2_peaks=FALSE){
-    Idents(seurat_data) <- "new.ident"                                    # safety measure
-    peak_type <- ifelse(macs2_peaks, "- MACS2", "- 10x")
-    selected_features=c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "nCount_ATAC", "TSS.enrichment", "nucleosome_signal", "nFeature_ATAC", "frip", "blacklist_fraction")
-    selected_labels=c(
-        "UMI(RNA)", "Genes", "Mitochondrial %", "Novelty score",
-        paste(
-            c("UMI(ATAC)", "TSS enrichment score", "Nucl. signal", "Peaks", "FRiP", "Bl. regions"),
-            peak_type
-        )
-    )
-    graphics$dim_plot(
-        data=seurat_data,
-        reduction="rnaumap",
-        plot_title=paste("Clustered cells UMAP for RNA assay (", suffix, "). Resolution ", args$resolution, sep=""),
-        legend_title="Cluster",
-        group_by=paste(paste(cluster_prefix, "res", sep="_"), args$resolution, sep="."),
-        label=TRUE,
-        palette_colors=graphics$D40_COLORS,
-        theme=args$theme,
-        rootname=paste(args$output, suffix, "umap_res", args$resolution, sep="_"),
-        pdf=args$pdf
-    )
-    Idents(seurat_data) <- paste(paste(cluster_prefix, "res", sep="_"), args$resolution, sep=".")
-    graphics$feature_plot(
-        data=seurat_data,
-        features=selected_features,
-        labels=selected_labels,
-        from_meta=TRUE,
-        reduction="rnaumap",
-        plot_title=paste("QC metrics on cells UMAP for RNA assay (", suffix, "). Resolution ", args$resolution, sep=""),
-        label=TRUE,
-        alpha=0.4,
-        max_cutoff="q99",                    # to prevent outlier cells to distort coloring
-        combine_guides="keep",
-        theme=args$theme,
-        rootname=paste(args$output, suffix, "umap_qc_mtrcs_res", args$resolution, sep="_"),
-        pdf=args$pdf
-    )
-    Idents(seurat_data) <- "new.ident"
-}
 
 export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
     Idents(seurat_data) <- "new.ident"                                                                # safety measure
@@ -630,10 +543,11 @@ get_args <- function(){
     parser$add_argument(
         "--barcodes",
         help=paste(
-            "Path to the headerless TSV/CSV file with the list of barcodes to select",
-            "cells of interest (one barcode per line). Prefilters input feature-barcode",
-            "matrix to include only selected cells.",
-            "Default: use all cells."
+            "Path to the TSV/CSV file to optionally prefilter and extend Seurat object",
+            "metadata be selected barcodes. First column should be named as 'barcode'.",
+            "If file includes any other columns they will be added to the Seurat object",
+            "metadata ovewriting the existing ones if those are present.",
+            "Default: all cells used, no extra metadata is added"
         ),
         type="character"
     )
@@ -767,73 +681,16 @@ get_args <- function(){
         type="double", default=0.05, nargs="*"
     )
     parser$add_argument(
-        "--callpeaks",
+        "--callby",
         help=paste(
-            "Call peaks with MACS2 instead of those that are provided by Cell Ranger ARC Count.",
-            "Peaks are called per identity or per RNA cluster after applying all RNA related",
-            "thresholds, maximum nucleosome signal, and minimum TSS enrichment scores filters.",
-            "If set to 'cluster' RNA clusters are identified based on the parameters set with",
-            "'--resolution', '--dimensions', '--highvargenes', '--norm', and '--ntgr'.",
+            "Replace Cell Ranger ARC peaks with MACS2 peaks called for cells grouped by",
+            "the column from the optionally provided --barcodes file. If --barcodes file",
+            "was not provided MACS2 peaks can be still called per dataset by setting --callby",
+            "to new.ident. Peaks are called only after applying all RNA related thresholds,",
+            "maximum nucleosome signal, and minimum TSS enrichment scores filters.",
             "Default: do not call peaks"
         ),
-        type="character",
-        choices=c("identity", "cluster")
-    )
-    parser$add_argument(
-        "--norm",
-        help=paste(
-            "Normalization method applied to genes expression counts when identifying RNA based",
-            "clusters before calling custom MACS2 peaks. Ignored if '--callpeaks' is not set to",
-            "'cluster'.",
-            "Default: sct"
-        ),
-        type="character",
-        default="sct",
-        choices=c("sct", "log", "sctglm")
-    )
-    parser$add_argument(
-        "--highvargenes",
-        help=paste(
-            "Number of highly variable genes used in RNA datasets integration, scaling and",
-            "dimensionality reduction when identifying RNA based clusters for calling",
-            "custom MACS2 peaks. Ignored if '--callpeaks' is not set to 'cluster'.",
-            "Default: 3000"
-        ),
-        type="integer", default=3000
-    )
-    parser$add_argument(
-        "--ntgr",
-        help=paste(
-            "RNA datasets integration method used for identifying RNA based clusters",
-            "before calling custom MACS2 peaks. Automatically set to 'none' if '--mex' points",
-            "to the Cell Ranger ARC Count outputs (single, not aggregated dataset that",
-            "doesn't require any integration). Ignored if '--callpeaks' is not set to",
-            "'cluster'.",
-            "Default: seurat"
-        ),
-        type="character",
-        default="seurat",
-        choices=c("seurat", "none")
-    )
-    parser$add_argument(
-        "--dimensions",
-        help=paste(
-            "Dimensionality to use in projection and clustering for RNA assay when identifying",
-            "RNA based clusters for calling custom MACS2 peaks (from 1 to 50). If single",
-            "number N is provided, use from 1 to N PCs. If multiple numbers are provided,",
-            "subset to only selected PCs. Ignored if '--callpeaks' is not set to 'cluster'.",
-            "Default: from 1 to 10"
-        ),
-        type="integer", default=10, nargs="*"
-    )
-    parser$add_argument(
-        "--resolution",
-        help=paste(
-            "Resolution to be used when identifying RNA based clusters for calling",
-            "custom MACS2 peaks. Ignored if '--callpeaks' is not set to 'cluster'.",
-            "Default: 0.3"
-        ),
-        type="double", default=0.3
+        type="character"
     )
     parser$add_argument(
         "--pdf",
@@ -853,17 +710,6 @@ get_args <- function(){
     parser$add_argument(
         "--h5ad",
         help="Save Seurat data to h5ad file. Default: false",
-        action="store_true"
-    )
-    parser$add_argument(
-        "--lowmem",
-        help=paste(
-            "Attempts to minimize RAM usage when integrating multiple datasets",
-            "with SCTransform algorithm (slows down the computation).",
-            "Ignored if '--callpeaks' is not set to 'cluster', if '--ntgr' is not set",
-            "to 'seurat', if '--norm' is not set to either 'sct' or 'sctglm'.",
-            "Default: false"
-        ),
         action="store_true"
     )
     parser$add_argument(
@@ -945,16 +791,13 @@ for (key in names(args)){
         }
     }
 }
-if (length(args$dimensions) == 1) {                            # only one value was provided, so we need to inflate it to 1:N
-    args$dimensions <- c(1:args$dimensions[1])
-}
 print("Adjusted parameters")
 print(args)
 
-print(paste("Loading barcodes of interest from", args$barcodes))
-barcodes_data <- io$load_barcodes_data(args$barcodes, seurat_data)
-print("Applying cell filters based on the loaded barcodes of interest")
-seurat_data <- filter$apply_cell_filters(seurat_data, barcodes_data)
+if (!is.null(args$barcodes)){
+    print("Applying cell filters based on the barcodes of interest")
+    seurat_data <- io$extend_metadata_by_barcode(seurat_data, args$barcodes, TRUE)
+}
 debug$print_info(seurat_data, args)
 
 print("Adding RNA QC metrics for not filtered datasets")
@@ -979,7 +822,7 @@ print("Applying filters based on ATAC QC metrics")
 seurat_data <- filter$apply_atac_qc_filters(seurat_data, cell_identity_data, args)         # cleans up all reductions
 debug$print_info(seurat_data, args)
 
-if (!is.null(args$callpeaks)){
+if (!is.null(args$callby)){
     print("Forced to replace Cell Ranger ARC peaks with MACS2 peaks")
     seurat_data <- call_peaks(seurat_data, args)
     debug$print_info(seurat_data, args)
@@ -994,19 +837,6 @@ if (!is.null(args$callpeaks)){
         args=args,
         macs2_peaks=TRUE
     )
-    if (args$callpeaks == "cluster"){                                                      # we have this plots only when we run RNA clustering for calling peaks per cluster
-        export_all_dimensionality_plots(
-            seurat_data=seurat_data,
-            suffix="mid_fltr",
-            args=args
-        )
-        export_all_clustering_plots(
-            seurat_data=seurat_data,
-            suffix="mid_fltr",
-            args=args,
-            cluster_prefix="peak_calling"
-        )
-    }
     print("Applying filters based on updated ATAC QC metrics after calling MACS2 peaks")
     seurat_data <- filter$apply_atac_qc_filters(seurat_data, cell_identity_data, args)     # cleans up all reductions
     debug$print_info(seurat_data, args)
@@ -1024,7 +854,7 @@ export_all_qc_plots(                                                            
     seurat_data=seurat_data,
     suffix="fltr",
     args=args,
-    macs2_peaks=!is.null(args$callpeaks)                                                   # can be both from 10x or MACS2
+    macs2_peaks=!is.null(args$callby)                                                   # can be both from 10x or MACS2
 )
 
 DefaultAssay(seurat_data) <- "RNA"                                                         # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 

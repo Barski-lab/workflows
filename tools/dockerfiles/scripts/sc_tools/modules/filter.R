@@ -2,7 +2,6 @@ import("Seurat")
 import("Signac")
 
 export(
-    "apply_cell_filters",
     "apply_metadata_filters",
     "apply_rna_qc_filters",
     "apply_atac_qc_filters",
@@ -52,10 +51,10 @@ collapse_fragments_list <- function(seurat_data){
     return (seurat_data)
 }
 
-apply_cell_filters <- function(seurat_data, barcodes_data) {
-    filtered_seurat_data <- base::subset(seurat_data, cells=barcodes_data)
-    return (filtered_seurat_data)
-}
+# apply_cell_filters <- function(seurat_data, barcodes_data) {
+#     filtered_seurat_data <- base::subset(seurat_data, cells=barcodes_data)
+#     return (filtered_seurat_data)
+# }
 
 apply_metadata_filters <- function(seurat_data, target_column, target_values){
     base::print(

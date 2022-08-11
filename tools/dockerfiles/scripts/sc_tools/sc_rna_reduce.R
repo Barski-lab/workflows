@@ -266,10 +266,11 @@ get_args <- function(){
     parser$add_argument(
         "--barcodes",
         help=paste(
-            "Path to the headerless TSV/CSV file with the list of barcodes to select",
-            "cells of interest (one barcode per line). Prefilters loaded Seurat object",
-            "to include only specific set of cells.",
-            "Default: use all cells."
+            "Path to the TSV/CSV file to optionally prefilter and extend Seurat object",
+            "metadata be selected barcodes. First column should be named as 'barcode'.",
+            "If file includes any other columns they will be added to the Seurat object",
+            "metadata ovewriting the existing ones if those are present.",
+            "Default: all cells used, no extra metadata is added"
         ),
         type="character"
     )
@@ -537,10 +538,10 @@ if (!is.null(args$metadata)){
     debug$print_info(seurat_data, args)
 }
 
-print(paste("Loading barcodes of interest from", args$barcodes))
-barcodes_data <- io$load_barcodes_data(args$barcodes, seurat_data)
-print("Applying cell filters based on the loaded barcodes of interest")
-seurat_data <- filter$apply_cell_filters(seurat_data, barcodes_data)
+if (!is.null(args$barcodes)){
+    print("Applying cell filters based on the barcodes of interest")
+    seurat_data <- io$extend_metadata_by_barcode(seurat_data, args$barcodes, TRUE)
+}
 debug$print_info(seurat_data, args)
 
 if (!is.null(args$regressgenes)){
