@@ -2,16 +2,22 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.10
+# Software Version: v0.0.11
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.0.6
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.10 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.10
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.10 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.11 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.11
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.11 /bin/bash
 ##########################################################################################################
+#
+# v0.0.11
+# - add integration with Harmony in sc_atac_reduce.R script
+# - updated --barcodes parameter to extend metadata
+# - updated --norm parameter in sc_atac_reduce.R
+# - updated --callby parameter in sc_multiome_filter.R
 #
 # v0.0.10
 # - add integration with Harmony on sc_rna_reduce.R script
