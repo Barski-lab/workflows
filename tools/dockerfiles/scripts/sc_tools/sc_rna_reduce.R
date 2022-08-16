@@ -83,8 +83,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             label=FALSE,
             alpha=0.5,
             palette_colors=graphics$D40_COLORS,
-            width=1200,
-            height=400,
             theme=args$theme,
             rootname=paste(args$output, "umap_spl_ph", sep="_"),
             pdf=args$pdf
@@ -100,8 +98,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         label=FALSE,
         alpha=0.5,
         palette_colors=graphics$D40_COLORS,
-        width=1200,
-        height=400,
         theme=args$theme,
         rootname=paste(args$output, "umap_spl_mito", sep="_"),
         pdf=args$pdf
@@ -116,8 +112,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         label=FALSE,
         alpha=0.5,
         palette_colors=graphics$D40_COLORS,
-        width=1200,
-        height=400,
         theme=args$theme,
         rootname=paste(args$output, "umap_spl_umi", sep="_"),
         pdf=args$pdf
@@ -132,8 +126,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         label=FALSE,
         alpha=0.5,
         palette_colors=graphics$D40_COLORS,
-        width=1200,
-        height=400,
         theme=args$theme,
         rootname=paste(args$output, "umap_spl_gene", sep="_"),
         pdf=args$pdf
@@ -180,8 +172,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
                 label=FALSE,
                 alpha=0.5,
                 palette_colors=graphics$D40_COLORS,
-                width=1200,
-                height=400,
                 theme=args$theme,
                 rootname=paste(args$output, "umap_gr_cnd_spl_ph", sep="_"),
                 pdf=args$pdf
@@ -197,8 +187,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             label=FALSE,
             alpha=0.5,
             palette_colors=graphics$D40_COLORS,
-            width=1200,
-            height=400,
             theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_mito", sep="_"),
             pdf=args$pdf
@@ -213,8 +201,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             label=FALSE,
             alpha=0.5,
             palette_colors=graphics$D40_COLORS,
-            width=1200,
-            height=400,
             theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_umi", sep="_"),
             pdf=args$pdf
@@ -229,8 +215,6 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             label=FALSE,
             alpha=0.5,
             palette_colors=graphics$D40_COLORS,
-            width=1200,
-            height=400,
             theme=args$theme,
             rootname=paste(args$output, "umap_gr_cnd_spl_gene", sep="_"),
             pdf=args$pdf
