@@ -146,6 +146,8 @@ steps:
     run: ../../tools/extract-fastq.cwl
     in:
       compressed_file: fastq_file_r1
+      output_prefix:
+        default: "read_1"
     out:
     - fastq_file
 
@@ -161,6 +163,8 @@ steps:
     run: ../../tools/extract-fastq.cwl
     in:
       compressed_file: fastq_file_r2
+      output_prefix:
+        default: "read_2"
     out:
     - fastq_file
 
