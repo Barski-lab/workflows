@@ -2,16 +2,19 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.11
+# Software Version: v0.0.12
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.0.6
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.11 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.11
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.11 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.12 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.12
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.12 /bin/bash
 ##########################################################################################################
+#
+# v0.0.12
+# - add sc_triangulate.R to run scTriangulate
 #
 # v0.0.11
 # - add integration with Harmony in sc_atac_reduce.R script
@@ -88,6 +91,7 @@ WORKDIR /tmp
 ENV R_MAX_VSIZE=200000000000
 ENV CB_VERSION "1.1.1"
 ENV MACS2_VERSION "2.2.7.1"
+ENV SCTRIANGULATE_VERSION "0.12.0"
 
 COPY ./scripts/sc_tools/sc_rna_filter.R /usr/local/bin/sc_rna_filter.R
 COPY ./scripts/sc_tools/sc_multiome_filter.R /usr/local/bin/sc_multiome_filter.R
@@ -99,6 +103,7 @@ COPY ./scripts/sc_tools/sc_wnn_cluster.R /usr/local/bin/sc_wnn_cluster.R
 COPY ./scripts/sc_tools/sc_ctype_assign.R /usr/local/bin/sc_ctype_assign.R
 COPY ./scripts/sc_tools/sc_rna_de_pseudobulk.R /usr/local/bin/sc_rna_de_pseudobulk.R
 COPY ./scripts/sc_tools/sc_rna_da_cells.R /usr/local/bin/sc_rna_da_cells.R
+COPY ./scripts/sc_tools/sc_triangulate.R /usr/local/bin/sc_triangulate.R
 COPY ./scripts/sc_tools/modules/*.R /usr/local/bin/modules/
 
 ### Installing dependencies
@@ -110,6 +115,7 @@ RUN apt-get update && \
     pip3 install cellbrowser==${CB_VERSION} && \
     pip3 install -U numba && \
     pip3 install MACS2==${MACS2_VERSION} && \
+    pip3 install sctriangulate==${SCTRIANGULATE_VERSION} && \
     R -e 'install.packages("devtools", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("tidyverse", repo = "https://cloud.r-project.org/")' && \
@@ -130,6 +136,7 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_ctype_assign.R && \
     chmod +x /usr/local/bin/sc_rna_de_pseudobulk.R && \
     chmod +x /usr/local/bin/sc_rna_da_cells.R && \
+    chmod +x /usr/local/bin/sc_triangulate.R && \
 ### Cleaning
     apt-get clean && \
     apt-get purge && \

@@ -3,17 +3,20 @@ import("limma", attach=FALSE)
 import("DAseq", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
+import("sceasy", attach=FALSE)
 import("DESeq2", attach=FALSE)
 import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
 import("S4Vectors", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
+import("reticulate", attach=FALSE)
 import("SummarizedExperiment", attach=FALSE)
 
 export(
     "rna_analyze",
     "add_clusters",
+    "integrate_labels",
     "rna_preprocess",
     "rna_log_single",
     "rna_sct_single",
@@ -555,6 +558,89 @@ add_clusters <- function(seurat_data, assay, graph_name, reduction, cluster_algo
         algorithm=cluster_algorithm,
         verbose=FALSE
     )
+    return (seurat_data)
+}
+
+integrate_labels <- function(seurat_data, source_columns, args){
+    base::print(
+        base::paste(
+            "Running scTriangulate for", base::paste(source_columns, collapse=", "), "columns.",
+            base::ifelse(
+                !is.null(args$target),
+                base::paste("The results will be saved into the columns with the suffix", args$target),
+                ""
+            )
+        )
+    )
+    temporary_file <- base::tempfile(                                      # will be automatically removed when R exits
+        pattern="sctri",
+        tmpdir=base::tempdir(),
+        fileext=".h5ad"
+    )
+    base::print(base::paste("Saving temporary h5ad file to", temporary_file))
+    sceasy::convertFormat(seurat_data, from="seurat", to="anndata", outFile=temporary_file)
+    script_file <- base::tempfile(                                         # will be automatically removed when R exits
+        pattern="sctri",
+        tmpdir=base::tempdir(),
+        fileext=".py"
+    )
+    output_stream <- base::file(script_file)
+    base::writeLines(
+        c(
+            "import os",
+            "import scanpy",
+            "import platform",
+            "import resource",
+            "import sctriangulate",
+            "try:",
+            "    R_MAX_VSIZE = int(os.getenv('R_MAX_VSIZE'))//2",
+            "    resource.setrlimit(resource.RLIMIT_AS, (R_MAX_VSIZE, R_MAX_VSIZE))",         # ignored if run not on Linux
+            "    print(f'Attempting to set the maximum memory limits to {R_MAX_VSIZE}')",
+            "except Exception:",
+            "    print('Failed to set maximum memory limits')",
+            "def sc_triangulate(location, clustering_columns, tmp_dir, cores=None):",
+            "    cores = 1 if cores is None else int(cores)",
+            "    sctri_data = sctriangulate.ScTriangulate(",
+            "        dir=tmp_dir,",
+            "        adata=scanpy.read(location),",
+            "        query=clustering_columns,",
+            "        predict_doublet=False",
+            "    )",
+            "    sctri_data.compute_metrics(",
+            "        cores=cores,",
+            "        scale_sccaf=True",
+            "    )",
+            "    sctri_data.compute_shapley(cores=cores)",
+            "    sctri_data.prune_result()",
+            "    return sctri_data.adata.obs"
+        ),
+        output_stream
+    )
+    base::close(output_stream)
+    reticulate::source_python(script_file)
+    pruned_clusters <- sc_triangulate(
+                           temporary_file,
+                           source_columns,
+                           base::tempdir(),
+                           args$cpus
+                       )[, c("pruned", "confidence", "final_annotation")] %>%
+                       dplyr::mutate("pruned"=base::gsub("@", "__", .$pruned)) %>%  # @ is not good if it somehow appears in any of the filenames
+                       dplyr::rename(
+                           !!tidyselect::all_of(base::paste("custom", args$target, "pruned", sep="_")):="pruned"       # need "custom" prefix for UCSC Browser
+                       ) %>%
+                       dplyr::rename(
+                           !!tidyselect::all_of(base::paste("custom", args$target, "confidence", sep="_")):="confidence"
+                       ) %>%
+                       dplyr::rename(
+                           !!tidyselect::all_of(base::paste("custom", args$target, "final_annotation", sep="_")):="final_annotation"
+                       )
+    base::print(utils::head(pruned_clusters))
+    seurat_data <- SeuratObject::AddMetaData(
+        seurat_data,
+        pruned_clusters[SeuratObject::Cells(seurat_data), , drop=FALSE]    # to guarantee the proper cells order
+    )
+    base::rm(pruned_clusters)  # remove unused data
+    base::gc(verbose=FALSE)
     return (seurat_data)
 }
 
