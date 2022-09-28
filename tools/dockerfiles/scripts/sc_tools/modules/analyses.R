@@ -589,11 +589,10 @@ integrate_labels <- function(seurat_data, source_columns, args){
         c(
             "import os",
             "import scanpy",
-            "import platform",
             "import resource",
             "import sctriangulate",
             "try:",
-            "    R_MAX_VSIZE = int(os.getenv('R_MAX_VSIZE'))//2",
+            "    R_MAX_VSIZE = int(os.getenv('R_MAX_VSIZE'))",
             "    resource.setrlimit(resource.RLIMIT_AS, (R_MAX_VSIZE, R_MAX_VSIZE))",         # ignored if run not on Linux
             "    print(f'Attempting to set the maximum memory limits to {R_MAX_VSIZE}')",
             "except Exception:",

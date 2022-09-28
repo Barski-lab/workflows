@@ -15,6 +15,14 @@
 #
 # v0.0.12
 # - add sc_triangulate.R to run scTriangulate
+# - install certain packages with manually provided
+#   dependencies as R updates Seurat to the latest
+#   version by default
+# - need to have fixed versions for scipy and numpy
+#   to be able to build numpy from source because of
+#   seg. fault when running it from reticulate
+#   https://stackoverflow.com/questions/70711946/reticulate-segfaults-with-call-to-plt-plot
+#   https://github.com/rstudio/reticulate/issues/1133#issuecomment-1021783041
 #
 # v0.0.11
 # - add integration with Harmony in sc_atac_reduce.R script
@@ -92,6 +100,8 @@ ENV R_MAX_VSIZE=200000000000
 ENV CB_VERSION "1.1.1"
 ENV MACS2_VERSION "2.2.7.1"
 ENV SCTRIANGULATE_VERSION "0.12.0"
+ENV SCIPY_VERSION "1.7.3"
+ENV NUMPY_VERSION "1.22.0"
 
 COPY ./scripts/sc_tools/sc_rna_filter.R /usr/local/bin/sc_rna_filter.R
 COPY ./scripts/sc_tools/sc_multiome_filter.R /usr/local/bin/sc_multiome_filter.R
@@ -111,7 +121,9 @@ RUN apt-get update && \
     apt-get install libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev \
                     libssl-dev pandoc libudunits2-dev libgdal-dev libcairo2-dev libharfbuzz-dev \
                     libfribidi-dev libbz2-dev tk -y && \
-    pip3 install scipy numpy anndata && \
+    pip3 install --no-binary="numpy" numpy==${NUMPY_VERSION} --ignore-installed && \
+    pip3 install scipy==${SCIPY_VERSION} && \
+    pip3 install anndata && \
     pip3 install cellbrowser==${CB_VERSION} && \
     pip3 install -U numba && \
     pip3 install MACS2==${MACS2_VERSION} && \
@@ -121,10 +133,17 @@ RUN apt-get update && \
     R -e 'install.packages("tidyverse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("modules", repo = "https://cloud.r-project.org/")' && \
     R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', 'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment', 'harmony'))" && \
-    R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/")' && \
-    R -e 'devtools::install_github("cellgeni/sceasy")' && \
-    R -e 'devtools::install_github("KlugerLab/DAseq")' && \
-    R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/")' && \
+    R -e 'install.packages("fastmatch")' && \
+    R -e 'install.packages("RcppRoll")' && \
+    R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
+    R -e 'devtools::install_github("cellgeni/sceasy", upgrade = "never")' && \
+    R -e 'devtools::install_github("KlugerLab/DAseq", upgrade = "never")' && \
+    R -e 'install.packages("LambertW")' && \
+    R -e 'install.packages("nortest")' && \
+    R -e 'install.packages("doParallel")' && \
+    R -e 'install.packages("doRNG")' && \
+    R -e 'install.packages("butcher")' && \
+    R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
     chmod +x /usr/local/bin/sc_multiome_filter.R && \
