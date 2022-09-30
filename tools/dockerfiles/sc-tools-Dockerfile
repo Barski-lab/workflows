@@ -143,6 +143,7 @@ RUN apt-get update && \
     R -e 'install.packages("doParallel")' && \
     R -e 'install.packages("doRNG")' && \
     R -e 'install.packages("butcher")' && \
+    R -e 'install.packages("recipes")' && \
     R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
