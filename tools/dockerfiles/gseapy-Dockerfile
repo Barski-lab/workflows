@@ -2,15 +2,22 @@
 # Dockerfile
 #
 # Software:         GSEApy
-# Software Version: v0.0.4
+# Software Version: v0.0.5
 # Description:      Gene Set Enrichment Analysis in Python
 # Website:          https://gseapy.readthedocs.io/en/latest/index.html
 # Provides:         GSEApy 0.9.18 (modified: works without Internet)
 # Base Image:       python:3.7
-# Build Cmd:        docker build --rm -t biowardrobe2/gseapy:v0.0.4 -f gseapy-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/gseapy:v0.0.4
-# Run Cmd:          docker run --rm -ti biowardrobe2/gseapy:v0.0.4 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/gseapy:v0.0.5 -f gseapy-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/gseapy:v0.0.5
+# Run Cmd:          docker run --rm -ti biowardrobe2/gseapy:v0.0.5 /bin/bash
 #################################################################
+#
+# v0.0.5
+# - updated to the latest msigdb 2022.1.Hs release
+# - added new genesets
+#   KEGG_2021_Human
+#   Reactome_2022
+#   WikiPathways_2019_Human
 #
 # v0.0.4
 # CLS file now can be both space and tab delimited
@@ -37,17 +44,18 @@ COPY ./scripts/gseapy_download_datasets.py /tmp/gseapy_download_datasets.py
 COPY ./scripts/gsea_download_datasets.sh /tmp/gsea_download_datasets.sh
 
 ### Installing GSEApy
-RUN git clone ${URL_GSEAPY} && \
+RUN pip install tqdm && \
+    git clone ${URL_GSEAPY} && \
     cd GSEApy && \
     git checkout ${COMMIT_GSEAPY} && \
     pip install . && \
     cd .. && \
 ### Downloading genesets
-#   python gseapy_download_datasets.py && \
     mkdir /opt/gseapy/ && \
     cd /opt/gseapy/ && \
     chmod +x /tmp/gsea_download_datasets.sh && \
     /tmp/gsea_download_datasets.sh && \
+    python3 /tmp/gseapy_download_datasets.py --libraries KEGG_2021_Human Reactome_2022 WikiPathways_2019_Human --names KEGG_2021_Human Reactome_2022 WikiPathways_2019_Human && \
     cd /tmp && \
 ### Cleaning
     apt-get clean && \

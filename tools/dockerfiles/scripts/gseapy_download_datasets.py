@@ -1,30 +1,32 @@
+#!/usr/bin/env python
 import os
-import json
-import requests
-
-from gseapy.utils import DEFAULT_CACHE_PATH, retry, mkdirs
-
-
-def get_libraries():
-    lib_url='http://amp.pharm.mssm.edu/Enrichr/datasetStatistics'
-    response = requests.get(lib_url)
-    if not response.ok:
-        raise Exception("Error getting the Enrichr libraries")
-    libs_json = json.loads(response.text)
-    libs = [lib['libraryName'] for lib in libs_json['statistics']]
-    return sorted(libs)
+import sys
+import argparse
+from gseapy.utils import retry, mkdirs
 
 
-def parse_lib(libname):
-    tmpname = "enrichr." + libname + ".gmt"
-    tempath = os.path.join(DEFAULT_CACHE_PATH, tmpname)
+# import json
+# import requests
+# def get_libraries():
+#     lib_url='http://amp.pharm.mssm.edu/Enrichr/datasetStatistics'
+#     response = requests.get(lib_url)
+#     if not response.ok:
+#         raise Exception("Error getting the Enrichr libraries")
+#     libs_json = json.loads(response.text)
+#     libs = [lib['libraryName'] for lib in libs_json['statistics']]
+#     return sorted(libs)
+
+
+def parse_lib(libname, suffix, location):
+    tmpname = "enrichr." + suffix + ".gmt"
+    tempath = os.path.join(location, tmpname)
     if os.path.isfile(tempath):
         print("Already downloaded", libname)
     else:
-        return download_library(libname)
+        return download_library(libname, location)
 
 
-def download_library(libname):
+def download_library(libname, location):
     print("Downloading: ", libname)
     s = retry(5)
     ENRICHR_URL = 'http://amp.pharm.mssm.edu/Enrichr/geneSetLibrary'
@@ -32,10 +34,10 @@ def download_library(libname):
     response = s.get( ENRICHR_URL + query_string % libname, timeout=None)
     if not response.ok:
         raise Exception('Error fetching enrichment results, check internet connection first.')
-    mkdirs(DEFAULT_CACHE_PATH)
+    mkdirs(location)
     genesets_dict = {}
     outname = "enrichr.%s.gmt"%libname
-    gmtout = open(os.path.join(DEFAULT_CACHE_PATH, outname), "w")
+    gmtout = open(os.path.join(location, outname), "w")
     for line in response.iter_lines(chunk_size=1024, decode_unicode='utf-8'):
         line=line.strip()
         k = line.split("\t")[0]
@@ -47,8 +49,45 @@ def download_library(libname):
     return genesets_dict
 
 
-for libname in get_libraries():
-    try:
-        parse_lib(libname)
-    except Exception as err:
-        pass
+class ArgsParser():
+
+    def __init__(self, args):
+        self.args, _ = self.get_parser().parse_known_args(args)
+        self.set_args_as_attributes()
+
+    def set_args_as_attributes(self):
+        for arg, value in vars(self.args).items():
+            setattr(self, arg, value)
+
+    def get_parser(self):
+        general_parser = argparse.ArgumentParser()
+        general_parser.add_argument(
+            "--libraries",
+            help="Name of GSEAPY genesets to select for downloading",
+            type=str, required=True, nargs="+"
+        )
+        general_parser.add_argument(
+            "--names",
+            help="Names to save downloaded genesets",
+            type=str, required=True, nargs="+"
+        ),
+        general_parser.add_argument(
+            "--output",
+            help="Path to the folder to save downloaded files",
+            type=str, default="./"
+        )
+        return general_parser
+
+
+def main(args=None):
+    args = ArgsParser(sys.argv[1:] if args is None else args)
+    for library, suffix in zip(args.libraries, args.names):
+        try:
+            print(f"Attempting to download {library} with the name {suffix}")
+            parse_lib(library, suffix, args.output)
+        except Exception as err:
+            print(f"Failed to download {library} with the name {suffix}")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
