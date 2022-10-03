@@ -909,18 +909,18 @@ outputs:
       UMI per cell correlation for RNA vs ATAC assays (intermediate filtered).
       PDF format
 
-  mid_tss_atac_umi_corr_plot_png:
+  mid_fltr_tss_atac_umi_corr_plot_png:
     type: File?
     outputBinding:
-      glob: "*_mid_tss_atac_umi_corr.png"
+      glob: "*_mid_fltr_tss_atac_umi_corr.png"
     doc: |
       TSS enrichment score vs UMI per cell correlation for ATAC assay (intermediate filtered).
       PNG format
 
-  mid_tss_atac_umi_corr_plot_pdf:
+  mid_fltr_tss_atac_umi_corr_plot_pdf:
     type: File?
     outputBinding:
-      glob: "*_mid_tss_atac_umi_corr.pdf"
+      glob: "*_mid_fltr_tss_atac_umi_corr.pdf"
     doc: |
       TSS enrichment score vs UMI per cell correlation for ATAC assay (intermediate filtered).
       PDF format
