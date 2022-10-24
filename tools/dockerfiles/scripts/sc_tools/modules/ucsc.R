@@ -200,8 +200,7 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, dot_radius=3,
                 meta_fields <- base::append(meta_fields, "new.ident", 0)
                 meta_fields_names <- base::append(meta_fields_names, "Identity", 0)
             }
-
-            if(seurat_data@meta.data$new.ident != seurat_data@meta.data$condition){
+            if (all(base::as.vector(as.character(seurat_data@meta.data$new.ident)) != base::as.vector(as.character(seurat_data@meta.data$condition)))){
                 meta_fields <- base::append(meta_fields, "condition", 1)
                 meta_fields_names <- base::append(meta_fields_names, "Condition", 1)
             }
