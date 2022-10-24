@@ -366,7 +366,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
     )
     DefaultAssay(seurat_data) <- backup_assay
 
-    if (seurat_data@meta.data$new.ident != seurat_data@meta.data$condition){
+    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
         graphics$geom_density_plot(
             data=seurat_data@meta.data,
             x_axis="nCount_RNA",

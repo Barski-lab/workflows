@@ -61,7 +61,7 @@ export_all_clustering_plots <- function(seurat_data, args){
                 pdf=args$pdf
             )
         }
-        if (seurat_data@meta.data$new.ident != seurat_data@meta.data$condition){
+        if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
             graphics$dim_plot(
                 data=seurat_data,
                 reduction=reduction,
@@ -158,7 +158,7 @@ export_all_clustering_plots <- function(seurat_data, args){
         }
     }
     
-    if (seurat_data@meta.data$new.ident != seurat_data@meta.data$condition){
+    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
         graphics$composition_plot(
             data=downsampled_data,
             plot_title=paste(

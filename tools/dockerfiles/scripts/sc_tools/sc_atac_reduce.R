@@ -80,7 +80,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         )
     }
 
-    if (seurat_data@meta.data$new.ident != seurat_data@meta.data$condition){
+    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
         graphics$dim_plot(
             data=seurat_data,
             reduction="atacumap",
