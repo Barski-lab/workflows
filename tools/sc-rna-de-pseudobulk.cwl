@@ -627,23 +627,21 @@ doc: |
 
 
 s:about: |
-  usage: sc_rna_de_pseudobulk.R [-h] --query QUERY
-                                              [--metadata METADATA] --splitby
-                                              SPLITBY --first FIRST --second
-                                              SECOND [--batchby BATCHBY]
-                                              [--groupby GROUPBY]
-                                              [--subset [SUBSET [SUBSET ...]]]
-                                              [--lrt] [--alpha ALPHA]
-                                              [--genes [GENES [GENES ...]]]
-                                              [--exclude EXCLUDE]
-                                              [--topgenes TOPGENES] [--pdf]
-                                              [--verbose] [--output OUTPUT]
-                                              [--theme {gray,bw,linedraw,light,dark,minimal,classic,void}]
-                                              [--cpus CPUS] [--memory MEMORY]
+  usage: sc_rna_de_pseudobulk.R
+        [-h] --query QUERY [--metadata METADATA] --splitby SPLITBY --first
+        FIRST --second SECOND [--batchby BATCHBY] [--groupby GROUPBY]
+        [--subset [SUBSET ...]] [--lrt] [--padj PADJ] [--genes [GENES ...]]
+        [--exclude EXCLUDE] [--norm {vst,rlog}] [--remove]
+        [--cluster {row,column,both}]
+        [--rowdist {cosangle,abscosangle,euclid,abseuclid,cor,abscor}]
+        [--columndist {cosangle,abscosangle,euclid,abseuclid,cor,abscor}]
+        [--center] [--pdf] [--verbose] [--output OUTPUT]
+        [--theme {gray,bw,linedraw,light,dark,minimal,classic,void}]
+        [--cpus CPUS] [--memory MEMORY]
 
-  Single-cell Pseudobulk Differential Expression Analysis
+  Single-cell Pseudobulk Differential Expression Analysis Between Datasets
 
-  optional arguments:
+  options:
     -h, --help            show this help message and exit
     --query QUERY         Path to the RDS file to load Seurat object from. This
                           file should include genes expression information
@@ -658,56 +656,83 @@ s:about: |
                           provided in this file columns are already present in
                           the Seurat object metadata, they will be overwritten.
                           Default: no extra metadata is added
-    --splitby SPLITBY     Column from the Seurat object metadata to split cells
-                          into two groups to run --second vs --first pseudobulk
-                          DE analysis. May include columns from the extra
-                          metadata added with --metadata parameter.
+    --splitby SPLITBY     Column from the Seurat object metadata to split
+                          datasets into two groups to run --second vs --first
+                          pseudobulk DE analysis, i.e., calculate log2FC. May be
+                          one of the columns from the extra metadata added with
+                          --metadata parameter. Provided value should group the
+                          datasets, not cells, therefore do not use a column
+                          with clustering results.
     --first FIRST         Value from the Seurat object metadata column set with
-                          --splitby to define the first group of cells for
+                          --splitby to define the first group of datasets for
                           pseudobulk DE analysis.
     --second SECOND       Value from the Seurat object metadata column set with
-                          --splitby to define the second group of cells for
+                          --splitby to define the second group of datasets for
                           pseudobulk DE analysis.
-    --batchby BATCHBY     Column from the Seurat object metadata to define the
-                          variable that should be modeled as a batch effect when
-                          running pseudobulk DE analysis. May include columns
-                          from the extra metadata added with --metadata
-                          parameter. Default: do not model batch effect.
+    --batchby BATCHBY     Column from the Seurat object metadata to group
+                          datasets into batches. It will be used as a factor
+                          variable to model batch effect when running pseudobulk
+                          DE analysis (makes design formula look like
+                          ~splitby+batchby). May be one of the columns from the
+                          extra metadata added with --metadata parameter.
+                          Provided value should batch the datasets, not cells,
+                          therefore do not use a column with clustering results.
+                          Default: do not model batch effect.
     --groupby GROUPBY     Column from the Seurat object metadata to group cells
                           for optional subsetting when combined with --subset
-                          parameter. May include columns from the extra metadata
-                          added with --metadata parameter. Ignored if --subset
-                          is not provided. Default: do not subset, run
-                          pseudobulk DE analysis for all cells jointly
-    --subset [SUBSET [SUBSET ...]]
+                          parameter. May be one of the columns from the extra
+                          metadata added with --metadata parameter. Ignored if
+                          --subset is not set. Provided value defines the groups
+                          of cells, therefore any metadata column, including the
+                          clustering results, may be used. Default: do not
+                          subset, run pseudobulk DE analysis for all cells
+                          jointly
+    --subset [SUBSET ...]
                           Value(s) from the column set with --groupby parameter
                           to subset cells before running pseudobulk DE analysis.
                           If multiple values are provided run analysis jointly
                           for selected groups of cells. Ignored if --groupby is
                           not set. Default: do not subset, run pseudobulk DE
                           analysis for all cells jointly
-    --lrt                 Use LRT instead of the pair-wise Wald test. Determines
-                          if the increased likelihood of the data using the
-                          --splitby term is more than expected if that term is
-                          truly zero. Default: use Wald test
-    --alpha ALPHA         The maximum significance level alpha used by DESeq2
-                          for independent filtering of results. The adjusted p
-                          values for the genes which do not pass this filter
-                          threshold will be set to NA and removed from the
-                          outputs. The same threshold will be used for
-                          identifying --topgenes the most DE genes. Default: 0.1
-    --genes [GENES [GENES ...]]
-                          Genes of interest to label on the generated plots.
-                          Default: --topgenes N genes with the highest and the
-                          lowest log2 fold change expression values.
+    --lrt                 Use LRT instead of the pair-wise Wald test. If
+                          --batchby is not provided use ~1 as a reduced formula,
+                          otherwise ~batchby. Default: use Wald test
+    --padj PADJ           In the exploratory visualization part of the analysis
+                          output only features with adjusted P-value not bigger
+                          than this value. Default: 0.05
+    --genes [GENES ...]   Genes of interest to label on the generated plots.
+                          Default: top 10 genes with the highest and the lowest
+                          log2FC expression values.
     --exclude EXCLUDE     Regex pattern to identify and exclude non-coding RNA
                           genes from the pseudobulk DE analysis (not case-
                           sensitive). If any of such genes were provided in the
                           --genes parameter, they will be excluded from there as
                           well. Default: use all genes
-    --topgenes TOPGENES   Show N genes with the highest and N genes with the
-                          lowest log2 fold change expression values. Ignored if
-                          --genes are provided. Default: 10
+    --norm {vst,rlog}     Read counts normalization for the exploratory
+                          visualization part of the analysis. Use 'vst' for
+                          medium-to-large datasets (n > 30) and 'rlog' for small
+                          datasets (n < 30), when there is a wide range of
+                          sequencing depth across samples. Default: rlog
+    --remove              Remove batch effect when generating normalized read
+                          counts for the exploratory visualization part of the
+                          analysis. Ignored if --batchby is not provided.
+                          Default: do not remove batch effect from normalized
+                          read counts.
+    --cluster {row,column,both}
+                          Hopach clustering method to be run on normalized read
+                          counts for the exploratory visualization part of the
+                          analysis. Default: do not run clustering
+    --rowdist {cosangle,abscosangle,euclid,abseuclid,cor,abscor}
+                          Distance metric for HOPACH row clustering. Ignored if
+                          --cluster is set to column or not provided. Default:
+                          cosangle
+    --columndist {cosangle,abscosangle,euclid,abseuclid,cor,abscor}
+                          Distance metric for HOPACH column clustering. Ignored
+                          if --cluster is set to row or not provided. Default:
+                          euclid
+    --center              Apply mean centering for gene expression prior to
+                          running clustering by row. Ignored if --cluster is set
+                          to column or not provided. Default: do not centered
     --pdf                 Export plots in PDF. Default: false
     --verbose             Print debug information. Default: false
     --output OUTPUT       Output prefix. Default: ./sc
