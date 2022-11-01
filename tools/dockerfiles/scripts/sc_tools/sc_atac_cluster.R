@@ -230,6 +230,17 @@ get_args <- function(){
         )
     )
     parser$add_argument(
+        "--algorithm",
+        help=paste(
+            "Algorithm for modularity optimization when running clustering.",
+            "Default: slm"
+        ),
+        type="character", default="slm",
+        choices=c(
+            "louvain", "mult-louvain", "slm", "leiden"
+        )
+    )
+    parser$add_argument(
         "--resolution",
         help=paste(
             "Clustering resolution applied to the constructed nearest-neighbor graph.",
@@ -394,7 +405,6 @@ seurat_data <- analyses$add_clusters(
     assay="ATAC",
     graph_name="atac",                          # will be used in all the plot generating functions
     reduction="atac_lsi",
-    cluster_algorithm=3,                        # SLM algorithm
     args=args
 )
 debug$print_info(seurat_data, args)

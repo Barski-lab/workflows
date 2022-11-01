@@ -2,20 +2,31 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.12
+# Software Version: v0.0.13
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.0.6
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.12 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.12
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.12 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.13 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.13
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.13 /bin/bash
 ##########################################################################################################
 #
 # Notes:
 # - if you have problems compiling Harmony
 #   https://github.com/immunogenomics/harmony/pull/165
+#
+# v0.0.13
+# - Doesn't fail anymore when analyzing single dataset
+# - Updated sc_rna_de_pseudobulk.R script to
+#   * produce MDS plot
+#   * to save HOPACH clustered aggregated GCT heatmap
+#   * to use dittoHeatmap for cell heatmap
+# - Updated sc_[rna/atac/wnn]_cluster.R scripts to allow
+#   selecting cluster algorithm
+# - Need to intall Harmony from GitHub as it disappeared
+#   from BioConductor and official R repository
 #
 # v0.0.12
 # - add sc_triangulate.R to run scTriangulate
@@ -124,7 +135,8 @@ COPY ./scripts/sc_tools/modules/*.R /usr/local/bin/modules/
 RUN apt-get update && \
     apt-get install libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev \
                     libssl-dev pandoc libudunits2-dev libgdal-dev libcairo2-dev libharfbuzz-dev \
-                    libfribidi-dev libbz2-dev tk -y && \
+                    libfribidi-dev libbz2-dev tk libfontconfig1-dev libfreetype6-dev libpng-dev \
+                    libtiff5-dev libjpeg-dev vim -y && \
     pip3 install --no-binary="numpy" numpy==${NUMPY_VERSION} --ignore-installed && \
     pip3 install scipy==${SCIPY_VERSION} && \
     pip3 install anndata && \
@@ -136,7 +148,11 @@ RUN apt-get update && \
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("tidyverse", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("modules", repo = "https://cloud.r-project.org/")' && \
-    R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', 'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment', 'harmony'))" && \
+    R -e "BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats','limma', \
+                                 'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', \
+                                 'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', \
+                                 'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment', \
+                                 'hopach', 'Glimma', 'dittoSeq', 'cmapR'))" && \
     R -e 'install.packages("fastmatch")' && \
     R -e 'install.packages("RcppRoll")' && \
     R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
@@ -149,6 +165,7 @@ RUN apt-get update && \
     R -e 'install.packages("butcher")' && \
     R -e 'install.packages("recipes")' && \
     R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
+    R -e 'devtools::install_github("immunogenomics/harmony", upgrade = "never")' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
     chmod +x /usr/local/bin/sc_multiome_filter.R && \

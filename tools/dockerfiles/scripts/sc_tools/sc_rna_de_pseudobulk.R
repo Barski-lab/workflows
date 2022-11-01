@@ -68,12 +68,18 @@ export_processed_plots <- function(seurat_data, de_results, args){
     DefaultAssay(seurat_data) <- "RNA"                                  # safety measure
     Idents(seurat_data) <- "new.ident"                                  # safety measure
     
-    pca_data <- qc$counts_pca(de_results$vst_counts)                    # adds 'group' column to identify the datasets
+    graphics$mds_html_plot(
+        norm_counts_data=de_results$norm_counts_data,
+        rootname=paste(args$output, "mds_plot", sep="_")
+    )
+
+    pca_data <- qc$counts_pca(de_results$norm_counts_mat)               # adds 'group' column to identify the datasets
+
     graphics$pca_plot(
         pca_data=pca_data,
         pcs=c(1, 2),
         plot_title=paste0(
-            "VST normalized counts PCA subsetted to all DE genes regardless of Padj, PC1 and PC2",
+            "Normalized counts PCA subsetted to all DE genes regardless of Padj, PC1 and PC2",
             ifelse(
                 (!is.null(args$batchby)),
                 paste(", batch corrected by", args$batchby),
@@ -84,14 +90,15 @@ export_processed_plots <- function(seurat_data, de_results, args){
         color_by="group",
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, "vst_pca_1_2", sep="_"),
+        rootname=paste(args$output, "pca_1_2", sep="_"),
         pdf=args$pdf
     )
+
     graphics$pca_plot(
         pca_data=pca_data,
         pcs=c(2, 3),
         plot_title=paste0(
-            "VST normalized counts PCA subsetted to all DE genes regardless of Padj, PC2 and PC3",
+            "Normalized counts PCA subsetted to all DE genes regardless of Padj, PC2 and PC3",
             ifelse(
                 (!is.null(args$batchby)),
                 paste(", batch corrected by", args$batchby),
@@ -102,17 +109,18 @@ export_processed_plots <- function(seurat_data, de_results, args){
         color_by="group",
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, "vst_pca_2_3", sep="_"),
+        rootname=paste(args$output, "pca_2_3", sep="_"),
         pdf=args$pdf
     )
 
     genes_to_highlight <- get_genes_to_highlight(de_results, args)
+
     graphics$volcano_plot(
         data=de_results$de_genes,                                   # this is not filtered differentially expressed features
         x_axis="log2FoldChange",
         y_axis="padj",
         x_cutoff=0,
-        y_cutoff=args$alpha,
+        y_cutoff=args$padj,
         x_label="log2 FC",
         y_label="-log10 Padj",
         plot_title=paste(
@@ -136,7 +144,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
                 paste0("Model batch effect by ", args$batchby, ". "),
                 ""
             ),
-            "Displayed Padj threshold equals to ", args$alpha
+            "Displayed Padj threshold equals to ", args$padj
         ),
         caption=paste(nrow(de_results$de_genes), "genes"),
         features=genes_to_highlight,
@@ -146,12 +154,6 @@ export_processed_plots <- function(seurat_data, de_results, args){
     )
 
     if (!is.null(genes_to_highlight) && length(genes_to_highlight) > 0){
-        seurat_data <- ScaleData(                                           # we need it only for gene expression heatmap
-            seurat_data,
-            features=genes_to_highlight,                                    # use those genes that we are interested in
-            assay="RNA",
-            verbose=FALSE
-        )
         for (current_gene in genes_to_highlight) {
             graphics$vln_plot(
                 data=seurat_data,
@@ -203,27 +205,33 @@ export_processed_plots <- function(seurat_data, de_results, args){
                 )
             }
         }
-        graphics$feature_heatmap(
-            data=seurat_data,
-            features=genes_to_highlight,
-            plot_title=paste(
-                "Log normalized gene expression heatmap per dataset",
-                ifelse(
-                    (!is.null(args$groupby) && !is.null(args$subset)),
-                    paste("subsetted to", paste(args$subset, collapse=", "), "values from", args$groupby, "column"),
-                    ""
-                )
-            ),
-            assay="RNA",
-            slot="scale.data",
-            cells=NULL,
-            group_by="new.ident",
-            palette_colors=graphics$D40_COLORS,
-            theme=args$theme,
-            rootname=paste(args$output, "xpr_htmp", sep="_"),
-            pdf=args$pdf
-        )
     }
+
+    # To make sure we use the same order of samples as in GCT file we want to
+    # reorder levels of new.ident so they correspond to col_metadata's rownames
+    seurat_data@meta.data$new.ident <- factor(seurat_data@meta.data$new.ident, levels=rownames(de_results$col_metadata))
+    graphics$feature_heatmap(
+        data=seurat_data,
+        assay="RNA",                                           # for now we will always use RNA even if SCT may be present
+        slot="data",
+        features=rownames(de_results$row_metadata),            # to make sure we use the same number and order of genes as in GCT file
+        show_rownames=TRUE,
+        scale_to_max=FALSE,
+        scale="row",
+        plot_title=paste(
+            "Normalized gene expression heatmap",
+            ifelse(
+                (!is.null(args$groupby) && !is.null(args$subset)),
+                paste("subsetted to", paste(args$subset, collapse=", "), "values from", args$groupby, "column"),
+                ""
+            )
+        ),
+        group_by=if(is.null(args$batchby)) c("new.ident", args$splitby) else c("new.ident", args$splitby, args$batchby),
+        palette_colors=graphics$D40_COLORS,
+        rootname=paste(args$output, "xpr_htmp", sep="_"),
+        pdf=args$pdf
+    )
+
 }
 
 
@@ -234,13 +242,13 @@ get_genes_to_highlight <- function(de_results, args){
     } else {
         print(
             paste(
-                "Identifying top", args$topgenes, "the most DE genes with P adjusted <= ", args$alpha
+                "Identifying top 10 the most DE genes with P adjusted <= ", args$padj
             )
         )
         top_de_genes <- de_results$de_genes %>%
-                        filter(.$padj<=args$alpha) %>%
+                        filter(.$padj<=args$padj) %>%
                         arrange(desc(log2FoldChange)) %>%
-                        filter(row_number() > max(row_number()) - all_of(args$topgenes) | row_number() <= all_of(args$topgenes))
+                        filter(row_number() > max(row_number()) - 10 | row_number() <= 10)
         genes_to_highlight <- as.vector(as.character(top_de_genes[, "gene"]))
     }
     print(paste("Genes to highlight", paste(genes_to_highlight, collapse=", ")))
@@ -249,7 +257,9 @@ get_genes_to_highlight <- function(de_results, args){
 
 
 get_args <- function(){
-    parser <- ArgumentParser(description="Single-cell Pseudobulk Differential Expression Analysis")
+    parser <- ArgumentParser(
+        description="Single-cell Pseudobulk Differential Expression Analysis Between Datasets"
+    )
     parser$add_argument(
         "--query",
         help=paste(
@@ -266,17 +276,19 @@ get_args <- function(){
             "categorical values using samples identities. First column - 'library_id'",
             "should correspond to all unique values from the 'new.ident' column of the",
             "loaded Seurat object. If any of the provided in this file columns are already",
-            "present in the Seurat object metadata, they will be overwritten.",
-            "Default: no extra metadata is added"
+            "present in the Seurat object metadata, they will be overwritten. Default: no",
+            "extra metadata is added"
         ),
         type="character"
     )
     parser$add_argument(
         "--splitby",
         help=paste(
-            "Column from the Seurat object metadata to split cells into two groups",
-            "to run --second vs --first pseudobulk DE analysis. May include columns",
-            "from the extra metadata added with --metadata parameter."
+            "Column from the Seurat object metadata to split datasets into two groups",
+            "to run --second vs --first pseudobulk DE analysis, i.e., calculate log2FC.",
+            "May be one of the columns from the extra metadata added with --metadata",
+            "parameter. Provided value should group the datasets, not cells, therefore",
+            "do not use a column with clustering results."
         ),
         type="character", required="True"
     )
@@ -284,7 +296,7 @@ get_args <- function(){
         "--first",
         help=paste(
             "Value from the Seurat object metadata column set with --splitby to define the",
-            "first group of cells for pseudobulk DE analysis."
+            "first group of datasets for pseudobulk DE analysis."
         ),
         type="character", required="True"
     )
@@ -292,17 +304,19 @@ get_args <- function(){
         "--second",
         help=paste(
             "Value from the Seurat object metadata column set with --splitby to define the",
-            "second group of cells for pseudobulk DE analysis."
+            "second group of datasets for pseudobulk DE analysis."
         ),
         type="character", required="True"
     )
     parser$add_argument(
         "--batchby",
         help=paste(
-            "Column from the Seurat object metadata to define the variable that should",
-            "be modeled as a batch effect when running pseudobulk DE analysis. May include",
-            "columns from the extra metadata added with --metadata parameter.",
-            "Default: do not model batch effect."
+            "Column from the Seurat object metadata to group datasets into batches. It will be used",
+            "as a factor variable to model batch effect when running pseudobulk DE analysis (makes",
+            "design formula look like ~splitby+batchby). May be one of the columns from the extra",
+            "metadata added with --metadata parameter. Provided value should batch the datasets, not",
+            "cells, therefore do not use a column with clustering results. Default: do not model",
+            "batch effect."
         ),
         type="character"
     )
@@ -310,9 +324,11 @@ get_args <- function(){
         "--groupby",
         help=paste(
             "Column from the Seurat object metadata to group cells for optional subsetting",
-            "when combined with --subset parameter. May include columns from the extra metadata",
-            "added with --metadata parameter. Ignored if --subset is not provided.",
-            "Default: do not subset, run pseudobulk DE analysis for all cells jointly"
+            "when combined with --subset parameter. May be one of the columns from the extra",
+            "metadata added with --metadata parameter. Ignored if --subset is not set. Provided",
+            "value defines the groups of cells, therefore any metadata column, including the",
+            "clustering results, may be used. Default: do not subset, run pseudobulk DE analysis",
+            "for all cells jointly"
         ),
         type="character"
     )
@@ -322,38 +338,32 @@ get_args <- function(){
             "Value(s) from the column set with --groupby parameter to subset cells",
             "before running pseudobulk DE analysis. If multiple values are provided",
             "run analysis jointly for selected groups of cells. Ignored if --groupby",
-            "is not set.",
-            "Default: do not subset, run pseudobulk DE analysis for all cells jointly"
+            "is not set. Default: do not subset, run pseudobulk DE analysis for all",
+            "cells jointly"
         ),
         type="character", nargs="*"
     )
     parser$add_argument(
         "--lrt",
         help=paste(
-            "Use LRT instead of the pair-wise Wald test. Determines if the increased",
-            "likelihood of the data using the --splitby term is more than expected if",
-            "that term is truly zero.",
-            "Default: use Wald test"
+            "Use LRT instead of the pair-wise Wald test. If --batchby is not provided",
+            "use ~1 as a reduced formula, otherwise ~batchby. Default: use Wald test"
         ),
         action="store_true"
     )
     parser$add_argument(
-        "--alpha",
+        "--padj",
         help=paste(
-            "The maximum significance level alpha used by DESeq2 for independent filtering",
-            "of results. The adjusted p values for the genes which do not pass this filter",
-            "threshold will be set to NA and removed from the outputs. The same threshold",
-            "will be used for identifying --topgenes the most DE genes.",
-            "Default: 0.1"
+            "In the exploratory visualization part of the analysis output only features",
+            "with adjusted P-value not bigger than this value. Default: 0.05"
         ),
-        type="double", default=0.1
+        type="double", default=0.05
     )
     parser$add_argument(
         "--genes",
         help=paste(
-            "Genes of interest to label on the generated plots.",
-            "Default: --topgenes N genes with the highest and the lowest log2 fold change",
-            "expression values."
+            "Genes of interest to label on the generated plots. Default: top 10 genes",
+            "with the highest and the lowest log2FC expression values."
         ),
         type="character", nargs="*"
     )
@@ -368,13 +378,61 @@ get_args <- function(){
         type="character"
     )
     parser$add_argument(
-        "--topgenes",
+        "--norm",
         help=paste(
-            "Show N genes with the highest and N genes with the lowest log2 fold change",
-            "expression values. Ignored if --genes are provided.",
-            "Default: 10"
+            "Read counts normalization for the exploratory visualization part of the analysis.",
+            "Use 'vst' for medium-to-large datasets (n > 30) and 'rlog' for small datasets",
+            "(n < 30), when there is a wide range of sequencing depth across samples.",
+            "Default: rlog"
         ),
-        type="integer", default=10
+        type="character", default="rlog",
+        choices=c("vst", "rlog")
+    )
+    parser$add_argument(
+        "--remove",
+        help=paste(
+            "Remove batch effect when generating normalized read counts for the exploratory",
+            "visualization part of the analysis. Ignored if --batchby is not provided.",
+            "Default: do not remove batch effect from normalized read counts."
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--cluster",
+        help=paste(
+            "Hopach clustering method to be run on normalized read counts for the",
+            "exploratory visualization part of the analysis. Default: do not run",
+            "clustering"
+        ),
+        type="character",
+        choices=c("row", "column", "both")
+    )
+    parser$add_argument(
+        "--rowdist",
+        help=paste(
+            "Distance metric for HOPACH row clustering. Ignored if --cluster is set",
+            "to column or not provided. Default: cosangle"
+        ),
+        type="character", default="cosangle",
+        choices=c("cosangle", "abscosangle", "euclid", "abseuclid", "cor", "abscor")
+    )
+    parser$add_argument(
+        "--columndist",
+        help=paste(
+            "Distance metric for HOPACH column clustering. Ignored if --cluster is set",
+            "to row or not provided. Default: euclid"
+        ),
+        type="character", default="euclid",
+        choices=c("cosangle", "abscosangle", "euclid", "abseuclid", "cor", "abscor")
+    )
+    parser$add_argument(
+        "--center",
+        help=paste(
+            "Apply mean centering for gene expression prior to running",
+            "clustering by row. Ignored if --cluster is set to column or",
+            "not provided. Default: do not centered"
+        ),
+        action="store_true"
     )
     parser$add_argument(
         "--pdf",
@@ -456,13 +514,15 @@ if (!("RNA" %in% names(seurat_data@assays))){
 
 print("Setting default assay to RNA")
 DefaultAssay(seurat_data) <- "RNA"
+print("Normalizing counts")
+seurat_data <- NormalizeData(seurat_data, verbose=FALSE)
 debug$print_info(seurat_data, args)
 
 excluded_genes <- c()
 if (!is.null(args$exclude)){
     excluded_genes <- grep(
         args$exclude,
-        as.vector(as.character(rownames(seurat_data))),                                          # with RNA assay set as default the rownames should be genes
+        as.vector(as.character(rownames(seurat_data))),    # with RNA assay set as default the rownames should be genes
         value=TRUE,
         ignore.case=TRUE
     )
@@ -531,19 +591,20 @@ export_processed_plots(seurat_data, de_results, args)
 
 print("Exporting differentially expressed genes")
 io$export_data(
-    de_results$de_genes,
+    de_results$de_genes,                                                    # not filtered na-removed differentially expressed genes
     paste(args$output, "_de_genes.tsv", sep="")
 )
 
-print("Exporting VST normalized counts")
+print("Exporting normalized read counts to GCT format")
 io$export_gct(
-    de_results$vst_counts,
-    paste(args$output, "_vst_counts.gct", sep="")
+    counts_mat=de_results$norm_counts_mat,
+    row_metadata=de_results$row_metadata,                                   # includes genes as row names
+    col_metadata=de_results$col_metadata,                                   # includes samples as row names
+    location=paste(args$output, "_norm_read_counts.gct", sep="")
 )
 
 print("Exporting CLS phenotype data")
 io$export_cls(
-    de_results,
-    paste(args$output, "_phenotypes.cls", sep=""),
-    args
+    categories=de_results$col_metadata[, args$splitby],                     # to have the same samples order as in GCT file
+    paste(args$output, "_phenotypes.cls", sep="")
 )

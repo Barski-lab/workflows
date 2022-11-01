@@ -11,7 +11,7 @@ requirements:
 
 hints:
 - class: DockerRequirement
-  dockerPull: biowardrobe2/sc-tools:v0.0.12
+  dockerPull: biowardrobe2/sc-tools:v0.0.13
 
 
 inputs:
@@ -53,6 +53,21 @@ inputs:
       is provided, use from 2 to N dimensions. If multiple values are provided,
       subset to only selected dimensions.
       Default: from 2 to 10
+
+  cluster_algorithm:
+    type:
+    - "null"
+    - type: enum
+      symbols:
+      - "louvain"
+      - "mult-louvain"
+      - "slm"
+      - "leiden"
+    inputBinding:
+      prefix: "--algorithm"
+    doc: |
+      Algorithm for modularity optimization when running clustering.
+      Default: slm
 
   umap_spread:
     type: float?

@@ -1,3 +1,4 @@
+import("cmapR", attach=FALSE)
 import("dplyr", attach=FALSE)
 import("purrr", attach=FALSE)
 import("Seurat", attach=FALSE)
@@ -437,56 +438,39 @@ replace_fragments <- function(location, seurat_data){
     return(seurat_data)
 }
 
-export_gct <- function(counts_data, location){
+export_gct <- function(counts_mat, row_metadata, col_metadata, location){
     base::tryCatch(
         expr = {
-            counts_matrix <- base::as.matrix(counts_data)
-            output_stream <- base::file(location, "w")
-            on.exit(base::close(output_stream), add=TRUE)                           # can't put it in 'finally' as there is no access to output_stream variable
-            base::cat(                                                              # construction header of GCT file
-                "#1.2",
-                base::paste(
-                    dim(counts_matrix)[1],
-                    dim(counts_matrix)[2],
-                    sep="\t"
-                ),
-                base::paste(
-                    "Name",
-                    "Description",
-                    base::paste(base::colnames(counts_matrix), collapse="\t"),
-                    sep="\t"
-                ),
-                file=output_stream,
-                sep="\n"
+            row_metadata <- row_metadata %>%
+                            tibble::rownames_to_column("id") %>%
+                            dplyr::mutate_at("id", base::as.vector)
+            col_metadata <- col_metadata %>%
+                            tibble::rownames_to_column("id") %>%
+                            dplyr::mutate_at("id", base::as.vector)
+            gct_data <- methods::new(
+                "GCT",
+                mat=counts_mat[row_metadata$id, col_metadata$id],       # to guarantee the order and number of row/columns
+                rdesc=row_metadata,
+                cdesc=col_metadata
             )
-            utils::write.table(
-                cbind(
-                    base::row.names(counts_matrix),                                   # gene names
-                    c(rep("na", times=length(base::row.names(counts_data)))),         # the description column will have NA
-                    counts_matrix                                                     # counts data
-                ),
-                file=output_stream,
-                append=TRUE,                                                          # appending to already opened file
-                quote=FALSE,
-                sep="\t",
-                eol="\n",
-                col.names=FALSE,
-                row.names=FALSE
+            cmapR::write_gct(
+                ds=gct_data,
+                ofile=location,
+                appenddim=FALSE
             )
             base::print(base::paste("Exporting GCT data to", location, sep=" "))
         },
         error = function(e){
-            base::print(base::paste("Failed to export GCT data to", location, sep=" "))
+            base::print(base::paste("Failed to export GCT data to ", location, "with error - ", e, sep=""))
         }
     )
 }
 
-export_cls <- function(de_results, location, args){
+export_cls <- function(categories, location){
     base::tryCatch(
         expr = {
             output_stream <- base::file(location, "w")
             on.exit(base::close(output_stream), add=TRUE)           # can't put it in 'finally' as there is no access to output_stream variable
-            categories <- de_results$sample_data[, args$splitby]    # order already corresponds to the counts table columns
             base::cat(
                 base::paste(
                     length(categories),                             # number of datasets
@@ -515,7 +499,7 @@ export_cls <- function(de_results, location, args){
             base::print(base::paste("Exporting CLS data to", location, sep=" "))
         },
         error = function(e){
-            base::print(base::paste("Failed to export CLS data to", location, sep=" "))
+            base::print(base::paste("Failed to export CLS data to ", location, "with error - ", e, sep=""))
         }
     )
 }

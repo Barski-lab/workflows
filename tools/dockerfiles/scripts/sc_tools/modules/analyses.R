@@ -4,6 +4,7 @@ import("DAseq", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("sceasy", attach=FALSE)
+import("hopach", attach=FALSE)
 import("DESeq2", attach=FALSE)
 import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
@@ -11,6 +12,7 @@ import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, b
 import("S4Vectors", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
 import("reticulate", attach=FALSE)
+import("BiocParallel", attach=FALSE)
 import("SummarizedExperiment", attach=FALSE)
 
 export(
@@ -32,6 +34,8 @@ export(
     "rna_de_analyze",
     "da_analyze",
     "get_de_sample_data",
+    "get_norm_counts_data",
+    "get_clustered_data",
     "get_aggregated_expession"
 )
 
@@ -42,7 +46,19 @@ get_tf_idf_method <- function(method_name){
             "log-tfidf"    = 1,
             "tf-logidf"    = 2,
             "logtf-logidf" = 3,
-            "idf"         = 4
+            "idf"          = 4
+        )
+    )
+}
+
+get_cluster_algorithm <- function(algorithm_name){
+    return (
+        switch(
+            algorithm_name,
+            "louvain"      = 1,
+            "mult-louvain" = 2,
+            "slm"          = 3,
+            "leiden"       = 4
         )
     )
 }
@@ -540,7 +556,7 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
     return (seurat_data)
 }
 
-add_clusters <- function(seurat_data, assay, graph_name, reduction, cluster_algorithm, args){
+add_clusters <- function(seurat_data, assay, graph_name, reduction, args){
     SeuratObject::DefaultAssay(seurat_data) <- assay                                  # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                                  # safety measure
     seurat_data <- Seurat::FindNeighbors(
@@ -555,7 +571,7 @@ add_clusters <- function(seurat_data, assay, graph_name, reduction, cluster_algo
         seurat_data,
         resolution=args$resolution,
         graph.name=graph_name,
-        algorithm=cluster_algorithm,
+        algorithm=get_cluster_algorithm(args$algorithm),
         verbose=FALSE
     )
     return (seurat_data)
@@ -643,7 +659,7 @@ integrate_labels <- function(seurat_data, source_columns, args){
     return (seurat_data)
 }
 
-add_wnn_clusters <- function(seurat_data, graph_name, reductions, dimensions, cluster_algorithm, args){
+add_wnn_clusters <- function(seurat_data, graph_name, reductions, dimensions, args){
     SeuratObject::Idents(seurat_data) <- "new.ident"                                   # safety measure
     seurat_data <- Seurat::FindMultiModalNeighbors(
         seurat_data,
@@ -668,7 +684,7 @@ add_wnn_clusters <- function(seurat_data, graph_name, reductions, dimensions, cl
     seurat_data <- Seurat::FindClusters(
         seurat_data,
         graph.name=graph_name,
-        algorithm=cluster_algorithm,                                    # 3
+        algorithm=get_cluster_algorithm(args$algorithm),
         resolution=args$resolution,
         verbose=FALSE
     )
@@ -906,16 +922,81 @@ get_de_sample_data <- function(seurat_data, samples_order, args){
                    dplyr::arrange(new.ident) %>%                                                  # sorting by levels defined from samples_order
                    tibble::remove_rownames() %>%
                    tibble::column_to_rownames("new.ident") %>%
-                   dplyr::mutate_at(colnames(.), base::factor)                                    # DEseq prefers factors
+                   dplyr::mutate_at(base::colnames(.), base::factor)                              # DEseq prefers factors
     sample_data[[args$splitby]] <- stats::relevel(sample_data[[args$splitby]], args$first)        # relevel to have args$first as a base for DESeq comparison
     base::print(sample_data)
     return (sample_data)
 }
 
+get_norm_counts_data <- function(deseq_data, sample_data, args){
+    if (args$norm == "vst"){
+        base::print("Applying vst transformation (not blind to the experimental design)")
+        norm_counts_data <- DESeq2::vst(deseq_data, blind=FALSE)
+    } else {
+        base::print("Applying rlog transformation (not blind to the experimental design)")
+        norm_counts_data <- DESeq2::rlog(deseq_data, blind=FALSE)
+    }
+    if(!is.null(args$batchby) && !is.null(args$remove) && args$remove){
+        base::print("Removing batch effect from the normalized counts")
+        SummarizedExperiment::assay(norm_counts_data) <- limma::removeBatchEffect(
+            SummarizedExperiment::assay(norm_counts_data),
+            batch=norm_counts_data[[args$batchby]],
+            design=stats::model.matrix(stats::as.formula(base::paste("~",args$splitby)), sample_data)  # should include only splitby
+        )
+    }
+    base::print("Normalized read counts")
+    base::print(utils::head(SummarizedExperiment::assay(norm_counts_data)))
+    base::print(dim(SummarizedExperiment::assay(norm_counts_data)))
+    base::print(SummarizedExperiment::colData(norm_counts_data))
+    return (norm_counts_data)
+}
+
+get_clustered_data <- function(expression_data, center_row, dist, transpose) {
+    if (transpose){
+        base::print("Transposing expression data")
+        expression_data = t(expression_data)
+    }
+    if (center_row) {
+        base::print("Centering expression data by row means")
+        expression_data = expression_data - base::rowMeans(expression_data)    
+    }
+    base::print("Creating distance matrix")
+    distance_matrix <- hopach::distancematrix(expression_data, dist)
+    base::print("Running HOPACH")
+    hopach_results <- hopach::hopach(expression_data, dmat=distance_matrix)
+
+    if (transpose){
+        base::print("Transposing expression data back")
+        expression_data = base::t(expression_data)
+    }
+
+    base::print("Parsing cluster labels")
+    clusters = base::as.data.frame(hopach_results$clustering$labels)
+    base::colnames(clusters) = "label"
+    clusters = base::cbind(
+        clusters,
+        "HCL"=outer(
+            clusters$label,
+            10^c((base::nchar(trunc(clusters$label))[1]-1):0),
+            function(a, b) {
+                base::paste0("c", a %/% b %% 10)
+            }
+        )
+    )
+    clusters = clusters[, c(-1), drop=FALSE]
+    return (
+        list(
+            order=base::as.vector(hopach_results$clustering$order),
+            expression=expression_data,
+            clusters=clusters
+        )
+    )
+}
+
 rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                                # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                                # safety measure
-    base::print(base::paste("Aggregating gene expression per sample"))
+    base::print(base::paste("Aggregating raw gene expression counts by dataset"))
     selected_genes <- base::as.vector(as.character(base::rownames(seurat_data)))    # all available genes
     if (!is.null(excluded_genes) && length(excluded_genes) > 0){
         base::print(base::paste("Excluding", length(excluded_genes), "genes"))
@@ -960,8 +1041,8 @@ rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
         }
         base::print(                                                               # see this post for details https://support.bioconductor.org/p/95493/#95572
             base::paste(
-                "Using LRT test with the design formula", base::paste(design_formula, collapse=" "),
-                "and the reduced formula", base::paste(reduced_formula, collapse=" "),
+                "Using LRT test with the design formula", base::paste(design_formula, collapse=""),
+                "and the reduced formula", base::paste(reduced_formula, collapse=""),
                 "to calculate p-values."
             )
         )
@@ -970,29 +1051,37 @@ rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
             test="LRT",
             reduced=reduced_formula,
             quiet=TRUE,
-            parallel=TRUE
+            parallel=TRUE,
+            BPPARAM=BiocParallel::MulticoreParam(args$cpus)  # add it here as well just in case
         )
     } else {
         base::print(
             base::paste(
-                "Using Wald test with the design formula", base::paste(design_formula, collapse=" "),
+                "Using Wald test with the design formula", base::paste(design_formula, collapse=""),
                 "to calculate p-values."
             )
         )
         deseq_data <- DESeq2::DESeq(
             deseq_data,
             quiet=TRUE,
-            parallel=TRUE
+            parallel=TRUE,
+            BPPARAM=BiocParallel::MulticoreParam(args$cpus)  # add it here as well just in case
         )
     }
+    print("Estimated effects")
     base::print(DESeq2::resultsNames(deseq_data))
+
     de_genes <- DESeq2::results(
         deseq_data,
         contrast=c(args$splitby, args$second, args$first),            # we are interested in seconds vs first fold change values
-        alpha=base::ifelse(is.null(args$alpha), 0.1, args$alpha),     # recommended to set to our FDR threshold https://master.bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html
-        parallel=TRUE
+        alpha=base::ifelse(is.null(args$padj), 0.1, args$padj),       # recommended to set to our FDR threshold https://master.bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html
+        parallel=TRUE,
+        BPPARAM=BiocParallel::MulticoreParam(args$cpus)                             # add it here as well just in case
     )
+    base::print("Results description")
     base::print(S4Vectors::mcols(de_genes))
+    base::print(utils::head(de_genes))
+
     de_genes <- base::as.data.frame(de_genes) %>%
                 stats::na.omit() %>%                           # exclude all rows where NA is found in any column. See http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#pvaluesNA
                 tibble::rownames_to_column(var="gene")
@@ -1002,27 +1091,70 @@ rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){
         )
     )
 
-    vsd <- DESeq2::vst(deseq_data)
-    vst_counts <- SummarizedExperiment::assay(vsd)[de_genes$gene, ]
-    if(!is.null(args$batchby)){
-        base::print("Removing batch effect from the vst normalized counts")
-        vst_counts <- limma::removeBatchEffect(
-            vst_counts,
-            batch=vsd[[args$batchby]],
-            design=stats::model.matrix(stats::as.formula(base::paste("~",args$splitby)), sample_data)  # should include only splitby
-        )[de_genes$gene, ]
-    }
-    base::print("VST normalized counts data for DE genes")
-    base::print(utils::head(vst_counts))
+    base::print("Normalizing read count data")
+    norm_counts_data <- get_norm_counts_data(deseq_data, sample_data, args)
 
-    base::rm(raw_counts, aggregated_seurat_data, selected_genes, vsd)                       # remove unused data
+    base::print(
+        base::paste(
+            "Creating filtered normalized read counts matrix to include",
+            "only differentially expressed features with padj <= ", args$padj
+        )
+    )
+    row_metadata <- de_genes %>%
+                    tibble::remove_rownames() %>%
+                    tibble::column_to_rownames("gene") %>%
+                    dplyr::select(log2FoldChange, pvalue, padj)  %>%                 # we are interested only in these three columns
+                    dplyr::filter(.$padj<=args$padj) %>%
+                    dplyr::arrange(desc(log2FoldChange))
+    col_metadata <- sample_data %>%
+                    dplyr::mutate_at(base::colnames(.), base::as.vector)             # need to convert to vector, because in our sample_data everything was a factor
+    norm_counts_mat <- SummarizedExperiment::assay(norm_counts_data)[base::as.vector(base::rownames(row_metadata)), ]
+    base::print("Size of the normalized read counts matrix after filtering")
+    base::print(dim(norm_counts_mat))
+
+    if (!is.null(args$cluster)){
+        if (args$cluster == "column" || args$cluster == "both") {
+            base::print("Clustering filtered read counts by columns")
+            clustered_data = get_clustered_data(
+                expression_data=norm_counts_mat,
+                center_row=FALSE,                                                    # centering doesn't influence on the samples order
+                dist=args$columndist,
+                transpose=TRUE
+            )
+            col_metadata <- base::cbind(col_metadata, clustered_data$clusters)       # adding cluster labels
+            col_metadata <- col_metadata[clustered_data$order, ]                     # reordering samples order based on the HOPACH clustering resutls
+            base::print("Reordered samples")
+            base::print(col_metadata)
+        }
+        if (args$cluster == "row" || args$cluster == "both") {
+            base::print("Clustering filtered normalized read counts by rows")
+            clustered_data = get_clustered_data(
+                expression_data=norm_counts_mat,
+                center_row=base::ifelse(is.null(args$center), FALSE, args$center),   # about centering normalized data https://www.biostars.org/p/387863/
+                dist=args$rowdist,
+                transpose=FALSE
+            )
+            norm_counts_mat <- clustered_data$expression                             # can be different because of optional centering by rows mean
+            row_metadata <- base::cbind(row_metadata, clustered_data$clusters)       # adding cluster labels
+            row_metadata <- row_metadata[clustered_data$order, ]                     # reordering features order based on the HOPACH clustering results
+            base::print("Reordered features")
+            base::print(utils::head(row_metadata))
+        }
+        base::rm(clustered_data)
+    }
+
+    base::rm(raw_counts, aggregated_seurat_data, selected_genes)                       # remove unused data
     base::gc(verbose=FALSE)
+
     return (
         list(
-            de_genes=de_genes,
-            de_data=deseq_data,
-            sample_data=sample_data,  # return sample_data even if we can get the same as colData(de_data)
-            vst_counts=vst_counts     # with remove by limma batch effect if args$batchby was provided
+            de_genes=de_genes,                     # not filtered differentialy expressed genes
+            de_data=deseq_data,                    # raw DESeq output
+            sample_data=sample_data,               # we return sample_data even if we can get the same as colData(de_data)
+            norm_counts_data=norm_counts_data,     # not filtered trasformed DESeq counts data, includes all genes
+            norm_counts_mat=norm_counts_mat,       # filtered to only signif. genes normalized counts matrix (not reordered, for order refer to row/col_metadata)
+            row_metadata=row_metadata,             # filtered to only signif. genes ordered based on clusters row metadata for normalized counts matrix
+            col_metadata=col_metadata              # filtered to only signif. genes ordered based on clusters column metadata for normalized counts matrix
         )
     )
 }

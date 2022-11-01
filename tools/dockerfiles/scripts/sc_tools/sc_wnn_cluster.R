@@ -340,6 +340,17 @@ get_args <- function(){
         type="integer", default=10, nargs="*"
     )
     parser$add_argument(
+        "--algorithm",
+        help=paste(
+            "Algorithm for modularity optimization when running clustering.",
+            "Default: louvain"
+        ),
+        type="character", default="slm",
+        choices=c(
+            "louvain", "mult-louvain", "slm", "leiden"
+        )
+    )
+    parser$add_argument(
         "--uspread",
         help=paste(
             "The effective scale of embedded points on UMAP. In combination with '--mindist'",
@@ -620,7 +631,6 @@ seurat_data <- analyses$add_wnn_clusters(                       # will add 'wnnu
     graph_name="wsnn",                                          # will be used in all the plot generating functions
     reductions=list("pca", "atac_lsi"),
     dimensions=list(args$rnadimensions, args$atacdimensions),   # should be the same order as reductions
-    cluster_algorithm=3,                                        # SLM algorithm
     args=args
 )
 debug$print_info(seurat_data, args)

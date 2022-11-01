@@ -5,15 +5,19 @@ import("scales", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("tibble", attach=FALSE)
+import("Glimma", attach=FALSE)
 import("ggplot2", attach=FALSE)
 import("ggrepel", attach=FALSE)
 import("cluster", attach=FALSE)
 import("reshape2", attach=FALSE)
+import("dittoSeq", attach=FALSE)
 import("Nebulosa", attach=FALSE)
 import("patchwork", attach=FALSE)
+import("htmlwidgets", attach=FALSE)
 import("RColorBrewer", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
 import("EnhancedVolcano", attach=FALSE)
+import("SummarizedExperiment", attach=FALSE)
 
 
 export(
@@ -28,6 +32,7 @@ export(
     "tss_plot",
     "fragments_hist",
     "pca_plot",
+    "mds_html_plot",
     "dot_plot",
     "feature_plot",
     "expression_density_plot",
@@ -846,6 +851,26 @@ pca_plot <- function(pca_data, pcs, rootname, plot_title, legend_title, color_by
     )
 }
 
+mds_html_plot <- function(norm_counts_data, rootname){
+    tryCatch(
+        expr = {
+            location <- base::paste0(rootname, ".html")
+            htmlwidgets::saveWidget(
+                Glimma::glimmaMDS(
+                    x=SummarizedExperiment::assay(norm_counts_data),
+                    groups=base::as.data.frame(SummarizedExperiment::colData(norm_counts_data)),
+                    labels=base::rownames(SummarizedExperiment::colData(norm_counts_data))
+                ),
+                file=location
+            )
+            base::print(base::paste("Exporting MDS plot to ", location, sep=""))
+        },
+        error = function(e){
+            print(paste0("Failed to export MDS plot to ", location, " with error - ", e))
+        }
+    )
+}
+
 dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, cluster_idents=FALSE, min_pct=0.01, col_min=-2.5, col_max=2.5, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
@@ -1206,23 +1231,30 @@ volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_l
     )
 }
 
-feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", slot="scale.data", cells=NULL, group_by="ident", palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+feature_heatmap <- function(data, features, rootname, plot_title, assay="RNA", slot="data", cells=NULL, scale_to_max=TRUE, scale="none", heatmap_colors=c("blue", "black", "yellow"), group_by="new.ident", show_rownames=FALSE, palette_colors=D40_COLORS, pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
-            plot <- Seurat::DoHeatmap(
-                        data,
-                        features=features,
-                        cells=cells,
-                        assay=assay,
-                        slot=slot,
-                        group.by=group_by,
-                        group.colors=palette_colors,
-                        label=TRUE,
-                        combine=TRUE
-                    ) +
-                    get_theme(theme) +
-                    ggplot2::ggtitle(plot_title) +
-                    ggplot2::scale_color_manual(values=palette_colors)
+
+            plot <- dittoSeq::dittoHeatmap(
+                data,
+                assay=assay,
+                slot=slot,
+                cells.use=cells,
+                genes=features,
+                scaled.to.max=scale_to_max,
+                cluster_rows=FALSE,
+                cluster_cols=FALSE,
+                show_colnames=FALSE,
+                show_rownames=show_rownames,
+                main=plot_title,
+                heatmap.colors=grDevices::colorRampPalette(heatmap_colors)(50),
+                heatmap.colors.max.scaled=grDevices::colorRampPalette(heatmap_colors[1:2])(25),  # only two colors needed
+                scale=scale,                  # can be "row"/"column"/"none" but will be forced to "none" if scaled.to.max is TRUE
+                annot.by=group_by,            # the first item will be used to order the cells
+                annot.colors=palette_colors,  # defines colors for the first item set in annot.by
+                drop_levels=TRUE,             # to drop factor levels that are not present in factor values
+                silent=TRUE                   # to prevent saving to file
+            )
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))

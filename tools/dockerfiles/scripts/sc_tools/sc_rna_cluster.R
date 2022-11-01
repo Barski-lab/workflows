@@ -308,6 +308,17 @@ get_args <- function(){
         )
     )
     parser$add_argument(
+        "--algorithm",
+        help=paste(
+            "Algorithm for modularity optimization when running clustering.",
+            "Default: louvain"
+        ),
+        type="character", default="louvain",
+        choices=c(
+            "louvain", "mult-louvain", "slm", "leiden"
+        )
+    )
+    parser$add_argument(
         "--resolution",
         help=paste(
             "Clustering resolution applied to the constructed nearest-neighbor graph.",
@@ -465,7 +476,6 @@ seurat_data <- analyses$add_clusters(
     assay="RNA",
     graph_name="rna",                          # will be used in all the plot generating functions
     reduction="pca",
-    cluster_algorithm=1,                       # original Louvain algorithm
     args=args
 )
 debug$print_info(seurat_data, args)

@@ -11,7 +11,7 @@ requirements:
 
 hints:
 - class: DockerRequirement
-  dockerPull: biowardrobe2/sc-tools:v0.0.12
+  dockerPull: biowardrobe2/sc-tools:v0.0.13
 
 
 inputs:
@@ -52,6 +52,21 @@ inputs:
     doc: |
       Distance metric used when constructing nearest-neighbor graph before clustering.
       Default: euclidean
+
+  cluster_algorithm:
+    type:
+    - "null"
+    - type: enum
+      symbols:
+      - "louvain"
+      - "mult-louvain"
+      - "slm"
+      - "leiden"
+    inputBinding:
+      prefix: "--algorithm"
+    doc: |
+      Algorithm for modularity optimization when running clustering.
+      Default: slm
 
   resolution:
     type:
