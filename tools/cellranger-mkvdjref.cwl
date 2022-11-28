@@ -35,7 +35,7 @@ inputs:
       position: 6
       prefix: "--genes"
     doc: |
-      GTF annotation file
+      GTF annotation file. Should include gene_biotype/transcript_biotype fields
 
   output_folder_name:
     type: string?
@@ -55,7 +55,8 @@ outputs:
     outputBinding:
       glob: $(get_output_folder_name())
     doc: |
-      Cell Ranger V(D)J-compatible reference folder
+      Cell Ranger V(D)J-compatible reference folder.
+      This folder will include V(D)J segment FASTA file.
 
   stdout_log:
     type: stdout
@@ -127,6 +128,9 @@ doc: |
 
   For simplicity purpose only option 1) is supported - user need to
   provide GTF annotation file, input --seqs is not implemented.
+
+  Chromosome names in GTF file should correspond to the chromosome
+  names in FASTA file.
 
 
 s:about: |
