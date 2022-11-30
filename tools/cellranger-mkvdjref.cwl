@@ -27,7 +27,7 @@ inputs:
       position: 5
       prefix: "--fasta"
     doc: |
-      Genome FASTA file
+      Genome FASTA file. Hard/soft-masked files are not allowed.
 
   annotation_gtf_file:
     type: File
