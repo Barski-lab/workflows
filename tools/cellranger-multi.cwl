@@ -396,7 +396,7 @@ outputs:
   consensus_annotations_csv:
     type: File
     outputBinding:
-      glob: "sample/outs/multi/vdj_*/consensus_annotations.csv"
+      glob: "sample/outs/per_sample_outs/sample/vdj_*/consensus_annotations.csv"
     doc: |
       CSV file with high-level and detailed annotations of each clonotype
       consensus sequence.
@@ -404,7 +404,7 @@ outputs:
   filtered_contig_annotations_csv:
     type: File
     outputBinding:
-      glob: "sample/outs/multi/vdj_*/filtered_contig_annotations.csv"
+      glob: "sample/outs/per_sample_outs/sample/vdj_*/filtered_contig_annotations.csv"
     doc: |
       CSV file with high-level annotations of each high-confidence contig from
       cell-associated barcodes. This is a subset of all_contig_annotations.csv.
