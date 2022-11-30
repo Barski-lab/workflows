@@ -871,7 +871,7 @@ mds_html_plot <- function(norm_counts_data, rootname){
     )
 }
 
-dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, cluster_idents=FALSE, split_by=NULL, min_pct=0.01, col_min=-2.5, col_max=2.5, gradient_colors=c("lightgrey", "blue"), theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, cluster_idents=FALSE, min_pct=0.01, col_min=-2.5, col_max=2.5, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             plot <- Seurat::DotPlot(
@@ -881,8 +881,6 @@ dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, clu
                         dot.min=min_pct,
                         col.min=col_min,
                         col.max=col_max,
-                        cols=gradient_colors,
-                        split.by=split_by,
                         scale=TRUE,
                         scale.by="size"  # for optimal perception
                     ) +
