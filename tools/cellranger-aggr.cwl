@@ -61,7 +61,7 @@ inputs:
   filtered_data_folder:
     type:
     - "null"
-    -  Directory[]
+    - Directory[]
     doc: |
       Array of folders containing filtered data, i.e., only
       cell-associated barcodes. Outputs from "cellranger multi"
