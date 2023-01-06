@@ -19,6 +19,7 @@ export(
     "load_cell_identity_data",
     "extend_metadata",
     "extend_metadata_by_barcode",
+    "refine_metadata_levels",
     "load_grouping_data",
     "load_blacklist_data",
     "assign_identities",
@@ -186,6 +187,26 @@ extend_metadata <- function(seurat_data, location, seurat_ref_column, meta_ref_c
     return (seurat_data)
 }
 
+refine_metadata_levels <- function(seurat_data){
+    for (i in base::colnames(seurat_data@meta.data)){
+        if (base::is.factor(seurat_data@meta.data[[i]])){
+            base::print(base::paste("Re-evaluating levels for a factor column", i))
+            base::print(
+                base::paste(
+                    "before:", base::paste(base::levels(seurat_data@meta.data[[i]]), collapse=", ")
+                )
+            )
+            seurat_data@meta.data[[i]] <- base::droplevels(seurat_data@meta.data[[i]])  # need to drop levels of the removed values
+            base::print(
+                base::paste(
+                    "after:", base::paste(base::levels(seurat_data@meta.data[[i]]), collapse=", ")
+                )
+            )
+        }
+    }
+    return (seurat_data)
+}
+
 extend_metadata_by_barcode <- function(seurat_data, location, filter=FALSE){
     metadata <- utils::read.table(
         location,
@@ -193,35 +214,16 @@ extend_metadata_by_barcode <- function(seurat_data, location, filter=FALSE){
         header=TRUE,
         check.names=FALSE,
         stringsAsFactors=FALSE
-    ) %>% dplyr::rename("barcode"=1)                                                  # rename the first column to barcode
+    ) %>% dplyr::rename("barcode"=1)                                                      # rename the first column to barcode
 
     base::print(base::paste("Barcodes metadata is successfully loaded from ", location))
 
     if (filter){
         base::print(base::paste("Filtering Seurat data by loaded barcodes"))
         base::print(base::paste("Cells before filtering", base::nrow(seurat_data@meta.data)))
-        idents_before_filter <- length(
-            base::unique(
-                base::as.vector(as.character(seurat_data@meta.data[["new.ident"]]))
-            )
-        )
-        seurat_data <- base::subset(seurat_data, cells=metadata$barcode)              # subset to only selected cells
-        idents_after_filter <- length(
-            base::unique(
-                base::as.vector(as.character(seurat_data@meta.data[["new.ident"]]))
-            )
-        )
+        seurat_data <- base::subset(seurat_data, cells=metadata$barcode)                  # subset to only selected cells
+        seurat_data <- refine_metadata_levels(seurat_data)                                # to drop empty levels
         base::print(base::paste("Cells after filtering", base::nrow(seurat_data@meta.data)))
-        if (idents_before_filter != idents_after_filter){                             # not yet supported if we filter out the whole dataset
-            base::print(
-                base::paste(
-                    "Filtering by barcodes resulted in the",
-                    "complete removal of one or more datasets.",
-                    "Exiting."
-                )
-            )
-            quit(save="no", status=1, runLast=FALSE)
-        }
     }
     if (base::ncol(metadata) > 1){
         base::print(

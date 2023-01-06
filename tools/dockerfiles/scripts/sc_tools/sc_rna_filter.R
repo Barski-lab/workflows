@@ -435,7 +435,7 @@ print(
 prod$parallel(args)
 
 print(paste("Loading datasets identities from", args$identity))
-cell_identity_data <- io$load_cell_identity_data(args$identity)
+cell_identity_data <- io$load_cell_identity_data(args$identity)                         # identities are always prepended with letters to keep the order
 
 print(paste("Loading datasets grouping from", args$grouping))
 grouping_data <- io$load_grouping_data(args$grouping, cell_identity_data)
@@ -450,28 +450,52 @@ seurat_data <- io$load_10x_rna_data(                                            
 )
 debug$print_info(seurat_data, args)
 
-print("Adjusting input parameters")
-idents_count <- length(unique(as.vector(as.character(Idents(seurat_data)))))
-for (key in names(args)){
-    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty")){
-        if (length(args[[key]]) != 1 && length(args[[key]]) != idents_count){
-            print(paste("Filtering parameter", key, "has an ambiguous size. Exiting"))
-            quit(save="no", status=1, runLast=FALSE)
-        }
-        if (length(args[[key]]) == 1){
-            print(paste("Extending filtering parameter", key, "to have a proper size"))
-            args[[key]] <- rep(args[[key]][1], idents_count)
-        }
-    }
-}
-print("Adjusted parameters")
-print(args)
-
+idents_before_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))    # A->Z sorted identities
 if (!is.null(args$barcodes)){
     print("Applying cell filters based on the barcodes of interest")
     seurat_data <- io$extend_metadata_by_barcode(seurat_data, args$barcodes, TRUE)
 }
 debug$print_info(seurat_data, args)
+idents_after_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))     # A->Z sorted identities
+
+print("Adjusting input parameters")
+for (key in names(args)){
+    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty")){
+        if (length(args[[key]]) == 1){
+            print(paste("Extending filtering parameter", key, "to have a proper size"))
+            args[[key]] <- rep(args[[key]][1], length(idents_after_filtering))           # we use number of identities after filtering as we may have potentially removed some of them
+        } else {
+            if (length(args[[key]]) != length(idents_before_filtering)){                 # we use the original number of identities to make sure
+                print(                                                                   # that a user provided the the correct number of filtering
+                    paste(                                                               # parameter from the very beginning (a.k.a the same as in --identity)
+                        "The size of the filtering parameter", key, "is not",
+                        "equal to the number of originally provided datasets.",
+                        "Exiting"
+                    )
+                )
+                quit(save="no", status=1, runLast=FALSE)
+            }
+            if (length(idents_after_filtering) != length(idents_before_filtering)){
+                filtered_params <- c()
+                for (i in 1:length(idents_before_filtering)){
+                    if (idents_before_filtering[i] %in% idents_after_filtering){
+                        filtered_params <- append(filtered_params, args[[key]][i])
+                    } else {
+                        print(
+                            paste(
+                                "Excluding value", args[[key]][i], "from the", key, "parameter as",
+                                "identity", idents_before_filtering[i], "is not present anymore"
+                            )
+                        )
+                    }
+                }
+                args[[key]] <- filtered_params
+            }
+        }
+    }
+}
+print("Adjusted parameters")
+print(args)
 
 print("Adding QC metrics for not filtered datasets")
 seurat_data <- qc$add_rna_qc_metrics(seurat_data, args)
@@ -484,7 +508,7 @@ export_all_qc_plots(
 )
 
 print("Applying filters based on QC metrics")
-seurat_data <- filter$apply_rna_qc_filters(seurat_data, cell_identity_data, args)          # cleans up all reductions
+seurat_data <- filter$apply_rna_qc_filters(seurat_data, args)                              # cleans up all reductions
 debug$print_info(seurat_data, args)
 
 export_all_qc_plots(                                                                       # after all filters have been applied

@@ -759,7 +759,7 @@ print(
 prod$parallel(args)
 
 print(paste("Loading datasets identities from", args$identity))
-cell_identity_data <- io$load_cell_identity_data(args$identity)
+cell_identity_data <- io$load_cell_identity_data(args$identity)              # identities are always prepended with letters to keep the order
 
 print(paste("Loading datasets grouping from", args$grouping))
 grouping_data <- io$load_grouping_data(args$grouping, cell_identity_data)
@@ -770,35 +770,60 @@ blacklist_data <- io$load_blacklist_data(args$blacklist)
 print(paste("Loading gene/peak-barcode matrices from", args$mex))
 print(paste("Loading fragments from", args$fragments))
 print(paste("Loading annotations from", args$annotations))
-seurat_data <- io$load_10x_multiome_data(                           # identities are set to the "new.ident" column
+seurat_data <- io$load_10x_multiome_data(                                                # identities are set to the "new.ident" column
     args=args,
     cell_identity_data=cell_identity_data,
     grouping_data=grouping_data
 )
 debug$print_info(seurat_data, args)
 
-print("Adjusting input parameters")
-idents_count <- length(unique(as.vector(as.character(Idents(seurat_data)))))
-for (key in names(args)){
-    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty", "atacminumi", "maxnuclsignal", "mintssenrich", "minfrip", "maxblacklist")){
-        if (length(args[[key]]) != 1 && length(args[[key]]) != idents_count){
-            print(paste("Filtering parameter", key, "has an ambiguous size. Exiting"))
-            quit(save="no", status=1, runLast=FALSE)
-        }
-        if (length(args[[key]]) == 1){
-            print(paste("Extending filtering parameter", key, "to have a proper size"))
-            args[[key]] <- rep(args[[key]][1], idents_count)
-        }
-    }
-}
-print("Adjusted parameters")
-print(args)
-
+idents_before_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))    # A->Z sorted identities
 if (!is.null(args$barcodes)){
     print("Applying cell filters based on the barcodes of interest")
     seurat_data <- io$extend_metadata_by_barcode(seurat_data, args$barcodes, TRUE)
 }
 debug$print_info(seurat_data, args)
+idents_after_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))     # A->Z sorted identities
+
+print("Adjusting input parameters")
+idents_count <- length(unique(as.vector(as.character(Idents(seurat_data)))))
+for (key in names(args)){
+    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty", "atacminumi", "maxnuclsignal", "mintssenrich", "minfrip", "maxblacklist")){
+        if (length(args[[key]]) == 1){
+            print(paste("Extending filtering parameter", key, "to have a proper size"))
+            args[[key]] <- rep(args[[key]][1], length(idents_after_filtering))           # we use number of identities after filtering as we may have potentially removed some of them
+        } else {
+            if (length(args[[key]]) != length(idents_before_filtering)){                 # we use the original number of identities to make sure
+                print(                                                                   # that a user provided the the correct number of filtering
+                    paste(                                                               # parameter from the very beginning (a.k.a the same as in --identity)
+                        "The size of the filtering parameter", key, "is not",
+                        "equal to the number of originally provided datasets.",
+                        "Exiting"
+                    )
+                )
+                quit(save="no", status=1, runLast=FALSE)
+            }
+            if (length(idents_after_filtering) != length(idents_before_filtering)){
+                filtered_params <- c()
+                for (i in 1:length(idents_before_filtering)){
+                    if (idents_before_filtering[i] %in% idents_after_filtering){
+                        filtered_params <- append(filtered_params, args[[key]][i])
+                    } else {
+                        print(
+                            paste(
+                                "Excluding value", args[[key]][i], "from the", key, "parameter as",
+                                "identity", idents_before_filtering[i], "is not present anymore"
+                            )
+                        )
+                    }
+                }
+                args[[key]] <- filtered_params
+            }
+        }
+    }
+}
+print("Adjusted parameters")
+print(args)
 
 print("Adding RNA QC metrics for not filtered datasets")
 seurat_data <- qc$add_rna_qc_metrics(seurat_data, args)
@@ -816,10 +841,10 @@ export_all_qc_plots(
 )
 
 print("Applying filters based on RNA QC metrics")
-seurat_data <- filter$apply_rna_qc_filters(seurat_data, cell_identity_data, args)          # cleans up all reductions
+seurat_data <- filter$apply_rna_qc_filters(seurat_data, args)                            # cleans up all reductions
 debug$print_info(seurat_data, args)
 print("Applying filters based on ATAC QC metrics")
-seurat_data <- filter$apply_atac_qc_filters(seurat_data, cell_identity_data, args)         # cleans up all reductions
+seurat_data <- filter$apply_atac_qc_filters(seurat_data, args)                           # cleans up all reductions
 debug$print_info(seurat_data, args)
 
 if (!is.null(args$callby)){
@@ -827,37 +852,37 @@ if (!is.null(args$callby)){
     seurat_data <- call_peaks(seurat_data, args)
     debug$print_info(seurat_data, args)
     print("Updating ATAC QC metrics after calling MACS2 peaks")
-    seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)                               # with the new peaks, we have different number of ATAC UMI counted per cell, so all the metrics should be updated
+    seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)                             # with the new peaks, we have different number of ATAC UMI counted per cell, so all the metrics should be updated
     print("Updating peak QC metrics after calling MACS2 peaks")
     seurat_data <- qc$add_peak_qc_metrics(seurat_data, blacklist_data, args)             # recalculate peak QC metrics
     debug$print_info(seurat_data, args)
-    export_all_qc_plots(                                                                   # after RNA and ATAC filters have been applied
+    export_all_qc_plots(                                                                 # after RNA and ATAC filters have been applied
         seurat_data=seurat_data,
         suffix="mid_fltr",
         args=args,
         macs2_peaks=TRUE
     )
     print("Applying filters based on updated ATAC QC metrics after calling MACS2 peaks")
-    seurat_data <- filter$apply_atac_qc_filters(seurat_data, cell_identity_data, args)     # cleans up all reductions
+    seurat_data <- filter$apply_atac_qc_filters(seurat_data, args)     # cleans up all reductions
     debug$print_info(seurat_data, args)
 }
 
 print("Applying filters based on peaks QC metrics")
-seurat_data <- filter$apply_peak_qc_filters(seurat_data, cell_identity_data, args)         # cleans up all reductions
+seurat_data <- filter$apply_peak_qc_filters(seurat_data, args)                           # cleans up all reductions
 print("Updating ATAC QC metrics after all filtering thresholds applied")
-seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)                                   # recalculate ATAC QC metrics
+seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)                                 # recalculate ATAC QC metrics
 print("Updating peak QC metrics after all filtering thresholds applied")
 seurat_data <- qc$add_peak_qc_metrics(seurat_data, blacklist_data, args)                 # recalculate peak QC metrics
 debug$print_info(seurat_data, args)
 
-export_all_qc_plots(                                                                       # after all filters have been applied
+export_all_qc_plots(                                                                     # after all filters have been applied
     seurat_data=seurat_data,
     suffix="fltr",
     args=args,
-    macs2_peaks=!is.null(args$callby)                                                   # can be both from 10x or MACS2
+    macs2_peaks=!is.null(args$callby)                                                    # can be both from 10x or MACS2
 )
 
-DefaultAssay(seurat_data) <- "RNA"                                                         # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
+DefaultAssay(seurat_data) <- "RNA"                                                       # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
 print("Exporting results to RDS file")
 io$export_rds(seurat_data, paste(args$output, "_data.rds", sep=""))
 if(args$h5seurat){

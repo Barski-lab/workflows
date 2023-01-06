@@ -71,24 +71,13 @@ apply_metadata_filters <- function(seurat_data, target_column, target_values){
     return (seurat_data)
 }
 
-# refine_metadata_levels <- function(seurat_data){
-#     for (i in base::colnames(seurat_data@meta.data)){
-#         if (base::is.factor(seurat_data@meta.data[[i]])){
-#             base::print(base::paste("Re-evaluating levels for a factor column", i))
-#             base::print(base::levels(seurat_data@meta.data[[i]]))
-#             seurat_data@meta.data[[i]] <- base::droplevels(seurat_data@meta.data[[i]])  # need to drop levels of the removed values
-#             base::print(base::levels(seurat_data@meta.data[[i]]))
-#         }
-#     }
-#     return (seurat_data)
-# }
-
-apply_rna_qc_filters <- function(seurat_data, cell_identity_data, args) {
+apply_rna_qc_filters <- function(seurat_data, args) {
     base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
     merged_seurat_data <- NULL
     SeuratObject::Idents(seurat_data) <- "new.ident"                                                 # safety measure
+    sorted_identities <- sort(unique(as.vector(as.character(Idents(seurat_data)))))                  # alphabetically sorted identities A -> Z
     for (i in 1:length(args$rnaminumi)){
-        identity <- cell_identity_data$library_id[i]
+        identity <- sorted_identities[i]
 
         mingenes <- args$mingenes[i]
         maxgenes <- args$maxgenes[i]
@@ -124,12 +113,13 @@ apply_rna_qc_filters <- function(seurat_data, cell_identity_data, args) {
     return (merged_seurat_data)
 }
 
-apply_atac_qc_filters <- function(seurat_data, cell_identity_data, args) {
+apply_atac_qc_filters <- function(seurat_data, args) {
     base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
     merged_seurat_data <- NULL
     SeuratObject::Idents(seurat_data) <- "new.ident"                                                 # safety measure
+    sorted_identities <- sort(unique(as.vector(as.character(Idents(seurat_data)))))                  # alphabetically sorted identities A -> Z
     for (i in 1:length(args$atacminumi)){
-        identity <- cell_identity_data$library_id[i]
+        identity <- sorted_identities[i]
 
         atacminumi <- args$atacminumi[i]
         maxnuclsignal <- args$maxnuclsignal[i]
@@ -161,12 +151,13 @@ apply_atac_qc_filters <- function(seurat_data, cell_identity_data, args) {
     return (merged_seurat_data)
 }
 
-apply_peak_qc_filters <- function(seurat_data, cell_identity_data, args) {
+apply_peak_qc_filters <- function(seurat_data, args) {
     base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
     merged_seurat_data <- NULL
     SeuratObject::Idents(seurat_data) <- "new.ident"                                                 # safety measure
+    sorted_identities <- sort(unique(as.vector(as.character(Idents(seurat_data)))))                  # alphabetically sorted identities A -> Z
     for (i in 1:length(args$mingenes)){
-        identity <- cell_identity_data$library_id[i]
+        identity <- sorted_identities[i]
 
         minfrip <- args$minfrip[i]
         maxblacklist <- args$maxblacklist[i]
