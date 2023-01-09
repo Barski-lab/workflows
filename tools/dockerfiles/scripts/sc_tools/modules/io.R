@@ -318,8 +318,22 @@ load_10x_multiome_data <- function(args, cell_identity_data, grouping_data) {
     annotation <- rtracklayer::import(args$annotations, format="GFF")
 
     if( !("gene_biotype" %in% base::colnames(GenomicRanges::mcols(annotation))) ){
-        base::print("Loaded genome annotation doesn't have 'gene_biotype' column. Adding NA")
+        base::print(
+            paste(
+                "Loaded genome annotation doesn't have 'gene_biotype' column.",
+                "Setting to NA"
+            )
+        )
         annotation$gene_biotype <- NA                                                               # some Signac functions fail without this column
+    }
+    if( !("tx_id" %in% base::colnames(GenomicRanges::mcols(annotation))) ){
+        base::print(
+            base::paste(
+                "Loaded genome annotation doesn't have 'tx_id' column.",
+                "Setting it from 'transcript_id'"
+            )
+        )
+        annotation$tx_id <- annotation$transcript_id                                                # https://github.com/stuart-lab/signac/issues/1159
     }
 
     all_cells <- SeuratObject::Cells(seurat_data)

@@ -1139,7 +1139,7 @@ dim_loadings_plot <- function(data, rootname, plot_title, x_label, y_label, redu
     )
 }
 
-coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, idents=NULL, cells=NULL, features=NULL, expression_assay="RNA", expression_slot="data", extend_upstream=0, extend_downstream=0, show_annotation=TRUE, show_peaks=TRUE, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, idents=NULL, cells=NULL, features=NULL, expression_assay="RNA", expression_slot="data", extend_upstream=0, extend_downstream=0, tile_cells=100, tile_size=100, show_annotation=TRUE, show_peaks=TRUE, show_tile=FALSE, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=NULL, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -1158,12 +1158,35 @@ coverage_plot <- function(data, assay, region, group_by, plot_title, rootname, i
                 annotation=show_annotation,
                 peaks=show_peaks,
                 links=FALSE,                                       # always FALSE as it requires running aditional function beforehand
-                tile=FALSE,                                        # always FALSE due to bug in Signac
+                tile=show_tile,
+                tile.size=tile_size,
+                tile.cells=tile_cells,
                 sep=c("-", "-")
             ) + patchwork::plot_annotation(title=plot_title)
 
-            plot[[1]][[1]] <- plot[[1]][[1]] + get_theme(theme) + ggplot2::scale_fill_manual(values=palette_colors)    # for genome coverage plots
-            plot[[1]][[2]] <- plot[[1]][[2]] + get_theme(theme) + ggplot2::scale_fill_manual(values=palette_colors)    # for gene expression plots
+            plot[[1]][[1]] <- plot[[1]][[1]] +                                        # for genome coverage plots
+                              get_theme(theme) +
+                              ggplot2::scale_fill_manual(values=palette_colors) +
+                              Seurat::NoLegend()
+            plot[[1]][[2]] <- plot[[1]][[2]] +                                        # for gene expression plots
+                              get_theme(theme) +
+                              ggplot2::scale_fill_manual(values=palette_colors) +
+                              Seurat::NoLegend()
+
+            if (is.null(height)){
+                groups = length(base::unique(base::as.vector(as.character(data@meta.data[[group_by]]))))
+                height <- round(groups * 0.8 * resolution)           # 0.8 inch per group
+                if (show_tile){
+                    height <- round(2 * height)                      # to give twice more space for tiles
+                    height <- height + round(0.1 * resolution)       # 0.1 inch for space between the plots
+                }
+                if (show_annotation){
+                    height <- height + round(0.5 * resolution)       # 0.5 inch for annotations
+                }
+                if (show_peaks){
+                    height <- height + round(0.3 * resolution)       # 0.3 inch for peaks
+                }
+            }
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))

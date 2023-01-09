@@ -3,6 +3,7 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(modules))
 suppressMessages(library(argparse))
@@ -14,6 +15,7 @@ suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R"))
 suppressMessages(io <- modules::use(file.path(HERE, "modules/io.R")))
 suppressMessages(qc <- modules::use(file.path(HERE, "modules/qc.R")))
 suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
+suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 
 export_all_qc_plots <- function(seurat_data, suffix, args){
@@ -389,6 +391,11 @@ get_args <- function(){
         action="store_true"
     )
     parser$add_argument(
+        "--cbbuild",
+        help="Export results to UCSC Cell Browser. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
@@ -516,6 +523,28 @@ export_all_qc_plots(                                                            
     suffix="fltr",
     args=args
 )
+
+print("Adding genes vs RNA UMI per cell correlation as gene_rnaumi dimensionality reduction")
+seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
+    embeddings=as.matrix(
+        seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%           # can't be include into the add_rna_qc_metrics function
+        dplyr::rename("GRU_1"="nCount_RNA", "GRU_2"="nFeature_RNA") %>%                    # as apply_rna_qc_filters removes all reductions
+        dplyr::mutate(GRU_1=log10(GRU_1), GRU_2=log10(GRU_2))
+    ),
+    key="GRU_",
+    assay="RNA"
+)
+
+if(args$cbbuild){
+    print("Exporting filtering results to UCSC Cellbrowser")
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="RNA",
+        slot="counts",
+        short_label="RNA",
+        rootname=paste(args$output, "_cellbrowser", sep=""),
+    )
+}
 
 DefaultAssay(seurat_data) <- "RNA"                                                         # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
 print("Exporting results to RDS file")

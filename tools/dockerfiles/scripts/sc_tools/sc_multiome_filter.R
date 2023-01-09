@@ -3,6 +3,7 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
@@ -18,6 +19,7 @@ suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R"))
 suppressMessages(io <- modules::use(file.path(HERE, "modules/io.R")))
 suppressMessages(qc <- modules::use(file.path(HERE, "modules/qc.R")))
 suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
+suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 
 call_peaks <- function(seurat_data, args) {
@@ -44,6 +46,10 @@ call_peaks <- function(seurat_data, args) {
             if( !("gene_biotype" %in% colnames(GenomicRanges::mcols(genome_annotation))) ){
                 print("Loaded genome annotation doesn't have 'gene_biotype' column. Adding NA")
                 genome_annotation$gene_biotype <- NA
+            }
+            if( !("tx_id" %in% colnames(GenomicRanges::mcols(genome_annotation))) ){
+                print("Genome annotation doesn't have 'tx_id' column. Adding from 'transcript_id'")
+                genome_annotation$tx_id <- genome_annotation$transcript_id
             }
             atac_assay <- CreateChromatinAssay(
                 counts=macs2_counts,
@@ -713,6 +719,11 @@ get_args <- function(){
         action="store_true"
     )
     parser$add_argument(
+        "--cbbuild",
+        help="Export results to UCSC Cell Browser. Default: false",
+        action="store_true"
+    )
+    parser$add_argument(
         "--output",
         help="Output prefix. Default: ./sc",
         type="character", default="./sc"
@@ -881,6 +892,59 @@ export_all_qc_plots(                                                            
     args=args,
     macs2_peaks=!is.null(args$callby)                                                    # can be both from 10x or MACS2
 )
+
+print("Adding genes vs RNA UMI per cell correlation as gene_rnaumi dimensionality reduction")
+seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
+    embeddings=as.matrix(
+        seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%
+        dplyr::rename("GRU_1"="nCount_RNA", "GRU_2"="nFeature_RNA") %>%
+        dplyr::mutate(GRU_1=log10(GRU_1), GRU_2=log10(GRU_2))
+    ),
+    key="GRU_",
+    assay="RNA"
+)
+
+print("Adding RNA UMI vs ATAC UMI per cell correlation as rnaumi_atacumi dimensionality reduction")
+seurat_data@reductions[["rnaumi_atacumi"]] <- CreateDimReducObject(
+    embeddings=as.matrix(
+        seurat_data@meta.data[, c("nCount_ATAC", "nCount_RNA"), drop=FALSE] %>%
+        dplyr::rename("RAU_1"="nCount_ATAC", "RAU_2"="nCount_RNA") %>%
+        dplyr::mutate(RAU_1=log10(RAU_1), RAU_2=log10(RAU_2))
+    ),
+    key="RAU_",
+    assay="RNA"
+)
+
+print("Adding TSS enrichment score vs ATAC UMI per cell correlation as tss_atacumi dimensionality reduction")
+seurat_data@reductions[["tss_atacumi"]] <- CreateDimReducObject(
+    embeddings=as.matrix(
+        seurat_data@meta.data[, c("nCount_ATAC", "TSS.enrichment"), drop=FALSE] %>%
+        dplyr::rename("TAU_1"="nCount_ATAC", "TAU_2"="TSS.enrichment") %>%
+        dplyr::mutate(TAU_1=log10(TAU_1))
+    ),
+    key="TAU_",
+    assay="ATAC"
+)
+
+if(args$cbbuild){
+    print("Exporting filtering results to UCSC Cellbrowser")
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="RNA",
+        slot="counts",
+        short_label="RNA",
+        is_nested=TRUE,
+        rootname=paste(args$output, "_cellbrowser/rna", sep=""),
+    )
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="ATAC",
+        slot="counts",
+        short_label="ATAC",
+        is_nested=TRUE,
+        rootname=paste(args$output, "_cellbrowser/atac", sep=""),
+    )
+}
 
 DefaultAssay(seurat_data) <- "RNA"                                                       # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
 print("Exporting results to RDS file")

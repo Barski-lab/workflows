@@ -162,8 +162,12 @@ export_all_coverage_plots <- function(seurat_data, args) {
     if( !("gene_biotype" %in% base::colnames(GenomicRanges::mcols(genome_annotation))) ){
         print("Genome annotation doesn't have 'gene_biotype' column. Adding NA")
         genome_annotation$gene_biotype <- NA
-        Annotation(seurat_data) <- genome_annotation
     }
+    if( !("tx_id" %in% base::colnames(GenomicRanges::mcols(genome_annotation))) ){             # https://github.com/stuart-lab/signac/issues/1159
+        print("Genome annotation doesn't have 'tx_id' column. Adding from 'transcript_id'")
+        genome_annotation$tx_id <- genome_annotation$transcript_id
+    }
+    Annotation(seurat_data) <- genome_annotation
 
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
@@ -187,6 +191,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
                 extend_downstream=2500,
                 show_annotation=TRUE,
                 show_peaks=TRUE,
+                show_tile=TRUE,
                 palette_colors=graphics$D40_COLORS,
                 theme=args$theme,
                 rootname=paste(args$output, "cvrg_res", current_resolution, current_gene, sep="_"),
