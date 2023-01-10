@@ -599,9 +599,9 @@ get_args <- function(){
         "--mitopattern",
         help=paste(
             "Regex pattern to identify mitochondrial genes.",
-            "Default: '^Mt-'"
+            "Default: '^mt-|^MT-'"
         ),
-        type="character", default="^Mt-"
+        type="character", default="^mt-|^MT-"
     )
     parser$add_argument(
         "--maxmt",
