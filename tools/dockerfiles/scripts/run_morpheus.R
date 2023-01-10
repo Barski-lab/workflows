@@ -3,6 +3,7 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(morpheus))
 suppressMessages(library(argparse))
 suppressMessages(library(htmlwidgets))
@@ -37,9 +38,12 @@ print(args)
 print(paste("Loading GCT data from", args$gct))
 gct_data <- read.gct(args$gct)
 
+is_all_numeric <- function(x) {
+  !any(is.na(suppressWarnings(as.numeric(na.omit(x))))) & is.character(x)
+}
 morpheus_html <- morpheus(
     x=gct_data$data,
-    rowAnnotations=if(nrow(gct_data$rowAnnotations) == 0) NULL else gct_data$rowAnnotations,
+    rowAnnotations=if(nrow(gct_data$rowAnnotations) == 0) NULL else gct_data$rowAnnotations %>% dplyr::mutate_if(is_all_numeric, as.numeric),
     columnAnnotations=if(nrow(gct_data$columnAnnotations) == 0) NULL else gct_data$columnAnnotations
 )
 
