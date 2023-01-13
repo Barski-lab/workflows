@@ -87,6 +87,19 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             rootname=paste(args$output, "umap_spl_ph", sep="_"),
             pdf=args$pdf
         )
+        graphics$dim_plot(
+            data=seurat_data,
+            reduction="ccpca",
+            plot_title="Cells PCA using only cell cycle genes",
+            legend_title="Phase",
+            group_by="Phase",
+            label=FALSE,
+            alpha=0.5,
+            palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
+            rootname=paste(args$output, "ccpca", sep="_"),
+            pdf=args$pdf
+        )
     }
     graphics$dim_plot(
         data=seurat_data,
@@ -145,6 +158,20 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
             rootname=paste(args$output, "umap_spl_idnt", sep="_"),
             pdf=args$pdf
         )
+        graphics$dim_plot(
+            data=seurat_data,
+            reduction="ccpca",
+            plot_title="Split by dataset cells PCA using only cell cycle genes",
+            legend_title="Phase",
+            group_by="Phase",
+            split_by="new.ident",
+            label=FALSE,
+            alpha=0.5,
+            palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
+            rootname=paste(args$output, "ccpca_spl_idnt", sep="_"),
+            pdf=args$pdf
+        )
     }
 
     if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
@@ -174,6 +201,20 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
                 palette_colors=graphics$D40_COLORS,
                 theme=args$theme,
                 rootname=paste(args$output, "umap_gr_cnd_spl_ph", sep="_"),
+                pdf=args$pdf
+            )
+            graphics$dim_plot(
+                data=seurat_data,
+                reduction="ccpca",
+                plot_title="Split by grouping condition cells PCA using only cell cycle genes",
+                legend_title="Phase",
+                group_by="Phase",
+                split_by="condition",
+                label=FALSE,
+                alpha=0.5,
+                palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
+                rootname=paste(args$output, "ccpca_spl_cnd", sep="_"),
                 pdf=args$pdf
             )
         }
@@ -263,8 +304,8 @@ get_args <- function(){
         help=paste(
             "Path to the TSV/CSV file with the information for cell cycle score assignment.",
             "First column - 'phase', second column 'gene_id'. If loaded Seurat object already",
-            "includes cell cycle scores in 'S.Score' and 'G2M.Score' metatada columns they will",
-            "be removed.",
+            "includes cell cycle scores in 'S.Score', 'G2M.Score', and 'CC.Difference' metatada",
+            "columns they will be overwritten.",
             "Default: skip cell cycle score assignment."
         ),
         type="character"
@@ -329,11 +370,24 @@ get_args <- function(){
         ),
         type="character", nargs="*"
     )
-    parser$add_argument(
-        "--regresscellcycle",
+    cell_cycle_group <- parser$add_mutually_exclusive_group()
+    cell_cycle_group$add_argument(
+        "--regressccfull",
         help=paste(
-            "Regress cell cycle scores as a confounding source of variation.",
-            "Ignored if --cellcycle is not provided.",
+            "Regress all signals associated with cell cycle phase.",
+            "Ignored if --cellcycle is not provided. Mutually exclusive",
+            "with --regressccdiff parameter.",
+            "Default: false"
+        ),
+        action="store_true"
+    )
+    cell_cycle_group$add_argument(
+        "--regressccdiff",
+        help=paste(
+            "Regress only differences in cell cycle phase among proliferating",
+            "cells. Signals separating non-cycling and cycling cells will be",
+            "maintained. Ignored if --cellcycle is not provided. Mutually",
+            "exclusive with --regressccfull",
             "Default: false"
         ),
         action="store_true"
@@ -499,17 +553,6 @@ debug$print_info(seurat_data, args)
 
 print(paste("Loading cell cycle data from", args$cellcycle))
 cell_cycle_data <- io$load_cell_cycle_data(args$cellcycle)
-if(!is.null(cell_cycle_data) && any(c("S.Score", "G2M.Score") %in% colnames(seurat_data@meta.data))){
-    print(
-        paste(
-            "Removing S.Score and G2M.Score columns from",
-            "the metadata of the loaded Seurat object",
-            "as cell cycle scores will be re-assigned."
-        )
-    )
-    seurat_data[["S.Score"]] <- NULL
-    seurat_data[["G2M.Score"]] <- NULL
-}
 
 if (!is.null(args$metadata)){
     print("Extending Seurat object with the extra metadata fields")
