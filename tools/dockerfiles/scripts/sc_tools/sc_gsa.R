@@ -7,10 +7,10 @@ suppressMessages(library(escape))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
+suppressMessages(library(GSEABase))
 suppressMessages(library(argparse))
 
 HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly=FALSE)[grep("--file=", commandArgs(trailingOnly=FALSE))])))})()
-suppressMessages(analyses <- modules::use(file.path(HERE, "modules/analyses.R")))
 suppressMessages(debug <- modules::use(file.path(HERE, "modules/debug.R")))
 suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R")))
 suppressMessages(io <- modules::use(file.path(HERE, "modules/io.R")))
@@ -18,8 +18,69 @@ suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
 suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 
+export_all_plots <- function(seurat_data, gene_sets, args) {
+    DefaultAssay(seurat_data) <- "GSA"                            # safety measure
+    Idents(seurat_data) <- args$groupby
+    labels <- sub(".*?_", "", tolower(gene_sets))
+    labels <- gsub("_|-", " ", labels)
+
+    graphics$dot_plot(
+        data=seurat_data,                                         # will use data slot
+        features=gene_sets,
+        plot_title=paste("Scaled gene signature scores per group"),
+        x_label="Gene set",
+        y_label="Group",
+        cluster_idents=FALSE,
+        theme=args$theme,
+        rootname=paste(args$output, "gsa_avg", sep="_"),
+        pdf=args$pdf
+    )
+    for (i in 1:length(gene_sets)){
+        current_gene_set <- gene_sets[i]
+        current_label <- labels[i]
+        graphics$vln_plot(
+            data=seurat_data,
+            features=current_gene_set,
+            labels=current_label,
+            plot_title=paste("Gene signature score density per cell group"),
+            legend_title="Group",
+            log=FALSE,
+            pt_size=0,
+            combine_guides="collect",
+            width=800,
+            height=600,
+            palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
+            rootname=paste(args$output, "gsa_dnst", gsub(" ", "_", current_label), sep="_"),
+            pdf=args$pdf
+        )
+        for (reduction in c("rnaumap", "atacumap", "wnnumap")){
+            if (!(reduction %in% names(seurat_data@reductions))) {next}                                  # skip missing reductions
+            graphics$feature_plot(
+                data=seurat_data,
+                features=current_gene_set,
+                labels=current_label,
+                reduction=reduction,
+                plot_title=paste0("Gene signature score on cells UMAP (", reduction, " dim. reduction)"),
+                label=TRUE,
+                order=TRUE,
+                max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
+                combine_guides="keep",
+                width=800,
+                height=800,
+                theme=args$theme,
+                rootname=paste(args$output, "gsa_per_cell_rd", reduction, gsub(" ", "_", current_label), sep="_"),
+                pdf=args$pdf
+            )
+        }
+    }
+
+    SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
+}
+
+
 get_args <- function(){
-    parser <- ArgumentParser(description="Single-cell Gene Set Enrichment Analysis")
+    parser <- ArgumentParser(description="Single-cell Gene Set Analysis")                               # https://academic.oup.com/bib/article/17/3/393/1744776
     parser$add_argument(
         "--query",
         help=paste(
@@ -40,6 +101,14 @@ get_args <- function(){
             "Default: all cells used, no extra metadata is added"
         ),
         type="character"
+    )
+    parser$add_argument(
+        "--groupby",
+        help=paste(
+            "Column from the metadata of the loaded Seurat object to group cells by.",
+            "May be one of the columns added by --barcodes parameter."
+        ),
+        type="character", required="True"
     )
     parser$add_argument(
         "--species",
@@ -64,11 +133,28 @@ get_args <- function(){
     parser$add_argument(
         "--method",
         help=paste(
-            "Single-cell gene signature scoring method.",
+            "Gene signature scoring method.",
             "Default: ssGSEA"
         ),
         type="character", default="ssGSEA",
         choices=c("ssGSEA", "UCell")
+    )
+    parser$add_argument(
+        "--mingenes",
+        help=paste(
+            "Minimum number of genes from the loaded Seurat object to be present",
+            "in the gene set to perform gene set analysis.",
+            "Default: 15"
+        ),
+        type="integer", default=15
+    )
+    parser$add_argument(
+        "--topn",
+        help=paste(
+            "Show top N the most variable gene sets",
+            "Default: 10"
+        ),
+        type="integer", default=10
     )
     parser$add_argument(
         "--pdf",
@@ -175,32 +261,58 @@ if (!is.null(args$barcodes)){
     debug$print_info(seurat_data, args)
 }
 
-print("Running Gene Set Enrichment Analysis")
+print("Running Gene Set Analysis")
 gene_sets <- getGeneSets(
     species=args$species,
     library=args$geneset
 )
-gsea_nes_df <- enrichIt(                          # data frame of normalized enrichmenet scores (NES)
-    obj=seurat_data, 
+print(
+    paste(
+        "Loaded", length(gene_sets), "genesets for", args$species,
+        "from", args$geneset, "library"
+    )
+)
+
+gsa_data <- enrichIt(                                                          # data frame of normalized (0,1) gene signatures scores
+    obj=seurat_data,                                                           # always uses counts slot from the RNA assay
     gene.sets=gene_sets,
     method=args$method,
-    groups=1000,
+    groups=1000,                                                               # if method is UCell this parameter shouldn't influence on the results
     cores=args$cpus, 
-    min.size=15
+    min.size=args$mingenes,
+    ssGSEA.norm=TRUE,                                                          # used only when method is ssGSEA, needed to have results in (0,1) range
+    maxRank=max(sapply(GSEABase::geneIds(gene_sets), function(x) length(x)))   # UCell fails if it's smaller than the longest geneset
 )
 
-gsea_nes_matrix <- t(as.matrix(gsea_nes_df))
-seurat_data[["GSEA"]] <- CreateAssayObject(
-    counts=gsea_nes_matrix,                       # data slot will be equal to counts
-    min.cells=0,                                  # to include all features
-    min.features=0                                # to include all cells
+print("Saving results as GSA assay")
+seurat_data[["GSA"]] <- CreateAssayObject(
+    counts=t(as.matrix(gsa_data)),                               # data slot will be equal to counts
+    min.cells=1,                                                 # to remove gene sets that have all signatures scores equal to 0
+    min.features=0                                               # to include all cells
 )
-
 debug$print_info(seurat_data, args)
+
+print("Searching the most variable gene sets")
+DefaultAssay(seurat_data) <- "GSA"
+seurat_data <- FindVariableFeatures(
+    seurat_data,                                                 # for "vst" counts slot is used
+    selection.method="vst",
+    nfeatures=args$topn,
+    verbose=FALSE
+)
+
+selected_gene_sets <- VariableFeatures(seurat_data)
+print(selected_gene_sets)
+
+export_all_plots(
+    seurat_data=seurat_data,
+    gene_sets=selected_gene_sets,
+    args=args
+)
 
 if(args$cbbuild){
     if (all(c("RNA", "ATAC") %in% names(seurat_data@assays))){
-        print("Exporting RNA, ATAC, and GSEA assays to UCSC Cellbrowser jointly")
+        print("Exporting RNA, ATAC, and GSA assays to UCSC Cellbrowser jointly")
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
             assay="RNA",
@@ -219,14 +331,15 @@ if(args$cbbuild){
         )
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
-            assay="GSEA",
+            assay="GSA",
             slot="counts",
-            short_label="GSEA",
+            short_label="GSA",
             is_nested=TRUE,
-            rootname=paste(args$output, "_cellbrowser/gsea", sep=""),
+            features=selected_gene_sets,
+            rootname=paste(args$output, "_cellbrowser/gsa", sep=""),
         )
     } else {
-        print("Exporting RNA and GSEA assays to UCSC Cellbrowser jointly")
+        print("Exporting RNA and GSA assays to UCSC Cellbrowser jointly")
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
             assay="RNA",
@@ -237,11 +350,12 @@ if(args$cbbuild){
         )
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
-            assay="GSEA",
+            assay="GSA",
             slot="counts",
-            short_label="GSEA",
+            short_label="GSA",
             is_nested=TRUE,
-            rootname=paste(args$output, "_cellbrowser/gsea", sep=""),
+            features=selected_gene_sets,
+            rootname=paste(args$output, "_cellbrowser/gsa", sep=""),
         )
     }
 }
