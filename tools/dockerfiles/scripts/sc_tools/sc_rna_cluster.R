@@ -20,6 +20,7 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 export_all_clustering_plots <- function(seurat_data, args){
     Idents(seurat_data) <- "new.ident"                                                               # safety measure
     downsampled_to <- analyses$get_min_ident_size(SplitObject(seurat_data, split.by="new.ident"))    # need to split it for consistency
+    print(paste("Downsampling datasets to", downsampled_to, "cells per sample"))
     downsampled_data <- subset(seurat_data, downsample=downsampled_to)
     if ("Phase" %in% colnames(seurat_data@meta.data)){
         if (length(unique(as.vector(as.character(Idents(seurat_data))))) > 1){
@@ -256,7 +257,7 @@ export_all_expression_plots <- function(seurat_data, args) {
             pdf=args$pdf
         )
         if (length(args$genes) > 0){
-            for (i in 1:length(args$genes)) {
+            for (i in 1:length(args$genes)){
                 current_gene <- args$genes[i]
                 graphics$vln_plot(
                     data=seurat_data,

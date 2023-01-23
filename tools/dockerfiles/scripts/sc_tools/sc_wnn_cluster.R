@@ -21,6 +21,7 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 export_all_clustering_plots <- function(seurat_data, args){
     Idents(seurat_data) <- "new.ident"                                                               # safety measure
     downsampled_to <- analyses$get_min_ident_size(SplitObject(seurat_data, split.by="new.ident"))    # need to split it for consistency
+    print(paste("Downsampling datasets to", downsampled_to, "cells per sample"))
     downsampled_data <- subset(seurat_data, downsample=downsampled_to)
     if ("Phase" %in% colnames(seurat_data@meta.data)){
         if (length(unique(as.vector(as.character(Idents(seurat_data))))) > 1){
@@ -197,7 +198,7 @@ export_all_expression_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
     if (length(args$genes) > 0){
-        for (i in 1:length(args$genes)) {
+        for (i in 1:length(args$genes)){
             current_gene <- args$genes[i]
             graphics$feature_plot(
                 data=seurat_data,
@@ -244,7 +245,7 @@ export_all_expression_plots <- function(seurat_data, args) {
             pdf=args$pdf
         )
         if (length(args$genes) > 0){
-            for (i in 1:length(args$genes)) {
+            for (i in 1:length(args$genes)){
                 current_gene <- args$genes[i]
                 graphics$vln_plot(
                     data=seurat_data,
@@ -286,31 +287,33 @@ export_all_coverage_plots <- function(seurat_data, args) {
 
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
-        for (i in 1:length(args$genes)) {
-            current_gene <- args$genes[i]
-            graphics$coverage_plot(
-                data=seurat_data,
-                assay="ATAC",
-                region=current_gene,
-                group_by=paste("wsnn_res", current_resolution, sep="."),
-                plot_title=paste(
-                    "Tn5 insertion frequency plot around", current_gene, "gene.",
-                    "Resolution", current_resolution
-                ),
-                idents=NULL,                                                   # to include all values from the default "new.ident" column
-                cells=colnames(seurat_data),                                   # limit to only those cells that are in out seurat_data
-                features=current_gene,
-                expression_assay="RNA",
-                expression_slot="data",                                        # use scaled counts
-                extend_upstream=2500,
-                extend_downstream=2500,
-                show_annotation=TRUE,
-                show_peaks=TRUE,
-                palette_colors=graphics$D40_COLORS,
-                theme=args$theme,
-                rootname=paste(args$output, "cvrg_res", current_resolution, current_gene, sep="_"),
-                pdf=args$pdf
-            )
+        if (length(args$genes) > 0){
+            for (i in 1:length(args$genes)){
+                current_gene <- args$genes[i]
+                graphics$coverage_plot(
+                    data=seurat_data,
+                    assay="ATAC",
+                    region=current_gene,
+                    group_by=paste("wsnn_res", current_resolution, sep="."),
+                    plot_title=paste(
+                        "Tn5 insertion frequency plot around", current_gene, "gene.",
+                        "Resolution", current_resolution
+                    ),
+                    idents=NULL,                                                   # to include all values from the default "new.ident" column
+                    cells=colnames(seurat_data),                                   # limit to only those cells that are in out seurat_data
+                    features=current_gene,
+                    expression_assay="RNA",
+                    expression_slot="data",                                        # use scaled counts
+                    extend_upstream=2500,
+                    extend_downstream=2500,
+                    show_annotation=TRUE,
+                    show_peaks=TRUE,
+                    palette_colors=graphics$D40_COLORS,
+                    theme=args$theme,
+                    rootname=paste(args$output, "cvrg_res", current_resolution, current_gene, sep="_"),
+                    pdf=args$pdf
+                )
+            }
         }
     }
 }
