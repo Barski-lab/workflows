@@ -306,7 +306,7 @@ export_all_expression_plots <- function(seurat_data, args) {
                     labels=current_gene,
                     reduction=reduction,
                     plot_title=paste0("Log normalized gene expression on cells UMAP with assigned cell types (", reduction, " dim. reduction)"),
-                    label=TRUE,
+                    label=FALSE,
                     order=TRUE,
                     max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
                     combine_guides="keep",
