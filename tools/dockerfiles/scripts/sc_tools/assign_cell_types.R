@@ -974,6 +974,7 @@ if (!is.null(args$ctype)){
             query=filtered_data,
             normalization.method=ref_norm_method,
             reference.assay=ref_assay,
+            features=as.vector(as.character(rownames(ref_seurat_data))),
             query.assay=ifelse(ref_norm_method == "LogNormalize", "RNA", "SCT"),
             reference.reduction=args$refreduction,
             dims=args$ndim
