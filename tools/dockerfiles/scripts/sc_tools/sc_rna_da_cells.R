@@ -72,7 +72,7 @@ export_plots <- function(seurat_data, da_cells, da_thresholds, args) {
                 split_by=args$splitby,
                 label=TRUE,
                 label_color="black",
-                palette_colors=c("grey", graphics$D40_COLORS),         # adding grey for cluster 0 as we can't use cells and split_by together
+                palette_colors=c("lightgrey", graphics$D40_COLORS),         # adding grey for cluster 0 as we can't use cells and split_by together
                 theme=args$theme,
                 rootname=paste(args$output, "umap_spl_cnd_rd", reduction, "res", current_resolution, sep="_"),
                 pdf=args$pdf
@@ -390,7 +390,7 @@ if(args$cbbuild){
             is_nested=TRUE,
             rootname=paste(args$output, "_cellbrowser/atac", sep=""),
         )
-    } else if ("RNA" %in% names(seurat_data@assays)){
+    } else {
         print("Exporting RNA assay to UCSC Cellbrowser")
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
@@ -398,16 +398,6 @@ if(args$cbbuild){
             slot="counts",
             short_label="RNA",
             features=args$genes,                                   # can be NULL
-            rootname=paste(args$output, "_cellbrowser", sep=""),
-        )
-    } else {
-        print("Exporting ATAC assay to UCSC Cellbrowser")
-        ucsc$export_cellbrowser(
-            seurat_data=seurat_data,
-            assay="ATAC",
-            slot="counts",
-            short_label="ATAC",
-            features=nearest_peaks,                               # use nearest to the genes if interest peaks
             rootname=paste(args$output, "_cellbrowser", sep=""),
         )
     }
