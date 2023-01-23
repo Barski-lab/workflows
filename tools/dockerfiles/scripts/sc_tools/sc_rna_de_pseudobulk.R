@@ -48,11 +48,7 @@ export_raw_plots <- function(seurat_data, args){
                 args$splitby
             ),
             highlight_group=if(!is.null(args$groupby) && !is.null(args$subset)) args$subset else NULL,
-            label=ifelse(
-                (!is.null(args$groupby) && !is.null(args$subset)),
-                TRUE,
-                FALSE
-            ),
+            label=FALSE,
             label_color="black",
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
@@ -113,8 +109,7 @@ export_processed_plots <- function(seurat_data, de_results, args){
         pdf=args$pdf
     )
 
-    genes_to_highlight <- get_genes_to_highlight(de_results, args)
-
+    genes_to_highlight <- get_genes_to_highlight(de_results, args)  # may return empty vector
     graphics$volcano_plot(
         data=de_results$de_genes,                                   # this is not filtered differentially expressed features
         x_axis="log2FoldChange",
