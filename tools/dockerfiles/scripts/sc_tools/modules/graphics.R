@@ -408,7 +408,7 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
     )
 }
 
-dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=NULL, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, ncol=NULL, label=FALSE, label_box=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=NULL, split_by=NULL, group_by=NULL, highlight_group=NULL, perc_split_by=NULL, perc_group_by=NULL, ncol=NULL, label=FALSE, label_box=FALSE, label_repel=FALSE, label_color="black", label_size=4, alpha=NULL, palette_colors=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             highlight_cells <- NULL
@@ -427,6 +427,7 @@ dim_plot <- function(data, rootname, reduction, plot_title, legend_title, cells=
                         split.by=split_by,
                         group.by=group_by,
                         label.box=label_box,
+                        repel=label_repel,
                         cells.highlight=if(is.null(highlight_cells))         # need to use this trick because ifelse doesn't return NULL, 'Selected' is just a name to display on the plot
                                             NULL
                                         else
