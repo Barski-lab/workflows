@@ -172,7 +172,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
 
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
-        if (length(args$genes) > 0){
+        if (!is.null(args$genes) && length(args$genes) > 0){
             for (i in 1:length(args$genes)){
                 current_gene <- args$genes[i]
                 graphics$coverage_plot(

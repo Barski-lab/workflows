@@ -197,7 +197,7 @@ export_all_clustering_plots <- function(seurat_data, args){
 export_all_expression_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
-    if (length(args$genes) > 0){
+    if (!is.null(args$genes) && length(args$genes) > 0){
         for (i in 1:length(args$genes)){
             current_gene <- args$genes[i]
             graphics$feature_plot(
@@ -244,7 +244,7 @@ export_all_expression_plots <- function(seurat_data, args) {
             rootname=paste(args$output, "xpr_avg_res", current_resolution, sep="_"),
             pdf=args$pdf
         )
-        if (length(args$genes) > 0){
+        if (!is.null(args$genes) && length(args$genes) > 0){
             for (i in 1:length(args$genes)){
                 current_gene <- args$genes[i]
                 graphics$vln_plot(
@@ -287,7 +287,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
 
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
-        if (length(args$genes) > 0){
+        if (!is.null(args$genes) && length(args$genes) > 0){
             for (i in 1:length(args$genes)){
                 current_gene <- args$genes[i]
                 graphics$coverage_plot(

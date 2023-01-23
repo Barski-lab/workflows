@@ -234,7 +234,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
     }
     Annotation(seurat_data) <- genome_annotation
 
-    if (length(args$genes) > 0){
+    if (!is.null(args$genes) && length(args$genes) > 0){
         for (i in 1:length(args$genes)){
             current_gene <- args$genes[i]
             graphics$coverage_plot(
@@ -279,7 +279,7 @@ export_all_expression_plots <- function(seurat_data, args) {
         rootname=paste(args$output, "xpr_avg", sep="_"),
         pdf=args$pdf
     )
-    if (length(args$genes) > 0){
+    if (!is.null(args$genes) && length(args$genes) > 0){
         for (i in 1:length(args$genes)){
             current_gene <- args$genes[i]
             graphics$vln_plot(
