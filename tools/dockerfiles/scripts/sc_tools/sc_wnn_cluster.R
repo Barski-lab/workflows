@@ -22,6 +22,25 @@ export_all_clustering_plots <- function(seurat_data, args){
     Idents(seurat_data) <- "new.ident"                                                               # safety measure
     downsampled_to <- analyses$get_min_ident_size(SplitObject(seurat_data, split.by="new.ident"))    # need to split it for consistency
     downsampled_data <- subset(seurat_data, downsample=downsampled_to)
+    if ("Phase" %in% colnames(seurat_data@meta.data)){
+        if (length(unique(as.vector(as.character(Idents(seurat_data))))) > 1){
+            graphics$composition_plot(
+                data=downsampled_data,
+                plot_title=paste(
+                    "Grouped by cell cycle phase split by dataset cells composition plot.",
+                    "Downsampled to", downsampled_to, "cells per dataset"),
+                legend_title="Phase",
+                group_by="Phase",
+                split_by="new.ident",
+                x_label="Dataset",
+                y_label="Cells percentage",
+                palette_colors=graphics$D40_COLORS,
+                theme=args$theme,
+                rootname=paste(args$output, "cmp_gr_ph_spl_idnt", sep="_"),
+                pdf=args$pdf
+            )
+        }
+    }
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
         graphics$dim_plot(
@@ -151,24 +170,6 @@ export_all_clustering_plots <- function(seurat_data, args){
                 rootname=paste(args$output, "umap_spl_ph_res", current_resolution, sep="_"),
                 pdf=args$pdf
             )
-            if (length(unique(as.vector(as.character(Idents(seurat_data))))) > 1){
-                graphics$composition_plot(
-                    data=downsampled_data,
-                    plot_title=paste(
-                        "Grouped by cell cycle phase split by dataset cells composition plot.",
-                        "Downsampled to", downsampled_to, "cells per dataset.",
-                        "Resolution", current_resolution),
-                    legend_title="Phase",
-                    group_by="Phase",
-                    split_by="new.ident",
-                    x_label="Dataset",
-                    y_label="Cells percentage",
-                    palette_colors=graphics$D40_COLORS,
-                    theme=args$theme,
-                    rootname=paste(args$output, "cmp_gr_ph_spl_idnt_res", current_resolution, sep="_"),
-                    pdf=args$pdf
-                )
-            }
             graphics$composition_plot(
                 data=downsampled_data,
                 plot_title=paste(
@@ -195,6 +196,39 @@ export_all_clustering_plots <- function(seurat_data, args){
 export_all_expression_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
+    if (length(args$genes) > 0){
+        for (i in 1:length(args$genes)) {
+            current_gene <- args$genes[i]
+            graphics$feature_plot(
+                data=seurat_data,
+                features=current_gene,
+                labels=current_gene,
+                reduction="wnnumap",
+                plot_title="Log normalized gene expression on cells UMAP",
+                label=FALSE,
+                order=TRUE,
+                max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
+                combine_guides="keep",
+                width=800,
+                height=800,
+                theme=args$theme,
+                rootname=paste(args$output, "xpr_per_cell", current_gene, sep="_"),
+                pdf=args$pdf
+            )
+            graphics$expression_density_plot(
+                data=seurat_data,
+                features=current_gene,
+                reduction="wnnumap",
+                plot_title="Log normalized gene expression density on cells UMAP",
+                joint=FALSE,
+                width=800,
+                height=800,
+                theme=args$theme,
+                rootname=paste(args$output, "xpr_per_cell_sgnl", current_gene, sep="_"),
+                pdf=args$pdf
+            )
+        }
+    }
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
         Idents(seurat_data) <- paste("wsnn_res", current_resolution, sep=".")
@@ -212,34 +246,6 @@ export_all_expression_plots <- function(seurat_data, args) {
         if (length(args$genes) > 0){
             for (i in 1:length(args$genes)) {
                 current_gene <- args$genes[i]
-                graphics$feature_plot(
-                    data=seurat_data,
-                    features=current_gene,
-                    labels=current_gene,
-                    reduction="wnnumap",
-                    plot_title=paste("Log normalized gene expression on cells UMAP. Resolution", current_resolution),
-                    label=TRUE,
-                    order=TRUE,
-                    max_cutoff="q99",  # to prevent cells with overexpressed gene from distoring the color bar
-                    combine_guides="keep",
-                    width=800,
-                    height=800,
-                    theme=args$theme,
-                    rootname=paste(args$output, "xpr_per_cell_res", current_resolution, current_gene, sep="_"),
-                    pdf=args$pdf
-                )
-                graphics$expression_density_plot(
-                    data=seurat_data,
-                    features=current_gene,
-                    reduction="wnnumap",
-                    plot_title=paste("Log normalized gene expression density on cells UMAP. Resolution", current_resolution),
-                    joint=FALSE,
-                    width=800,
-                    height=800,
-                    theme=args$theme,
-                    rootname=paste(args$output, "xpr_per_cell_sgnl_res", current_resolution, current_gene, sep="_"),
-                    pdf=args$pdf
-                )
                 graphics$vln_plot(
                     data=seurat_data,
                     features=current_gene,
@@ -262,6 +268,7 @@ export_all_expression_plots <- function(seurat_data, args) {
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
 }
 
+
 export_all_coverage_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                                          # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                                           # safety measure
@@ -270,8 +277,12 @@ export_all_coverage_plots <- function(seurat_data, args) {
     if( !("gene_biotype" %in% base::colnames(GenomicRanges::mcols(genome_annotation))) ){
         print("Genome annotation doesn't have 'gene_biotype' column. Adding NA")
         genome_annotation$gene_biotype <- NA
-        Annotation(seurat_data) <- genome_annotation
     }
+    if( !("tx_id" %in% base::colnames(GenomicRanges::mcols(genome_annotation))) ){             # https://github.com/stuart-lab/signac/issues/1159
+        print("Genome annotation doesn't have 'tx_id' column. Adding from 'transcript_id'")
+        genome_annotation$tx_id <- genome_annotation$transcript_id
+    }
+    Annotation(seurat_data) <- genome_annotation
 
     for (i in 1:length(args$resolution)) {
         current_resolution <- args$resolution[i]
