@@ -893,7 +893,7 @@ atac_analyze <- function(seurat_data, args){
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                           # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
     backup_reductions <- c()                                                    # ATAC integration main remove RNA related reductions so we need to back them up
-    for (reduction_name in c("pca", "rnaumap", "wnnumap")){
+    for (reduction_name in c("ccpca", "pca", "rnaumap", "wnnumap")){
         if (reduction_name %in% names(seurat_data@reductions)){
             base::print(base::paste("Backing up reduction", reduction_name))
             backup_reductions[[reduction_name]] <- seurat_data[[reduction_name]]
