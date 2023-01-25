@@ -908,7 +908,7 @@ atac_analyze <- function(seurat_data, args){
         "ccpca",
         "pca",
         "rnaumap",
-        "wnnumap"
+        "wnnumap",
         "gene_rnaumi",
         "rnaumi_atacumi",
         "tss_atacumi"
