@@ -146,6 +146,10 @@ load_cell_identity_data <- function(location) {
         check.names=FALSE,
         stringsAsFactors=FALSE
     )
+    if ("sample_id" %in% base::colnames(cell_identity_data)){             # the latest cellranger changed the name from library_id to sample_id
+        cell_identity_data <- cell_identity_data %>%
+                              dplyr::rename("library_id"="sample_id")     # we use "library_id" in our code
+    }
     # prepend with LETTERS, otherwise the order on the plot will be arbitrary sorted
     cell_identity_data <- cell_identity_data %>%
                           dplyr::mutate("library_id"=base::paste(LETTERS[1:base::nrow(cell_identity_data)], .$library_id))
