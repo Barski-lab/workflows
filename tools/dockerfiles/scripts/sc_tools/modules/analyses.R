@@ -487,7 +487,7 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
     backup_reductions <- c()                                                    # RNA integration main remove atac related reductions so we need to back them up
-    for (reduction_name in c("atac_lsi", "atacumap", "wnnumap")){
+    for (reduction_name in c("ccpca", "atac_lsi", "atacumap", "wnnumap")){
         if (reduction_name %in% names(seurat_data@reductions)){
             base::print(base::paste("Backing up reduction", reduction_name))
             backup_reductions[[reduction_name]] <- seurat_data[[reduction_name]]
