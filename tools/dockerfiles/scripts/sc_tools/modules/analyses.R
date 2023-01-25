@@ -487,7 +487,14 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
     backup_reductions <- c()                                                    # RNA integration main remove atac related reductions so we need to back them up
-    reduction_names <- c("atac_lsi", "atacumap", "wnnumap")
+    reduction_names <- c(
+        "atac_lsi",
+        "atacumap",
+        "wnnumap",
+        "gene_rnaumi",
+        "rnaumi_atacumi",
+        "tss_atacumi"
+    )
     if (is.null(cell_cycle_data)){                                              # we are not planning to run cell cycle score assignment, so we want to keep "ccpca"
         reduction_names <- append(reduction_names, "ccpca")
     }
@@ -897,7 +904,16 @@ atac_analyze <- function(seurat_data, args){
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                           # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
     backup_reductions <- c()                                                    # ATAC integration main remove RNA related reductions so we need to back them up
-    for (reduction_name in c("ccpca", "pca", "rnaumap", "wnnumap")){
+    reduction_names <- c(
+        "ccpca",
+        "pca",
+        "rnaumap",
+        "wnnumap"
+        "gene_rnaumi",
+        "rnaumi_atacumi",
+        "tss_atacumi"
+    )
+    for (reduction_name in reduction_names){
         if (reduction_name %in% names(seurat_data@reductions)){
             base::print(base::paste("Backing up reduction", reduction_name))
             backup_reductions[[reduction_name]] <- seurat_data[[reduction_name]]
