@@ -634,7 +634,7 @@ outputs:
     - type: array
       items: File
     outputBinding:
-      glob: "*_xpr_per_cell_*.png"
+      glob: "*_xpr_per_cell_[!sgnl_]*.png"
     doc: |
       Log normalized gene expression on cells UMAP.
       PNG format
@@ -645,7 +645,7 @@ outputs:
     - type: array
       items: File
     outputBinding:
-      glob: "*_xpr_per_cell_*.pdf"
+      glob: "*_xpr_per_cell_[!sgnl_]*.pdf"
     doc: |
       Log normalized gene expression on cells UMAP.
       PDF format
