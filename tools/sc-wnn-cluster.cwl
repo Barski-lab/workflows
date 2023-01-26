@@ -563,10 +563,7 @@ outputs:
       PDF format
 
   cmp_gr_ph_spl_idnt_plot_png:
-    type:
-    - "null"
-    - type: array
-      items: File
+    type: File?
     outputBinding:
       glob: "*_cmp_gr_ph_spl_idnt.png"
     doc: |
@@ -574,10 +571,7 @@ outputs:
       PNG format
 
   cmp_gr_ph_spl_idnt_plot_pdf:
-    type:
-    - "null"
-    - type: array
-      items: File
+    type: File?
     outputBinding:
       glob: "*_cmp_gr_ph_spl_idnt.pdf"
     doc: |
