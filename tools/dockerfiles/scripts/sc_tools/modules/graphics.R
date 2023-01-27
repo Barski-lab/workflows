@@ -135,7 +135,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                         )
             }
 
-            if (scale_x_log10){ plot <- plot + ggplot2::scale_x_log10() }
+            if (scale_x_log10){ plot <- plot + ggplot2::scale_x_log10() + ggplot2::annotation_logticks(sides="b", alpha=0.3) }
             if (scale_y_log10){ plot <- plot + ggplot2::scale_y_log10() }
 
             if (zoom_on_intercept) {
@@ -163,7 +163,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                 } else {
                     zoomed_plot <- zoomed_plot + ggplot2::coord_cartesian(xlim=c(NA, max(intercept_data$x_left)))
                 }
-                if (scale_x_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_x_log10() }
+                if (scale_x_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_x_log10() + ggplot2::annotation_logticks(sides="b", alpha=0.3) }
                 if (scale_y_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_y_log10() }
                 plot <- plot / zoomed_plot
             }
@@ -268,8 +268,8 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
                         )
             }
 
-            if (scale_x_log10){ plot <- plot + ggplot2::scale_x_log10() }
-            if (scale_y_log10){ plot <- plot + ggplot2::scale_y_log10() }
+            if (scale_x_log10){ plot <- plot + ggplot2::scale_x_log10() + ggplot2::annotation_logticks(sides="b", alpha=0.3) }
+            if (scale_y_log10){ plot <- plot + ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides="l", alpha=0.3) }
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(plot))
