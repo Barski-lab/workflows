@@ -2,15 +2,18 @@
 # Dockerfile
 #
 # Software:         Visualization Plugins
-# Software Version: v0.0.5
+# Software Version: v0.0.6
 # Description:      Visualization Plugins
 # Website:          https://github.com/Barski-lab/visualization_plugins.git
 # Provides:         Visualization Plugins
 # Base Image:       ubuntu:20.04
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/visualization:v0.0.5 -f visualization-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/visualization:v0.0.5
-# Run Cmd:          docker run --rm -ti biowardrobe2/visualization:v0.0.5 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/visualization:v0.0.6 -f visualization-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/visualization:v0.0.6
+# Run Cmd:          docker run --rm -ti biowardrobe2/visualization:v0.0.6 /bin/bash
 #################################################################
+#
+# v0.0.6
+# - Added MA-plot
 #
 # v0.0.5
 # - Bug fixes in volcano plot
@@ -42,10 +45,11 @@ ENV DEBIAN_FRONTEND noninteractive
 
 WORKDIR /opt/volcano_plot
 
-ENV VP_COMMIT "8cef14d108f2ac1a4c64533bbaf91af281288a12"
+ENV VP_COMMIT "618231b74332d27d35d8a809a7626879fc156b8b"
 
 COPY ./volcano_plot/ /opt/volcano_plot
 COPY ./scripts/volcano_plot.sh /usr/local/bin/volcano_plot.sh
+COPY ./scripts/ma_plot.sh /usr/local/bin/ma_plot.sh
 
 ### Installing dependencies
 RUN apt-get update && \
@@ -55,9 +59,11 @@ RUN apt-get update && \
     git checkout ${VP_COMMIT} && \
     rm -rf .git && \
     rm README.md README_old.md LICENSE && \
-### Installing R scripts
+### Installing scripts
     chmod +x /opt/volcano_plot/setVars.sh && \
+    chmod +x /opt/volcano_plot/MA_PLOT_set_vars.sh && \
     chmod +x /usr/local/bin/volcano_plot.sh && \
+    chmod +x /usr/local/bin/ma_plot.sh && \
 ### Cleaning
     apt-get clean && \
     apt-get purge && \
