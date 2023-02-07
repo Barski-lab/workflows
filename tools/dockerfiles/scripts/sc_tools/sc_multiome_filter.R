@@ -337,6 +337,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         features=selected_features,
         labels=selected_labels,
         from_meta=TRUE,
+        show_stats=TRUE,
         plot_title=paste("QC metrics per cell density (", suffix, ")", sep=""),
         legend_title="Dataset",
         hide_x_text=TRUE,

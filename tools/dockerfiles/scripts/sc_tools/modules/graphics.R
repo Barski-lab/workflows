@@ -341,7 +341,7 @@ feature_scatter_plot <- function(data, rootname, x_axis, y_axis, x_label, y_labe
     )
 }
 
-vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, split_by=NULL, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+vln_plot <- function(data, features, labels, rootname, plot_title, legend_title, from_meta=FALSE, log=FALSE, group_by=NULL, split_by=NULL, show_stats=FALSE, hide_x_text=FALSE, pt_size=NULL, palette_colors=NULL, combine_guides=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -383,6 +383,17 @@ vln_plot <- function(data, features, labels, rootname, plot_title, legend_title,
                               ggplot2::stat_boxplot(width=0.15, geom="errorbar") +
                               ggplot2::geom_boxplot(width=0.15, outlier.alpha=0) +
                               Seurat::RotatedAxis()
+                if (show_stats){                        # https://stackoverflow.com/questions/56434187/label-whiskers-on-ggplot-boxplot-when-there-are-outliers
+                    plots[[i]] <- plots[[i]] +
+                                  ggplot2::stat_summary(
+                                      ggplot2::aes(label=round(..y.., digits=2)),
+                                      geom="text",
+                                      fun.y=function(y) grDevices::boxplot.stats(y)$stats[c(1, 5)],
+                                      position=ggplot2::position_nudge(x=0.35), 
+                                      size=2.5,
+                                      color="darkblue"
+                                  )
+                }
                 if (!is.null(palette_colors)){ plots[[i]] <- plots[[i]] + ggplot2::scale_fill_manual(values=palette_colors) }
                 if (hide_x_text){ plots[[i]] <- plots[[i]] + ggplot2::theme(axis.text.x=ggplot2::element_blank()) }
                 return (plots[[i]])
