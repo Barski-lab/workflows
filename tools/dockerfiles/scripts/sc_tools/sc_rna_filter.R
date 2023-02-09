@@ -186,7 +186,10 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "qc_mtrcs_dnst", sep="_"),
         pdf=args$pdf
     )
-    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
+    if (
+        all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+        length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+    ){
         graphics$geom_density_plot(
             data=seurat_data@meta.data,
             x_axis="nCount_RNA",

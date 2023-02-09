@@ -174,7 +174,10 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         )
     }
 
-    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
+    if (
+        all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+        length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+    ){
         graphics$dim_plot(
             data=seurat_data,
             reduction="rnaumap",
