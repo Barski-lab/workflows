@@ -3,6 +3,7 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
@@ -329,7 +330,9 @@ get_args <- function(){
         "--resolution",
         help=paste(
             "Clustering resolution applied to the constructed nearest-neighbor graph.",
-            "Can be set as an array.",
+            "Can be set as an array but only the first item from the list will be used",
+            "for cluster labels and gene markers in the UCSC Cell Browser when running",
+            "with --cbbuild and --diffgenes parameters.",
             "Default: 0.3, 0.5, 1.0"
         ),
         type="double", default=c(0.3, 0.5, 1.0), nargs="*"
@@ -499,18 +502,7 @@ if (!is.null(args$genes)){
     print(args$genes)
 }
 
-if(args$cbbuild){
-    print("Exporting RNA assay to UCSC Cellbrowser")
-    ucsc$export_cellbrowser(
-        seurat_data=seurat_data,
-        assay="RNA",
-        slot="counts",
-        short_label="RNA",
-        features=args$genes,                                   # can be NULL
-        rootname=paste(args$output, "_cellbrowser", sep=""),
-    )
-}
-
+all_putative_markers <- NULL
 if (!is.null(args$genes) || args$diffgenes) {
     print("Normalizing counts in RNA assay before evaluating genes expression or identifying putative gene markers")
     DefaultAssay(seurat_data) <- "RNA"
@@ -521,7 +513,7 @@ if (!is.null(args$genes) || args$diffgenes) {
     }
     if(args$diffgenes){
         print("Identifying differentially expressed genes between each pair of clusters for all resolutions")
-        all_putative_markers <- analyses$get_putative_markers(
+        all_putative_markers <- analyses$get_markers_by_res(
             seurat_data=seurat_data,
             assay="RNA",
             resolution_prefix="rna_res",
@@ -532,6 +524,30 @@ if (!is.null(args$genes) || args$diffgenes) {
             paste(args$output, "_gene_markers.tsv", sep="")
         )
     }
+}
+
+if(args$cbbuild){
+    print("Exporting RNA assay to UCSC Cellbrowser")
+    if(!is.null(all_putative_markers)){
+        all_putative_markers <- all_putative_markers %>%
+                                dplyr::filter(.$resolution==args$resolution[1]) %>%        # always use only the first resolution
+                                dplyr::select(-c("resolution"))
+    }
+    print("Reordering reductions to have rnaumap on the first place")                      # will be shown first in UCSC Cellbrowser
+    reduc_names <- names(seurat_data@reductions)
+    ordered_reduc_names <- c("rnaumap", reduc_names[reduc_names!="rnaumap"])               # we checked before that rnaumap is present
+    seurat_data@reductions <- seurat_data@reductions[ordered_reduc_names]
+    debug$print_info(seurat_data, args)
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="RNA",
+        slot="counts",
+        short_label="RNA",
+        features=args$genes,                                                  # can be NULL
+        markers=all_putative_markers,                                         # can be NULL
+        label_field=paste0("Clustering (rna ", args$resolution[1], ")"),      # always use only the first resolution
+        rootname=paste(args$output, "_cellbrowser", sep="")
+    )
 }
 
 DefaultAssay(seurat_data) <- "RNA"                                                         # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 

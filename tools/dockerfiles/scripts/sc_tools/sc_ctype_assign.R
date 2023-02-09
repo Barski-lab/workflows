@@ -60,7 +60,10 @@ export_all_clustering_plots <- function(seurat_data, args){
                 pdf=args$pdf
             )
         }
-        if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
+        if (
+            all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+            length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+        ){
             graphics$dim_plot(
                 data=seurat_data,
                 reduction=reduction,
@@ -156,8 +159,10 @@ export_all_clustering_plots <- function(seurat_data, args){
             )
         }
     }
-    
-    if (all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition)))){
+    if (
+        all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+        length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+    ){
         graphics$composition_plot(
             data=downsampled_data,
             plot_title=paste(
@@ -366,9 +371,102 @@ get_args <- function(){
         "--target",
         help=paste(
             "Column from the metadata of the loaded Seurat object to save manually",
-            "assigned cell types."
+            "assigned cell types. Should start with 'custom_', otherwise, it won't",
+            "be shown in UCSC Cell Browser."
         ),
         type="character", required="True"
+    )
+    parser$add_argument(
+        "--diffgenes",
+        help=paste(
+            "Identify differentially expressed genes (putative gene markers) for",
+            "assigned cell types. Ignored if loaded Seurat object doesn't include",
+            "genes expression information stored in the RNA assay.",
+            "Default: false"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--diffpeaks",
+        help=paste(
+            "Identify differentially accessible peaks for assigned cell types. Ignored",
+            "if loaded Seurat object doesn't include chromatin accessibility information",
+            "stored in the ATAC assay.",
+            "Default: false"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--rnalogfc",
+        help=paste(
+            "For putative gene markers identification include only those genes that",
+            "on average have log fold change difference in expression between every",
+            "tested pair of cell types not lower than this value. Ignored if '--diffgenes'",
+            "is not set or RNA assay is not present.",
+            "Default: 0.25"
+        ),
+        type="double", default=0.25
+    )
+    parser$add_argument(
+        "--rnaminpct",
+        help=paste(
+            "For putative gene markers identification include only those genes that",
+            "are detected in not lower than this fraction of cells in either of the",
+            "two tested cell types. Ignored if '--diffgenes' is not set or RNA assay",
+            "is not present.",
+            "Default: 0.1"
+        ),
+        type="double", default=0.1
+    )
+    parser$add_argument(
+        "--rnaonlypos",
+        help=paste(
+            "For putative gene markers identification return only positive markers.",
+            "Ignored if '--diffgenes' is not set or RNA assay is not present.",
+            "Default: false"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--rnatestuse",
+        help=paste(
+            "Statistical test to use for putative gene markers identification.",
+            "Ignored if '--diffgenes' is not set or RNA assay is not present.",
+            "Default: wilcox"
+        ),
+        type="character", default="wilcox",
+        choices=c("wilcox", "bimod", "roc", "t", "negbinom", "poisson", "LR", "MAST", "DESeq2")
+    )
+    parser$add_argument(
+        "--ataclogfc",
+        help=paste(
+            "For differentially accessible peaks identification include only those peaks that",
+            "on average have log fold change difference in the chromatin accessibility between",
+            "every tested pair of cell types not lower than this value. Ignored if '--diffpeaks'",
+            "is not set or ATAC assay is not present.",
+            "Default: 0.25"
+        ),
+        type="double", default=0.25
+    )
+    parser$add_argument(
+        "--atacminpct",
+        help=paste(
+            "For differentially accessible peaks identification include only those peaks that",
+            "are detected in not lower than this fraction of cells in either of the two tested",
+            "cell types. Ignored if '--diffpeaks' is not set or ATAC assay is not present.",
+            "Default: 0.05"
+        ),
+        type="double", default=0.05
+    )
+    parser$add_argument(
+        "--atactestuse",
+        help=paste(
+            "Statistical test to use for differentially accessible peaks identification.",
+            "Ignored if '--diffpeaks' is not set or ATAC assay is not present.",
+            "Default: LR"
+        ),
+        type="character", default="LR",
+        choices=c("wilcox", "bimod", "roc", "t", "negbinom", "poisson", "LR", "MAST", "DESeq2")
     )
     parser$add_argument(
         "--fragments",
@@ -548,7 +646,69 @@ if (!is.null(args$genes)){
     }
 }
 
+all_rna_putative_markers <- NULL
+if (args$diffgenes && ("RNA" %in% names(seurat_data@assays))){
+    print("Normalizing counts in RNA assay before identifying putative gene markers")
+    DefaultAssay(seurat_data) <- "RNA"
+    seurat_data <- NormalizeData(seurat_data, verbose=FALSE)                              # this might be the second time we normalize data, but it should be ok to do it
+    print("Identifying differentially expressed genes between each pair of cell types")
+    args$logfc <- args$rnalogfc                                                           # need the proper names for get_markers
+    args$minpct <- args$rnaminpct
+    args$onlypos <- args$rnaonlypos
+    args$testuse <- args$rnatestuse
+    all_rna_putative_markers <- analyses$get_markers(                                     # will change default assay to RNA
+        seurat_data=seurat_data,
+        assay="RNA",
+        group_by=args$target,
+        args=args
+    )
+    args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]    # to remove temporary added items
+    io$export_data(
+        all_rna_putative_markers,
+        paste(args$output, "_gene_markers.tsv", sep="")
+    )
+}
+
+all_atac_putative_markers <- NULL
+if (args$diffpeaks && ("ATAC" %in% names(seurat_data@assays))){
+    print("Identifying differentially accessible peaks between each pair of cell types")
+    args$logfc <- args$ataclogfc                                     # need the proper names for get_markers
+    args$minpct <- args$atacminpct
+    args$onlypos <- FALSE                                            # need to overwrite what was set for RNA
+    args$testuse <- args$atactestuse
+    all_atac_putative_markers <- analyses$get_markers(               # will change default assay to ATAC
+        seurat_data=seurat_data,
+        assay="ATAC",
+        group_by=args$target,
+        latent_vars="nCount_ATAC",                                   # to remove the influence of sequencing depth
+        args=args
+    )
+    args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]    # to remove temporary added items
+    io$export_data(
+        all_atac_putative_markers,
+        paste(args$output, "_peak_markers.tsv", sep="")
+    )
+}
+
 if(args$cbbuild){
+    print("Attemting to reorder reductions")
+    reduc_names <- names(seurat_data@reductions)
+    possible_suffixes <- c("wsnn", "rna", "atac")
+    possible_names <- c("wnnumap", "rnaumap", "atacumap")
+    first_reduc_name <- NULL
+    for (i in 1:length(possible_suffixes)){
+        if (grepl(possible_suffixes[i], args$source) && possible_names[i] %in% reduc_names){
+            first_reduc_name <- possible_names[i]
+            break
+        }
+    }
+    if (!is.null(first_reduc_name)){
+        print(paste("Moving", first_reduc_name, "reduction on top"))
+        ordered_reduc_names <- c(first_reduc_name, reduc_names[reduc_names!=first_reduc_name])
+        seurat_data@reductions <- seurat_data@reductions[ordered_reduc_names]
+        debug$print_info(seurat_data, args)
+    }
+
     if (all(c("RNA", "ATAC") %in% names(seurat_data@assays))){
         print("Exporting RNA and ATAC assays to UCSC Cellbrowser jointly")
         ucsc$export_cellbrowser(
@@ -556,18 +716,22 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                   # can be NULL
+            features=args$genes,                                             # can be NULL
+            markers=all_rna_putative_markers,                                # can be NULL
+            label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
-            rootname=paste(args$output, "_cellbrowser/rna", sep=""),
+            rootname=paste(args$output, "_cellbrowser/rna", sep="")
         )
         ucsc$export_cellbrowser(
             seurat_data=seurat_data,
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            features=nearest_peaks,                               # use nearest to the genes if interest peaks
+            features=nearest_peaks,                                          # use nearest to the genes if interest peaks
+            markers=all_atac_putative_markers,                               # can be NULL
+            label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
-            rootname=paste(args$output, "_cellbrowser/atac", sep=""),
+            rootname=paste(args$output, "_cellbrowser/atac", sep="")
         )
     } else if ("RNA" %in% names(seurat_data@assays)){
         print("Exporting RNA assay to UCSC Cellbrowser")
@@ -576,8 +740,10 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                   # can be NULL
-            rootname=paste(args$output, "_cellbrowser", sep=""),
+            features=args$genes,                                             # can be NULL
+            markers=all_rna_putative_markers,                                # can be NULL
+            label_field <- base::gsub("custom_", "Custom ", args$target),
+            rootname=paste(args$output, "_cellbrowser", sep="")
         )
     } else {
         print("Exporting ATAC assay to UCSC Cellbrowser")
@@ -586,8 +752,10 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            features=nearest_peaks,                               # use nearest to the genes if interest peaks
-            rootname=paste(args$output, "_cellbrowser", sep=""),
+            features=nearest_peaks,                                          # use nearest to the genes if interest peaks
+            markers=all_atac_putative_markers,                               # can be NULL
+            label_field <- base::gsub("custom_", "Custom ", args$target),
+            rootname=paste(args$output, "_cellbrowser", sep="")
         )
     }
 }

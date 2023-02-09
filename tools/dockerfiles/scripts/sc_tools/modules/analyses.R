@@ -27,7 +27,8 @@ export(
     "get_vars_to_regress",
     "get_cell_cycle_scores",
     "get_min_ident_size",
-    "get_putative_markers",
+    "get_markers_by_res",
+    "get_markers",
     "atac_preprocess",
     "atac_analyze",
     "add_wnn_clusters",
@@ -729,45 +730,56 @@ add_wnn_clusters <- function(seurat_data, graph_name, reductions, dimensions, ar
     return (seurat_data)
 }
 
-get_putative_markers <- function(seurat_data, assay, resolution_prefix, args, latent_vars=NULL, min_diff_pct=-Inf){
+get_markers <- function(seurat_data, assay, group_by, args, latent_vars=NULL, min_diff_pct=-Inf){
     SeuratObject::DefaultAssay(seurat_data) <- assay                            # safety measure
-    SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
+    SeuratObject::Idents(seurat_data) <- group_by
+    markers <- NULL
+    base::tryCatch(
+        expr = {
+            markers <- Seurat::FindAllMarkers(
+                seurat_data,
+                logfc.threshold=base::ifelse(is.null(args$logfc), 0.25, args$logfc),
+                min.pct=base::ifelse(is.null(args$minpct), 0.1, args$minpct),
+                only.pos=base::ifelse(is.null(args$onlypos), FALSE, args$onlypos),
+                test.use=base::ifelse(is.null(args$testuse), "wilcox", args$testuse),
+                min.diff.pct=min_diff_pct,
+                latent.vars=latent_vars,
+                verbose=FALSE
+            ) %>% dplyr::relocate(cluster, gene, .before=1) %>% dplyr::rename("feature"="gene")
+        },
+        error = function(e){
+            base::print(base::paste("Failed to identify markers for cells grouped by", group_by, "with error -", e))
+        },
+        finally = {
+            SeuratObject::Idents(seurat_data) <- "new.ident"                    # safety measure
+        }
+    )
+    return (markers)
+}
+
+get_markers_by_res <- function(seurat_data, assay, resolution_prefix, args, latent_vars=NULL, min_diff_pct=-Inf){
+    SeuratObject::DefaultAssay(seurat_data) <- assay                # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                # safety measure
     all_putative_markers <- NULL
     for (i in 1:length(args$resolution)) {
         resolution <- args$resolution[i]
-        base::tryCatch(
-            expr = {
-                SeuratObject::Idents(seurat_data) <- paste(resolution_prefix, resolution, sep=".")
-                markers <- Seurat::FindAllMarkers(
-                    seurat_data,
-                    logfc.threshold=base::ifelse(is.null(args$logfc), 0.25, args$logfc),
-                    min.pct=base::ifelse(is.null(args$minpct), 0.1, args$minpct),
-                    only.pos=base::ifelse(is.null(args$onlypos), FALSE, args$onlypos),
-                    test.use=base::ifelse(is.null(args$testuse), "wilcox", args$testuse),
-                    min.diff.pct=min_diff_pct,
-                    latent.vars=latent_vars,
-                    verbose=FALSE
-                ) %>% dplyr::relocate(cluster, gene, .before=1) %>% dplyr::rename("feature"="gene")
-
-                if (base::nrow(markers) > 0) {
-                    markers <- markers %>% base::cbind(resolution=resolution, .)
-                } else {
-                    markers <- markers %>% tibble::add_column(resolution=base::numeric(), .before=1)  # safety measure in case markers was empty
-                }
-                if (!is.null(all_putative_markers)) {
-                    all_putative_markers <- base::rbind(all_putative_markers, markers)
-                } else {
-                    all_putative_markers <- markers
-                }
-                base::rm(markers)                                                             # remove unused data
-            },
-            error = function(e){
-                base::print(base::paste("Failed to identify putative markers for resolution", resolution, "with error -", e))
-            },
-            finally = {
-                SeuratObject::Idents(seurat_data) <- "new.ident"
-            }
+        markers <- get_markers(
+            seurat_data=seurat_data,
+            assay=assay,
+            group_by=base::paste(resolution_prefix, resolution, sep="."),
+            args=args,
+            latent_vars=latent_vars,
+            min_diff_pct=min_diff_pct
         )
+        if (!is.null(markers) && base::nrow(markers) > 0){
+            markers <- markers %>% base::cbind(resolution=resolution, .)
+            if (!is.null(all_putative_markers)) {
+                all_putative_markers <- base::rbind(all_putative_markers, markers)
+            } else {
+                all_putative_markers <- markers
+            }
+            base::rm(markers)                                       # remove unused data
+        }
     }
     base::gc(verbose=FALSE)
     return (all_putative_markers)

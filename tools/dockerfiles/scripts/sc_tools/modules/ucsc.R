@@ -4,9 +4,6 @@ import("data.table", attach=FALSE)
 import("reticulate", attach=FALSE)
 
 export(
-    "get_matrix",
-    "write_matrix",
-    "cb_build",
     "export_cellbrowser"
 )
 
@@ -48,7 +45,7 @@ write_matrix <- function(inMat, outFname, sliceSize=1000){
     base::unlink(fnames)
 }
 
-cb_build <- function(object, slot, short_label, rootname, cluster_field, features, meta_fields, meta_fields_names, is_nested, dot_radius, dot_alpha) {
+cb_build <- function(object, slot, short_label, rootname, label_field, show_labels, features, markers, meta_fields, meta_fields_names, is_nested, dot_radius, dot_alpha) {
     if (!base::dir.exists(rootname)) {
         base::dir.create(rootname, recursive=TRUE)
     }
@@ -125,7 +122,7 @@ geneIdType="auto"
 clusterField="%s"
 labelField="%s"
 enumFields=%s
-showLabels=False
+showLabels=%s
 coords=%s'
 
     local_config <- base::sprintf(
@@ -134,9 +131,10 @@ coords=%s'
         short_label,
         dot_radius,
         dot_alpha,
-        cluster_field,
-        cluster_field,
+        label_field,
+        label_field,
         base::paste0("[", base::paste(base::paste0('"', enum_fields, '"'), collapse=", "), "]"),
+        base::ifelse(show_labels, "True", "False"),
         base::paste0("[", base::paste(embeddings_conf, collapse = ",\n"), "]")
     )
 
@@ -149,7 +147,27 @@ coords=%s'
             row.names=FALSE,
             col.names=FALSE
         )
-        local_config <- base::paste(local_config, 'quickGenesFile="quickGenes.tsv"', sep="\n")
+        local_config <- base::paste(
+            local_config,
+            'quickGenesFile="quickGenes.tsv"',
+            sep="\n"
+        )
+    }
+
+    if (!is.null(markers)){
+        utils::write.table(
+            markers,
+            sep="\t",
+            file=base::file.path(rootname, "markers.tsv"),
+            quote=FALSE,
+            row.names=FALSE,
+            col.names=TRUE
+        )
+        local_config <- base::paste(
+            local_config,
+            'markers=[{"file":"markers.tsv", "shortLabel":"Cluster-specific markers"}]',
+            sep="\n"
+        )
     }
 
     html_data_dir <- base::file.path(rootname, "html_data")
@@ -176,7 +194,7 @@ coords=%s'
     cb$cellbrowser$build(rootname, html_data_dir)
 }
 
-export_cellbrowser <- function(seurat_data, assay, slot, rootname, dot_radius=3, dot_alpha=0.5, short_label="cellbrowser", is_nested=FALSE, features=NULL, meta_fields=NULL, meta_fields_names=NULL){
+export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, short_label="cellbrowser", is_nested=FALSE, features=NULL, meta_fields=NULL, meta_fields_names=NULL){
     base::tryCatch(
         expr = {
             backup_assay <- SeuratObject::DefaultAssay(seurat_data)
@@ -186,14 +204,6 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, dot_radius=3,
             if (is.null(meta_fields) || is.null(meta_fields_names)){
                 meta_fields <-       c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score",    "Phase", "nCount_ATAC", "nFeature_ATAC", "TSS.enrichment",       "nucleosome_signal", "frip", "blacklist_fraction")
                 meta_fields_names <- c("RNA UMIs",   "Genes",        "Mitochondrial %", "Novelty score",            "S score", "G to M score", "Phase", "ATAC UMIs",   "Peaks",         "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
-            }
-
-            for (i in 1:length(meta_fields)){
-                current_field <- meta_fields[i]
-                if (current_field %in% base::colnames(seurat_data@meta.data) && length(base::unique(base::as.vector(as.character(seurat_data@meta.data[, current_field])))) > 1){
-                    default_cluster_field <- meta_fields_names[i]                 # first field from the meta.data that is not unique for all cells
-                    break
-                }
             }
 
             if (length(base::unique(base::as.vector(as.character(seurat_data@meta.data$new.ident)))) > 1){
@@ -230,13 +240,28 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, dot_radius=3,
             meta_fields <- base::append(meta_fields, quartile_fields)
             meta_fields_names <- base::append(meta_fields_names, quartile_fields_names)
 
+            show_labels <- TRUE                                                      # by default we try to show labels, but we hide them if cluster_field wasn't provided
+            if (is.null(label_field) || !(label_field %in% (meta_fields_names))){    # either not provided or not correct label_field
+                show_labels <- FALSE                                                 # hide labels
+                markers <- NULL                                                      # we can't use markers if label_field wasn't provided
+                for (i in 1:length(meta_fields)){                                    # searching the first field from the meta.data that is not unique for all cells
+                    current_field <- meta_fields[i]
+                    if (current_field %in% base::colnames(seurat_data@meta.data) && length(base::unique(base::as.vector(as.character(seurat_data@meta.data[, current_field])))) > 1){
+                        label_field <- meta_fields_names[i]
+                        break
+                    }
+                }
+            }
+
             cb_build(
                 seurat_data,
                 slot=slot,
                 short_label=short_label,
                 rootname=rootname,
-                cluster_field=default_cluster_field,
+                label_field=label_field,
+                show_labels=show_labels,
                 features=features,
+                markers=markers,
                 meta_fields=meta_fields,
                 meta_fields_names=meta_fields_names,
                 is_nested=is_nested,

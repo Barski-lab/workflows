@@ -3,6 +3,7 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
@@ -424,7 +425,9 @@ get_args <- function(){
         "--resolution",
         help=paste(
             "Clustering resolution applied to the constructed weighted nearest-neighbor",
-            "graph. Can be set as an array.",
+            "graph. Can be set as an array but only the first item from the list will",
+            "be used for cluster labels and gene/peak markers in the UCSC Cell Browser",
+            "when running with --cbbuild and --diffgenes/--diffpeaks parameters.",
             "Default: 0.3, 0.5, 1.0"
         ),
         type="double", default=c(0.3, 0.5, 1.0), nargs="*"
@@ -678,29 +681,7 @@ if (!is.null(args$genes)){
     print(nearest_peaks)
 }
 
-if(args$cbbuild){
-    print("Exporting RNA assay to UCSC Cellbrowser")
-    ucsc$export_cellbrowser(
-        seurat_data=seurat_data,
-        assay="RNA",
-        slot="counts",
-        short_label="RNA",
-        features=args$genes,                                   # can be NULL
-        is_nested=TRUE,
-        rootname=paste(args$output, "_cellbrowser/rna", sep=""),
-    )
-    print("Exporting ATAC assay to UCSC Cellbrowser")
-    ucsc$export_cellbrowser(
-        seurat_data=seurat_data,
-        assay="ATAC",
-        slot="counts",
-        short_label="ATAC",
-        features=nearest_peaks,                               # use nearest to the genes if interest peaks
-        is_nested=TRUE,
-        rootname=paste(args$output, "_cellbrowser/atac", sep=""),
-    )
-}
-
+all_rna_putative_markers <- NULL
 if (!is.null(args$genes) || args$diffgenes) {
     print("Normalizing counts in RNA assay")
     DefaultAssay(seurat_data) <- "RNA"
@@ -715,41 +696,88 @@ if (!is.null(args$genes) || args$diffgenes) {
     }
     if(args$diffgenes){
         print("Identifying differentially expressed genes between each pair of clusters for all resolutions")
-        args$logfc <- args$rnalogfc                                  # need the proper names for get_putative_markers
+        args$logfc <- args$rnalogfc                                  # need the proper names for get_markers_by_res
         args$minpct <- args$rnaminpct
         args$onlypos <- args$rnaonlypos
         args$testuse <- args$rnatestuse
-        all_rna_putative_markers <- analyses$get_putative_markers(   # will change default assay to RNA
+        all_rna_putative_markers <- analyses$get_markers_by_res(     # will change default assay to RNA
             seurat_data=seurat_data,
             assay="RNA",
             resolution_prefix="wsnn_res",
             args=args
         )
+        args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]  # to remove temporary added items
         io$export_data(
             all_rna_putative_markers,
             paste(args$output, "_gene_markers.tsv", sep="")
         )
-        rm(all_rna_putative_markers)
     }
 }
 
+all_atac_putative_markers <- NULL
 if (args$diffpeaks){
     print("Identifying differentially accessible peaks between each pair of clusters for all resolutions")
-    args$logfc <- args$ataclogfc                                     # need the proper names for get_putative_markers
+    args$logfc <- args$ataclogfc                                     # need the proper names for get_markers_by_res
     args$minpct <- args$atacminpct
+    args$onlypos <- FALSE                                            # need to overwrite what was set for RNA
     args$testuse <- args$atactestuse
-    all_atac_putative_markers <- analyses$get_putative_markers(      # will change default assay to ATAC
+    all_atac_putative_markers <- analyses$get_markers_by_res(        # will change default assay to ATAC
         seurat_data=seurat_data,
         assay="ATAC",
         resolution_prefix="wsnn_res",
         latent_vars="nCount_ATAC",                                   # to remove the influence of sequencing depth
         args=args
     )
+    args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]  # to remove temporary added items
     io$export_data(
         all_atac_putative_markers,
         paste(args$output, "_peak_markers.tsv", sep="")
     )
-    rm(all_atac_putative_markers)
+}
+
+if(args$cbbuild){
+    print("Exporting RNA and ATAC assays to UCSC Cellbrowser")
+
+    if(!is.null(all_rna_putative_markers)){
+        all_rna_putative_markers <- all_rna_putative_markers %>%
+                                    dplyr::filter(.$resolution==args$resolution[1]) %>%     # always use only the first resolution
+                                    dplyr::select(-c("resolution"))
+    }
+    if(!is.null(all_atac_putative_markers)){
+        all_atac_putative_markers <- all_atac_putative_markers %>%
+                                     dplyr::filter(.$resolution==args$resolution[1]) %>%    # always use only the first resolution
+                                     dplyr::select(-c("resolution"))
+    }
+
+    print("Reordering reductions to have wnnumap on the first place")                       # will be shown first in UCSC Cellbrowser
+    reduc_names <- names(seurat_data@reductions)
+    ordered_reduc_names <- c("wnnumap", reduc_names[reduc_names!="wnnumap"])                # wnnumap will be added by this time
+    seurat_data@reductions <- seurat_data@reductions[ordered_reduc_names]
+    debug$print_info(seurat_data, args)
+
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="RNA",
+        slot="counts",
+        short_label="RNA",
+        features=args$genes,                                                    # can be NULL
+        markers=all_rna_putative_markers,                                       # can be NULL
+        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),       # always use only the first resolution
+        is_nested=TRUE,
+        rootname=paste(args$output, "_cellbrowser/rna", sep="")
+    )
+
+    ucsc$export_cellbrowser(
+        seurat_data=seurat_data,
+        assay="ATAC",
+        slot="counts",
+        short_label="ATAC",
+        features=nearest_peaks,                                                 # use nearest to the genes if interest peaks
+        markers=all_atac_putative_markers,                                      # can be NULL
+        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),       # always use only the first resolution
+        is_nested=TRUE,
+        rootname=paste(args$output, "_cellbrowser/atac", sep="")
+    )
 }
 
 DefaultAssay(seurat_data) <- "RNA"
