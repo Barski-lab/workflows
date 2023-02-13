@@ -374,7 +374,7 @@ export_heatmaps <- function(seurat_data, markers, args){
         palette_colors=graphics$D40_COLORS,
         heatmap_colors=c("black", "yellow"),
         plot_title="Normalized gene expression heatmap",
-        rootname=paste(args$output, "xpr_htmp_res", sep="_"),
+        rootname=paste(args$output, "xpr_htmp", sep="_"),
         pdf=args$pdf
     )
     Idents(seurat_data) <- "new.ident"                            # safety measure
