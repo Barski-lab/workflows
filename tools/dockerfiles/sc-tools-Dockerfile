@@ -151,7 +151,7 @@ RUN apt-get update && \
     apt-get install libgcc-10-dev python3-dev python3-pip libxml2-dev libcurl4-openssl-dev \
                     libssl-dev pandoc libudunits2-dev libgdal-dev libcairo2-dev libharfbuzz-dev \
                     libfribidi-dev libbz2-dev tk libfontconfig1-dev libfreetype6-dev libpng-dev \
-                    libtiff5-dev libjpeg-dev vim -y && \
+                    libtiff5-dev libjpeg-dev libmagick++-dev vim -y && \
     pip3 install --no-binary="numpy" numpy==${NUMPY_VERSION} --ignore-installed && \
     pip3 install scipy==${SCIPY_VERSION} && \
     pip3 install anndata && \
