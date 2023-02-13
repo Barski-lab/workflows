@@ -7,7 +7,9 @@ suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
+suppressMessages(library(forcats))
 suppressMessages(library(argparse))
+suppressMessages(library(tidyselect))
 suppressMessages(library(GenomicRanges))
 
 HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly=FALSE)[grep("--file=", commandArgs(trailingOnly=FALSE))])))})()
@@ -320,6 +322,53 @@ export_all_coverage_plots <- function(seurat_data, args) {
             }
         }
     }
+}
+
+
+export_heatmaps <- function(seurat_data, markers, args){
+    DefaultAssay(seurat_data) <- "RNA"                            # safety measure
+    Idents(seurat_data) <- "new.ident"                            # safety measure
+    for (i in 1:length(args$resolution)) {
+        current_resolution <- args$resolution[i]
+        grouped_markers <- markers %>%
+                           dplyr::filter(.$resolution==current_resolution) %>%                     # shouldn't fail even if resolution is not present
+                           dplyr::select(-c("resolution")) %>%
+                           dplyr::group_by(cluster) %>%
+                           dplyr::top_n(
+                               n=tidyselect::all_of(floor(60/length(unique(markers$cluster)))),
+                               wt=avg_log2FC
+                           )
+        if (nrow(grouped_markers) > 0){                                                            # in case we don't have any markers for specific resolution
+            column_annotations <- c(paste("wsnn_res", current_resolution, sep="."))
+            if (length(unique(as.vector(as.character(seurat_data@meta.data$new.ident)))) > 1){
+                column_annotations <- c(column_annotations, "new.ident")                           # several datasets found
+            }
+            if (
+                all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+                length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+            ){
+                column_annotations <- c(column_annotations, "condition")                           # several conditions found
+            }
+            graphics$feature_heatmap(                                                              # install.packages("magick") for better rasterization
+                data=seurat_data,
+                assay="RNA",
+                slot="data",
+                features=grouped_markers$feature,
+                split_rows=forcats::fct_inorder(as.character(grouped_markers$cluster)),            # fct_inorder fails with numeric
+                show_rownames=TRUE,
+                scale_to_max=TRUE,
+                group_by=column_annotations,
+                palette_colors=graphics$D40_COLORS,
+                heatmap_colors=c("black", "yellow"),
+                plot_title=paste(
+                    "Normalized gene expression heatmap. Resolution", current_resolution
+                ),
+                rootname=paste(args$output, "xpr_htmp_res", current_resolution, sep="_"),
+                pdf=args$pdf
+            )
+        }
+    }
+    Idents(seurat_data) <- "new.ident"                            # safety measure
 }
 
 
@@ -684,7 +733,7 @@ if (!is.null(args$genes)){
     print(nearest_peaks)
 }
 
-all_rna_putative_markers <- NULL
+all_rna_markers <- NULL
 if (!is.null(args$genes) || args$diffgenes) {
     print("Normalizing counts in RNA assay")
     DefaultAssay(seurat_data) <- "RNA"
@@ -703,28 +752,36 @@ if (!is.null(args$genes) || args$diffgenes) {
         args$minpct <- args$rnaminpct
         args$onlypos <- args$rnaonlypos
         args$testuse <- args$rnatestuse
-        all_rna_putative_markers <- analyses$get_markers_by_res(     # will change default assay to RNA
+        all_rna_markers <- analyses$get_markers_by_res(              # will change default assay to RNA
             seurat_data=seurat_data,
             assay="RNA",
             resolution_prefix="wsnn_res",
             args=args
         )
         args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]  # to remove temporary added items
-        io$export_data(
-            all_rna_putative_markers,
-            paste(args$output, "_gene_markers.tsv", sep="")
-        )
+        if (!is.null(all_rna_markers)){
+            io$export_data(
+                all_rna_markers,
+                paste(args$output, "_gene_markers.tsv", sep="")
+            )
+            export_heatmaps(                                         # will change default assay to RNA
+                seurat_data=seurat_data,
+                markers=all_rna_markers,
+                args=args
+            )
+        }
     }
 }
 
-all_atac_putative_markers <- NULL
+all_atac_markers <- NULL
 if (args$diffpeaks){
     print("Identifying differentially accessible peaks between each pair of clusters for all resolutions")
+    DefaultAssay(seurat_data) <- "ATAC"                              # safety measure
     args$logfc <- args$ataclogfc                                     # need the proper names for get_markers_by_res
     args$minpct <- args$atacminpct
     args$onlypos <- FALSE                                            # need to overwrite what was set for RNA
     args$testuse <- args$atactestuse
-    all_atac_putative_markers <- analyses$get_markers_by_res(        # will change default assay to ATAC
+    all_atac_markers <- analyses$get_markers_by_res(                 # will change default assay to ATAC
         seurat_data=seurat_data,
         assay="ATAC",
         resolution_prefix="wsnn_res",
@@ -732,29 +789,31 @@ if (args$diffpeaks){
         args=args
     )
     args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]  # to remove temporary added items
-    io$export_data(
-        all_atac_putative_markers,
-        paste(args$output, "_peak_markers.tsv", sep="")
-    )
+    if (!is.null(all_atac_markers)){
+        io$export_data(
+            all_atac_markers,
+            paste(args$output, "_peak_markers.tsv", sep="")
+        )
+    }
 }
 
 if(args$cbbuild){
     print("Exporting RNA and ATAC assays to UCSC Cellbrowser")
 
-    if(!is.null(all_rna_putative_markers)){
-        all_rna_putative_markers <- all_rna_putative_markers %>%
-                                    dplyr::filter(.$resolution==args$resolution[1]) %>%     # always use only the first resolution
-                                    dplyr::select(-c("resolution"))
+    if(!is.null(all_rna_markers)){
+        all_rna_markers <- all_rna_markers %>%
+                           dplyr::filter(.$resolution==args$resolution[1]) %>%     # won't fail even if resolution is not present
+                           dplyr::select(-c("resolution"))
     }
-    if(!is.null(all_atac_putative_markers)){
-        all_atac_putative_markers <- all_atac_putative_markers %>%
-                                     dplyr::filter(.$resolution==args$resolution[1]) %>%    # always use only the first resolution
-                                     dplyr::select(-c("resolution"))
+    if(!is.null(all_atac_markers)){
+        all_atac_markers <- all_atac_markers %>%
+                            dplyr::filter(.$resolution==args$resolution[1]) %>%    # won't fail even if resolution is not present
+                            dplyr::select(-c("resolution"))
     }
 
-    print("Reordering reductions to have wnnumap on the first place")                       # will be shown first in UCSC Cellbrowser
+    print("Reordering reductions to have wnnumap on the first place")              # will be shown first in UCSC Cellbrowser
     reduc_names <- names(seurat_data@reductions)
-    ordered_reduc_names <- c("wnnumap", reduc_names[reduc_names!="wnnumap"])                # wnnumap will be added by this time
+    ordered_reduc_names <- c("wnnumap", reduc_names[reduc_names!="wnnumap"])       # wnnumap will be added by this time
     seurat_data@reductions <- seurat_data@reductions[ordered_reduc_names]
     debug$print_info(seurat_data, args)
 
@@ -763,9 +822,8 @@ if(args$cbbuild){
         assay="RNA",
         slot="counts",
         short_label="RNA",
-        features=args$genes,                                                    # can be NULL
-        markers=all_rna_putative_markers,                                       # can be NULL
-        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),       # always use only the first resolution
+        markers=all_rna_markers,                                                   # can be NULL
+        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),          # always use only the first resolution
         is_nested=TRUE,
         rootname=paste(args$output, "_cellbrowser/rna", sep="")
     )
@@ -775,8 +833,7 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
-        features=nearest_peaks,                                                 # use nearest to the genes if interest peaks
-        markers=all_atac_putative_markers,                                      # can be NULL
+        markers=all_atac_markers,                                               # can be NULL
         label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),       # always use only the first resolution
         is_nested=TRUE,
         rootname=paste(args$output, "_cellbrowser/atac", sep="")

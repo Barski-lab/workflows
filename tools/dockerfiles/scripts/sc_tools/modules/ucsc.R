@@ -1,7 +1,10 @@
+import("dplyr", attach=FALSE)
 import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("data.table", attach=FALSE)
 import("reticulate", attach=FALSE)
+import("tidyselect", attach=FALSE)
+import("magrittr", `%>%`, attach=TRUE)
 
 export(
     "export_cellbrowser"
@@ -194,7 +197,7 @@ coords=%s'
     cb$cellbrowser$build(rootname, html_data_dir)
 }
 
-export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, short_label="cellbrowser", is_nested=FALSE, features=NULL, meta_fields=NULL, meta_fields_names=NULL){
+export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, features=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, short_label="cellbrowser", is_nested=FALSE, meta_fields=NULL, meta_fields_names=NULL){
     base::tryCatch(
         expr = {
             backup_assay <- SeuratObject::DefaultAssay(seurat_data)
@@ -254,6 +257,21 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                         break
                     }
                 }
+            }
+
+            if (!is.null(markers) && base::nrow(markers) == 0){                      # in case markers somehow was an empty dataframe
+                markers <- NULL
+            }
+
+            if (is.null(features) && !is.null(markers)){                             # setting default features from markers only if they are provided with correct label_field
+                features <- markers %>%
+                            dplyr::group_by(cluster) %>%
+                            dplyr::top_n(                                            # can't use dplyr::distinct for grouped data
+                                n=tidyselect::all_of(floor(60/length(base::unique(markers$cluster)))),
+                                wt=avg_log2FC
+                            ) %>%
+                            dplyr::pull(feature)                                     # can't use dplyr::distinct for vector
+                features <- base::unique(features)                                   # some of the genes may be identical for several clusters so we want to remove them
             }
 
             cb_build(

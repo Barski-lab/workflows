@@ -2,20 +2,27 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.14
+# Software Version: v0.0.15
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.1.0
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.14 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.14
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.14 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.15 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.15
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.15 /bin/bash
 ##########################################################################################################
 #
 # Notes:
 # - if you have problems compiling Harmony
 #   https://github.com/immunogenomics/harmony/pull/165
+#
+# v0.0.15
+# - Export feature markers to UCSC Cell Browser
+# - Update axes on log-scaled plots
+# - Add gene expression heatmap with "magick" and "ComplexHeatmap"
+# - Install MACS2 from source because of the known bug
+#   https://github.com/macs3-project/MACS/issues/544
 #
 # v0.0.14
 # - updated to seurat:4.1.0
@@ -120,6 +127,7 @@ WORKDIR /tmp
 
 ENV R_MAX_VSIZE=200000000000
 ENV CB_VERSION "1.1.1"
+ENV MACS2_URL "https://github.com/macs3-project/MACS.git"
 ENV MACS2_VERSION "2.2.7.1"
 ENV SCTRIANGULATE_VERSION "0.12.0"
 ENV SCIPY_VERSION "1.7.3"
@@ -149,7 +157,11 @@ RUN apt-get update && \
     pip3 install anndata && \
     pip3 install cellbrowser==${CB_VERSION} && \
     pip3 install -U numba && \
-    pip3 install MACS2==${MACS2_VERSION} && \
+    git clone --depth 1 --branch v${MACS2_VERSION} ${MACS2_URL} && \
+    cd MACS && \
+    sed -i -e 's/numpy>=/numpy /g' setup.py && \
+    pip3 install . && \
+    cd .. && \
     pip3 install sctriangulate==${SCTRIANGULATE_VERSION} && \
     R -e 'install.packages("devtools", repo = "https://cloud.r-project.org/")' && \
     R -e 'install.packages("argparse", repo = "https://cloud.r-project.org/")' && \
@@ -159,7 +171,7 @@ RUN apt-get update && \
                                  'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', \
                                  'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', \
                                  'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment', \
-                                 'hopach', 'Glimma', 'dittoSeq', 'cmapR'))" && \
+                                 'hopach', 'Glimma', 'dittoSeq', 'cmapR', 'ComplexHeatmap'))" && \
     R -e 'install.packages("fastmatch")' && \
     R -e 'install.packages("RcppRoll")' && \
     R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
@@ -173,6 +185,7 @@ RUN apt-get update && \
     R -e 'install.packages("recipes")' && \
     R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
     R -e 'install.packages("harmony")' && \
+    R -e 'install.packages("magick")' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
     chmod +x /usr/local/bin/sc_multiome_filter.R && \

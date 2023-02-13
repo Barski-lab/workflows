@@ -3,10 +3,13 @@ options(warn=-1)
 options("width"=200)
 options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)})
 
+suppressMessages(library(dplyr))
 suppressMessages(library(Seurat))
 suppressMessages(library(Signac))
 suppressMessages(library(modules))
+suppressMessages(library(forcats))
 suppressMessages(library(argparse))
+suppressMessages(library(tidyselect))
 suppressMessages(library(GenomicRanges))
 
 HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly=FALSE)[grep("--file=", commandArgs(trailingOnly=FALSE))])))})()
@@ -340,6 +343,44 @@ export_all_expression_plots <- function(seurat_data, args) {
 }
 
 
+export_heatmaps <- function(seurat_data, markers, args){
+    DefaultAssay(seurat_data) <- "RNA"                            # safety measure
+    Idents(seurat_data) <- "new.ident"                            # safety measure
+    grouped_markers <- markers %>%
+                       dplyr::group_by(cluster) %>%
+                       dplyr::top_n(
+                           n=tidyselect::all_of(floor(60/length(unique(markers$cluster)))),
+                           wt=avg_log2FC
+                       )
+    column_annotations <- c(args$target)
+    if (length(unique(as.vector(as.character(seurat_data@meta.data$new.ident)))) > 1){
+        column_annotations <- c(column_annotations, "new.ident")                           # several datasets found
+    }
+    if (
+        all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
+        length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
+    ){
+        column_annotations <- c(column_annotations, "condition")                           # several conditions found
+    }
+    graphics$feature_heatmap(                                                              # install.packages("magick") for better rasterization
+        data=seurat_data,
+        assay="RNA",
+        slot="data",
+        features=grouped_markers$feature,
+        split_rows=forcats::fct_inorder(as.character(grouped_markers$cluster)),            # fct_inorder fails with numeric
+        show_rownames=TRUE,
+        scale_to_max=TRUE,
+        group_by=column_annotations,
+        palette_colors=graphics$D40_COLORS,
+        heatmap_colors=c("black", "yellow"),
+        plot_title="Normalized gene expression heatmap",
+        rootname=paste(args$output, "xpr_htmp_res", sep="_"),
+        pdf=args$pdf
+    )
+    Idents(seurat_data) <- "new.ident"                            # safety measure
+}
+
+
 get_args <- function(){
     parser <- ArgumentParser(description="Single-cell Manual Cell Type Assignment")
     parser$add_argument(
@@ -646,7 +687,7 @@ if (!is.null(args$genes)){
     }
 }
 
-all_rna_putative_markers <- NULL
+all_rna_markers <- NULL
 if (args$diffgenes && ("RNA" %in% names(seurat_data@assays))){
     print("Normalizing counts in RNA assay before identifying putative gene markers")
     DefaultAssay(seurat_data) <- "RNA"
@@ -656,38 +697,48 @@ if (args$diffgenes && ("RNA" %in% names(seurat_data@assays))){
     args$minpct <- args$rnaminpct
     args$onlypos <- args$rnaonlypos
     args$testuse <- args$rnatestuse
-    all_rna_putative_markers <- analyses$get_markers(                                     # will change default assay to RNA
+    all_rna_markers <- analyses$get_markers(                                              # will change default assay to RNA
         seurat_data=seurat_data,
         assay="RNA",
         group_by=args$target,
         args=args
     )
     args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]    # to remove temporary added items
-    io$export_data(
-        all_rna_putative_markers,
-        paste(args$output, "_gene_markers.tsv", sep="")
-    )
+    if (!is.null(all_rna_markers)){
+        io$export_data(
+            all_rna_markers,
+            paste(args$output, "_gene_markers.tsv", sep="")
+        )
+        export_heatmaps(                                                                  # will change default assay to RNA
+            seurat_data=seurat_data,
+            markers=all_rna_markers,
+            args=args
+        )
+    }
 }
 
-all_atac_putative_markers <- NULL
+all_atac_markers <- NULL
 if (args$diffpeaks && ("ATAC" %in% names(seurat_data@assays))){
     print("Identifying differentially accessible peaks between each pair of cell types")
-    args$logfc <- args$ataclogfc                                     # need the proper names for get_markers
+    DefaultAssay(seurat_data) <- "ATAC"                                                   # safety measure
+    args$logfc <- args$ataclogfc                                                          # need the proper names for get_markers
     args$minpct <- args$atacminpct
-    args$onlypos <- FALSE                                            # need to overwrite what was set for RNA
+    args$onlypos <- FALSE                                                                 # need to overwrite what was set for RNA
     args$testuse <- args$atactestuse
-    all_atac_putative_markers <- analyses$get_markers(               # will change default assay to ATAC
+    all_atac_markers <- analyses$get_markers(                                             # will change default assay to ATAC
         seurat_data=seurat_data,
         assay="ATAC",
         group_by=args$target,
-        latent_vars="nCount_ATAC",                                   # to remove the influence of sequencing depth
+        latent_vars="nCount_ATAC",                                                        # to remove the influence of sequencing depth
         args=args
     )
     args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]    # to remove temporary added items
-    io$export_data(
-        all_atac_putative_markers,
-        paste(args$output, "_peak_markers.tsv", sep="")
-    )
+    if (!is.null(all_atac_markers)){
+        io$export_data(
+            all_atac_markers,
+            paste(args$output, "_peak_markers.tsv", sep="")
+        )
+    }
 }
 
 if(args$cbbuild){
@@ -716,8 +767,7 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                             # can be NULL
-            markers=all_rna_putative_markers,                                # can be NULL
+            markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
             rootname=paste(args$output, "_cellbrowser/rna", sep="")
@@ -727,8 +777,7 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            features=nearest_peaks,                                          # use nearest to the genes if interest peaks
-            markers=all_atac_putative_markers,                               # can be NULL
+            markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
             rootname=paste(args$output, "_cellbrowser/atac", sep="")
@@ -740,8 +789,7 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                             # can be NULL
-            markers=all_rna_putative_markers,                                # can be NULL
+            markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             rootname=paste(args$output, "_cellbrowser", sep="")
         )
@@ -752,8 +800,7 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            features=nearest_peaks,                                          # use nearest to the genes if interest peaks
-            markers=all_atac_putative_markers,                               # can be NULL
+            markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             rootname=paste(args$output, "_cellbrowser", sep="")
         )

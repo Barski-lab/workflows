@@ -160,8 +160,8 @@ export_all_clustering_plots <- function(seurat_data, args){
 
 
 export_all_coverage_plots <- function(seurat_data, args) {
-    SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                                          # safety measure
-    SeuratObject::Idents(seurat_data) <- "new.ident"                                           # safety measure
+    DefaultAssay(seurat_data) <- "ATAC"                                          # safety measure
+    Idents(seurat_data) <- "new.ident"                                           # safety measure
 
     genome_annotation <- Annotation(seurat_data)                                               # safety measure to build the coverage plot
     if( !("gene_biotype" %in% base::colnames(GenomicRanges::mcols(genome_annotation))) ){
@@ -463,32 +463,34 @@ if (!is.null(args$genes) && !is.null(args$fragments)){
     )
 }
 
-all_putative_markers <- NULL
+all_markers <- NULL
 if (args$diffpeaks){
     print("Identifying differentially accessible peaks between each pair of clusters for all resolutions")
-    all_putative_markers <- analyses$get_markers_by_res(
+    all_markers <- analyses$get_markers_by_res(
         seurat_data=seurat_data,
         assay="ATAC",
         resolution_prefix="atac_res",
         latent_vars="nCount_ATAC",                                  # to remove the influence of sequencing depth
         args=args
     )
-    io$export_data(
-        all_putative_markers,
-        paste(args$output, "_peak_markers.tsv", sep="")
-    )
+    if (!is.null(all_markers)){
+        io$export_data(
+            all_markers,
+            paste(args$output, "_peak_markers.tsv", sep="")
+        )
+    }
 }
 
 if(args$cbbuild){
     print("Exporting ATAC assay to UCSC Cellbrowser")
-    if(!is.null(all_putative_markers)){
-        all_putative_markers <- all_putative_markers %>%
-                                dplyr::filter(.$resolution==args$resolution[1]) %>%          # always use only the first resolution
-                                dplyr::select(-c("resolution"))
+    if(!is.null(all_markers)){
+        all_markers <- all_markers %>%
+                       dplyr::filter(.$resolution==args$resolution[1]) %>%          # won't fail even if resolution is not present
+                       dplyr::select(-c("resolution"))
     }
-    print("Reordering reductions to have atacumap on the first place")                       # will be shown first in UCSC Cellbrowser
+    print("Reordering reductions to have atacumap on the first place")              # will be shown first in UCSC Cellbrowser
     reduc_names <- names(seurat_data@reductions)
-    ordered_reduc_names <- c("atacumap", reduc_names[reduc_names!="atacumap"])               # we checked before that atacumap is present
+    ordered_reduc_names <- c("atacumap", reduc_names[reduc_names!="atacumap"])      # we checked before that atacumap is present
     seurat_data@reductions <- seurat_data@reductions[ordered_reduc_names]
     debug$print_info(seurat_data, args)
     ucsc$export_cellbrowser(
@@ -496,9 +498,8 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
-        features=nearest_peaks,                                                 # use nearest to the genes if interest peaks
-        markers=all_putative_markers,                                           # can be NULL
-        label_field=paste0("Clustering (atac ", args$resolution[1], ")"),       # always use only the first resolution
+        markers=all_markers,                                                        # can be NULL
+        label_field=paste0("Clustering (atac ", args$resolution[1], ")"),           # always use only the first resolution
         rootname=paste(args$output, "_cellbrowser", sep="")
     )
 }

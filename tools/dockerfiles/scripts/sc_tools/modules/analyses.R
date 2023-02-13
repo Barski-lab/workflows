@@ -10,9 +10,10 @@ import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
 import("S4Vectors", attach=FALSE)
-import("magrittr", `%>%`, attach=TRUE)
 import("reticulate", attach=FALSE)
+import("tidyselect", attach=FALSE)
 import("BiocParallel", attach=FALSE)
+import("magrittr", `%>%`, attach=TRUE)
 import("SummarizedExperiment", attach=FALSE)
 
 export(
@@ -746,6 +747,9 @@ get_markers <- function(seurat_data, assay, group_by, args, latent_vars=NULL, mi
                 latent.vars=latent_vars,
                 verbose=FALSE
             ) %>% dplyr::relocate(cluster, gene, .before=1) %>% dplyr::rename("feature"="gene")
+            if (base::nrow(markers) == 0){
+                return (NULL)                                                   # to be able to check later just with is.null
+            }
         },
         error = function(e){
             base::print(base::paste("Failed to identify markers for cells grouped by", group_by, "with error -", e))
@@ -771,7 +775,7 @@ get_markers_by_res <- function(seurat_data, assay, resolution_prefix, args, late
             latent_vars=latent_vars,
             min_diff_pct=min_diff_pct
         )
-        if (!is.null(markers) && base::nrow(markers) > 0){
+        if (!is.null(markers)){
             markers <- markers %>% base::cbind(resolution=resolution, .)
             if (!is.null(all_putative_markers)) {
                 all_putative_markers <- base::rbind(all_putative_markers, markers)
