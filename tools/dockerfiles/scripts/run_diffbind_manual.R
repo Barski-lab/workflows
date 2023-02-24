@@ -23,8 +23,6 @@ suppressMessages(library(SummarizedExperiment))
 
 # why to choose -log10(pvalue) instead of peak enrichment column from MACS2
 # - https://support.bioconductor.org/p/66628/
-# why we want to run rlog instead of retreaving normalized counts directly
-# - https://support.bioconductor.org/p/123969/
 
 theme_set(theme_classic())                       # set classic theme for all ggplot generated graphics
 D40_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", "#E8B4BD", "#FD00EA", "#0DD1FE", "#FF9B0D", "#0D601C", "#C50D69", "#CACA16", "#722A91", "#00DEBF", "#863B00", "#5D7C91", "#FD84D8", "#C100FB", "#8499FC", "#FD6658", "#83D87A", "#968549", "#DEB6FB", "#832E60", "#A8CAB0", "#FE8F95", "#FE1CBB", "#DF7CF8", "#FF0078", "#F9B781", "#4D493B", "#1C5198", "#7C32CE", "#EFBC16", "#7CD2DE", "#B30DA7", "#9FC0F6", "#7A940D", "#9B0000", "#946D9B", "#C8C2D9", "#94605A")
