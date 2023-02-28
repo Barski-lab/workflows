@@ -26,6 +26,7 @@ suppressMessages(library(SummarizedExperiment))
 
 theme_set(theme_classic())                       # set classic theme for all ggplot generated graphics
 D40_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", "#E8B4BD", "#FD00EA", "#0DD1FE", "#FF9B0D", "#0D601C", "#C50D69", "#CACA16", "#722A91", "#00DEBF", "#863B00", "#5D7C91", "#FD84D8", "#C100FB", "#8499FC", "#FD6658", "#83D87A", "#968549", "#DEB6FB", "#832E60", "#A8CAB0", "#FE8F95", "#FE1CBB", "#DF7CF8", "#FF0078", "#F9B781", "#4D493B", "#1C5198", "#7C32CE", "#EFBC16", "#7CD2DE", "#B30DA7", "#9FC0F6", "#7A940D", "#9B0000", "#946D9B", "#C8C2D9", "#94605A")
+ALL_CRITERIA <- c("Tissue", "Factor", "Condition", "Treatment", "Caller", "Replicate")
 
 
 get_file_type <- function (filename){
@@ -79,6 +80,12 @@ get_metadata <- function(args){
                     column_to_rownames("SampleID")
     print("Raw metadata")
     print(raw_metadata)
+
+    all_metadata_vars <- unique(colnames(raw_metadata))
+    if(length(intersect(all_metadata_vars, ALL_CRITERIA)) != length(all_metadata_vars)){
+        print("Metadata includes not supported column names")
+        quit(save = "no", status = 1, runLast = FALSE)
+    }
 
     locations_df <- data.frame(
         SampleID=args$aliases,
@@ -221,7 +228,7 @@ export_overlap_plot <- function(data, rootname, plot_title, highlight=NULL, pdf=
     tryCatch(
         expr = {
             colors <- rep("steelblue3", length(data))
-            if(!is.null(highlight) && is.integer(highlight) && highlight > 0 && highlight <= length(data)){
+            if(!is.null(highlight) && highlight > 0 && highlight <= length(data)){
                 colors[highlight] <- "steelblue4"
             }
             data_df <- data.frame(
@@ -293,6 +300,93 @@ export_corr_heatmap <- function(data, rootname, plot_title, score=NULL, padj=1, 
             print(
                 paste0(
                     "Failed to export correlation heatmap to ", rootname,
+                    ".(png/pdf) with error - ", e
+                )
+            )
+        }
+    )
+}
+
+
+export_profile_heatmap <- function(data, rootname, method, plot_title, merge=NULL, padj=1, max_sites=1000, pdf=FALSE, width=800, height=800, resolution=100){
+    tryCatch(
+        expr = {
+
+            profiles_data <- dba.plotProfile(
+                data,
+                sites=dba.report(                 # to select only those sites that have proper padj
+                    data,
+                    method=method,
+                    th=padj,
+                    bDB=TRUE,
+                    bGain=TRUE,
+                    bLoss=TRUE,
+                    bAll=FALSE
+                ),
+                normalize=TRUE,
+                merge=merge,
+                maxSites=max_sites
+            )
+            print(head(profiles_data))
+
+            png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
+            dba.plotProfile(profiles_data)
+            dev.off()
+
+            if (!is.null(pdf) && pdf) {
+                pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
+                dba.plotProfile(profiles_data)
+                dev.off()
+            }
+
+            print(paste("Exporting profile heatmap to ", rootname, ".(png/pdf)", sep=""))
+        },
+        error = function(e){
+            tryCatch(expr={dev.off()}, error=function(e){})
+            print(
+                paste0(
+                    "Failed to export profile heatmap to ", rootname,
+                    ".(png/pdf) with error - ", e
+                )
+            )
+        }
+    )
+}
+
+
+export_venn_diagram <- function(data, rootname, method, mask, plot_title, padj=1, pdf=FALSE, width=600, height=600, resolution=100){
+    tryCatch(
+        expr = {
+
+            png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
+            dba.plotVenn(
+                data,
+                method=method,
+                mask=mask,
+                th=padj,
+                main=plot_title
+            )
+            dev.off()
+
+            if (!is.null(pdf) && pdf) {
+                pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
+                dba.plotVenn(
+                    data,
+                    method=method,
+                    mask=mask,
+                    th=padj,
+                    main=plot_title
+                )
+                dev.off()
+            }
+
+            print(paste("Exporting venn diagram to ", rootname, ".(png/pdf)", sep=""))
+        },
+        error = function(e){
+            tryCatch(expr={dev.off()}, error=function(e){})
+            print(
+                paste0(
+                    "Failed to export venn diagram to ", rootname,
                     ".(png/pdf) with error - ", e
                 )
             )
@@ -542,9 +636,9 @@ export_plots <- function(data, metadata, args){
 
 
 assert_args <- function(args){
-    if ( length(args$alignments) != length(args$peaks) || length(args$alignments) != length(args$aliases) ){
-            print("Exiting: --alignments, --peaks and/or --aliases have different number of values")
-            quit(save = "no", status = 1, runLast = FALSE)
+    if (length(args$alignments) != length(args$peaks) || length(args$alignments) != length(args$aliases)){
+        print("--alignments, --peaks and/or --aliases have different number of values")
+        quit(save = "no", status = 1, runLast = FALSE)
     }
 
     args$method <- switch(
@@ -559,8 +653,6 @@ assert_args <- function(args){
         "qvalue" = 9            # -log10(qvalue)
     )
 
-    args$score <- -log10(args$score)             # need to convert it to -log10, as both pvalue and qvalue are -log10
-
     args$norm <- switch(
         args$norm,
         "auto" = DBA_NORM_NATIVE,
@@ -568,6 +660,39 @@ assert_args <- function(args){
         "tmm"  = DBA_NORM_TMM,
         "lib"  = DBA_NORM_LIB
     )
+
+    args$score <- -log10(args$score)             # need to convert it to -log10, as both pvalue and qvalue are -log10
+
+    all_design_vars <- unique(all.vars(as.formula(args$design)))
+    if(length(intersect(all_design_vars, ALL_CRITERIA)) != length(all_design_vars)){
+        print("--design parameter includes not supported values")
+        quit(save = "no", status = 1, runLast = FALSE)
+    }
+
+    if(!is.null(args$groupby)){
+        all_groupby_vars <- unique(args$groupby)
+        if(length(intersect(all_groupby_vars, ALL_CRITERIA)) != length(all_groupby_vars)){
+            print("--groupby parameter includes not supported values")
+            quit(save = "no", status = 1, runLast = FALSE)
+        }
+        dba_groupby <- c()
+        for (i in 1:length(all_groupby_vars)){
+            dba_groupby <- append(
+                dba_groupby,
+                switch(
+                    all_groupby_vars[i],
+                    "Tissue"     = DBA_TISSUE,
+                    "Factor"     = DBA_FACTOR,
+                    "Condition"  = DBA_CONDITION,
+                    "Treatment"  = DBA_TREATMENT,
+                    "Caller"     = DBA_CALLER,
+                    "Replicate"  = DBA_REPLICATE
+                )
+            )
+        }
+        args$groupby <- dba_groupby
+        args$minoverlap = 1                      # force it to 1 as we will be using our common peaks as a way to define consensus peaks
+    }
 
     return (args)
 }
@@ -651,8 +776,18 @@ get_args <- function(){
         "--minoverlap",
         help=paste(
             "Min peakset overlap. Only include peaks that are present in at least",
-            "this many peaksets when generating consensus peakset. Default: 2"),
+            "this many peaksets when generating consensus peakset. Ignored if",
+            "--groupby was provided. Default: 2"
+        ),
         type="integer", default=2
+    )
+    parser$add_argument(
+        "--groupby",
+        help=paste(
+            "Should include items from this list Tissue, Factor, Condition, Treatment,",
+            "Caller, Replicate."
+        ),
+        type="character", nargs="*"
     )
     parser$add_argument(
         "--design",
@@ -710,8 +845,6 @@ get_args <- function(){
         ),
         type="double", default=0.05
     )
-
-
     parser$add_argument(
         "--cluster",
         help=paste(
@@ -748,8 +881,6 @@ get_args <- function(){
         ),
         action="store_true"
     )
-
-
     parser$add_argument(
         "--pdf",
         help="Export plots in PDF. Default: false",
@@ -784,8 +915,8 @@ metadata <- get_metadata(args)
 print("Constructing DBA object")
 # peaks will be filtered by --scoreby column to include only >= args$score values.
 # Then Score column will be somehow normalized
-dba_data <- dba(                                # $peaks has only Chr, Start, End, Score
-    sampleSheet=metadata$dba,                   # includes locations of all input files
+
+dba_default_params <- list(
     minOverlap=args$minoverlap,
     peakCaller="macs",                          # we don't set peakFormat and scoreCol as they will be derived from the peakCaller value
     peakFormat="macs",
@@ -804,20 +935,94 @@ dba_data <- dba(                                # $peaks has only Chr, Start, En
         bUsePval=FALSE,
         design=TRUE,
         doBlacklist=FALSE,
-        doGreylist=FALSE
+        doGreylist=FALSE,
+        cores=args$cpus
     )
 )
-dba_data$config$cores <- args$cpus              # setting it here, otherwise diffbind uses all cores
-print(dba_data)
-print(str(dba_data))
 
-export_overlap_plot(
-    data=dba.overlap(dba_data, mode=DBA_OLAP_RATE),
-    plot_title="Peakset overlap rate",
-    highlight=args$minoverlap,
-    rootname=paste(args$output, "pk_vrlp", sep="_"),
-    pdf=args$pdf
-)
+dba_data <- do.call(dba, append(dba_default_params, list(sampleSheet=metadata$dba)))
+print(dba_data)
+
+if(!is.null(args$groupby)){
+    print("Searching for consensus peaks based on the user provided grouping")
+
+    dba_peakset_default_params <- list(
+        peak.caller="macs",
+        peak.format="macs",
+        scoreCol=args$scoreby,
+        bLowerScoreBetter=FALSE,
+        filter=args$score,
+        DataType=DBA_DATA_FRAME
+    )
+
+    dba_data_temp <- do.call(
+        dba.peakset,
+        append(
+            dba_peakset_default_params,
+            list(
+                DBA=dba_data,
+                consensus=args$groupby,
+                minOverlap=0.999                                          # to get only common peaks within group
+            )
+        )
+    )
+    print(dba_data_temp)
+    print(str(dba_data_temp))
+
+    selected_mask <- dba_data_temp$masks$All                             # default value in case each group consists of exactly one sample
+    if ("Consensus" %in% names(dba_data_temp$masks)){
+        selected_mask <- dba_data_temp$masks$Consensus                   # use proper consensus peaks
+    }
+
+    export_venn_diagram(
+        data=dba_data_temp,
+        method=args$method,
+        mask=selected_mask,
+        padj=args$padj,
+        plot_title="Consensus peaks",
+        rootname=paste(
+            args$output, "venn", sep="_"
+        ),
+        pdf=args$pdf
+    )
+
+    dba_data_temp <- do.call(
+        dba,
+        append(
+            dba_default_params,
+            list(
+                DBA=dba_data_temp,
+                mask=selected_mask
+            )
+        )
+    )
+    print(dba_data_temp)
+    print(str(dba_data_temp))
+
+    consensus_peaks <- do.call(
+        dba.peakset,
+        append(
+            dba_peakset_default_params,
+            list(
+                DBA=dba_data_temp,
+                minOverlap=args$minoverlap,                               # should be already forced to 1 by this moment
+                bRetrieve=TRUE
+            )
+        )
+    )
+    print(paste("Found", nrow(consensus_peaks), "consensus peaks"))
+    print(head(consensus_peaks))
+
+} else {
+    export_overlap_plot(
+        data=dba.overlap(dba_data, mode=DBA_OLAP_RATE),
+        plot_title="Peakset overlap rate",
+        highlight=args$minoverlap,                                        # will have user provided value
+        rootname=paste(args$output, "pk_vrlp", sep="_"),
+        pdf=args$pdf
+    )
+}
+
 
 # correlation heatmap is build based on the -log10(pvalue) or
 # -log10(qvalue) columns from the loaded peak files. All peaks
@@ -837,17 +1042,29 @@ export_corr_heatmap(                              # how it is calculated https:/
 )
 
 print("Counting reads in peaks")
-dba_data <- dba.count(                            # $peaks will be updated to 400bp and will include only consensus peaks based on minoverlap
-    dba_data,
-    minOverlap=args$minoverlap,
+dba_count_default_params <- list(
+    DBA=dba_data,
+    minOverlap=args$minoverlap,                   # can be forced to be 1 when we use common peaks
     bRemoveDuplicates=FALSE,                      # set to FALSE because with bUseSummarizeOverlaps duplicates should be removed in advance
     bUseSummarizeOverlaps=TRUE,                   # this is a default value but we set it here explicitely, fragmentSize will be ignored
     summits=200,                                  # default value, will make all consensus peaks have the same size 2*summits+s1
     filter=args$minrpkm,                          # keep only those peaks where max RPKM for all datasets is bigger or equal to this value
     bParallel=TRUE
 )
+
+if(!is.null(args$groupby)){
+    dba_data <- do.call(
+        dba.count,
+        append(
+            dba_count_default_params,
+            list(peaks=consensus_peaks)
+        )
+    )
+} else {
+    dba_data <- do.call(dba.count, dba_count_default_params)
+}
+
 print(dba_data)
-print(str(dba_data))
 
 export_corr_heatmap(
     data=dba_data,
@@ -860,7 +1077,6 @@ export_corr_heatmap(
 )
 
 print(dba_data)
-print(str(dba_data))
 
 print("Defining the contrast")
 
@@ -891,7 +1107,6 @@ dba_data <- dba.contrast(
     contrast=selected_contrast
 )
 print(dba_data)
-print(str(dba_data))
 
 print("Normalizing counts")
 dba_data <- dba.normalize(                        # this doesn't know anything about design formula yet, so it's not take into account when normalizing
@@ -900,7 +1115,6 @@ dba_data <- dba.normalize(                        # this doesn't know anything a
     normalize=args$norm
 )
 print(dba_data)
-print(str(dba_data))
 
 export_corr_heatmap(
     data=dba_data,
@@ -920,7 +1134,18 @@ dba_data <- dba.analyze(
     bReduceObjects=FALSE                             # we want to have a complete DESeq2 or edgeR object
 )
 print(dba_data)
-print(str(dba_data))
+
+export_profile_heatmap(
+    data=dba_data,
+    method=args$method,
+    padj=args$padj,
+    merge=NULL,                                                  # each sample separately
+    plot_title="Profile plot (normalized reads)",
+    rootname=paste(
+        args$output, "nr_prfl", sep="_"
+    ),
+    pdf=args$pdf
+)
 
 norm_counts_data <- dba.report(
     dba_data,
@@ -937,7 +1162,6 @@ norm_counts_data <- dba.report(
 
 print(head(norm_counts_data))
 export_plots(norm_counts_data, metadata$raw, args)
-
 
 print("Exporting differential binding sites")
 export_data(
@@ -963,7 +1187,6 @@ norm_counts_mat <- as.matrix(norm_counts_data[as.vector(rownames(row_metadata)),
 print("Size of the normalized read counts matrix after filtering")
 print(dim(norm_counts_mat))
 print(head(norm_counts_mat))
-
 
 if (!is.null(args$cluster)){
     if (args$cluster == "column" || args$cluster == "both") {
