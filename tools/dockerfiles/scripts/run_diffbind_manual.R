@@ -703,26 +703,25 @@ get_args <- function(){
     parser$add_argument(
         "--alignments",
         help=paste(
-            "Path to the sorted and indexed alignment files in BAM format."
+            "Path to the sorted and indexed alignment files in bam format."
         ),
         type="character", required="True", nargs="+"
     )
     parser$add_argument(
         "--peaks",
         help=paste(
-            "Path to the peak files in the MACS2 xls format.",
-            "Number and order of the files should corresponds",
-            "to the values from --alignments."
+            "Path to the peak files in the MACS2 xls format. Number and",
+            "order of the files should correspond to the values",
+            "provided in --alignments."
         ),
         type="character", required="True", nargs="+"
     )
     parser$add_argument(
         "--aliases",
         help=paste(
-            "Unique names for files provided in --alignments,",
-            "no special characters or spaces are allowed.",
-            "Number and order of the names should corresponds",
-            "to values from --alignments."
+            "Unique names for files provided in --alignments, no special",
+            "characters or spaces are allowed. Number and order of the",
+            "names should correspond to the values provided in --alignments."
         ),
         type="character", required="True", nargs="+"
     )
@@ -730,24 +729,23 @@ get_args <- function(){
         "--metadata",
         help=paste(
             "Path to the TSV/CSV file to provide metadata for the",
-            "samples from --alignments. First column should have",
-            "the name 'sample', all other columns names should be",
-            "selected from the following list: Tissue, Factor,",
-            "Condition, Treatment, Caller, Replicate. The values from",
-            "the 'sample' column should correspond to the values provided",
-            "in --aliases. For a proper --contrast intepretation, values",
-            "defined in each column should not be used in other columns.",
-            "All metadata columns are treated as factors (no covariates are",
-            "supported)."
+            "samples from the --alignments input. First column should",
+            "have the name 'sample', all other columns names should be",
+            "selected from the following list: Tissue, Factor, Condition,",
+            "Treatment, Caller, Replicate. The values from the 'sample'",
+            "column should correspond to the values used in --aliases.",
+            "For a proper --contrast intepretation, values defined in",
+            "each column should not be used in other columns. All metadata",
+            "columns are treated as factors (no covariates are supported)."
         ),
         type="character", required="True"
     )
     parser$add_argument(
         "--scoreby",
         help=paste(
-            "Score metrics to calculate peak overlap correlation and optionally",
-            "exclude low quality peaks based on the value provided in --score.",
-            "Default: pvalue"
+            "Score metrics to calculate peak overlap correlation and",
+            "exclude low quality peaks based on the value provided",
+            "in --score. Default: pvalue"
         ),
         type="character",
         choices=c("pvalue", "qvalue"),
@@ -765,10 +763,8 @@ get_args <- function(){
     parser$add_argument(
         "--minrpkm",
         help=paste(
-            "Keep only those peaks where the max RPKM for all datasets is bigger",
-            "or equal to this value. Default: 1"
-            # NOTE:  in fact, this filter will be applied to DBA_SCORE_RPKM_MINUS,
-            #        but we don't have any controls so it's the same as DBA_SCORE_RPKM
+            "Keep only those peaks where the max RPKM for all datasets is",          # NOTE:  in fact, this filter will be applied to DBA_SCORE_RPKM_MINUS,
+            "bigger or equal to this value. Default: 1"                              #        but we don't have any controls so it's the same as DBA_SCORE_RPKM 
         ),
         type="double", default=1
     )
@@ -776,7 +772,7 @@ get_args <- function(){
         "--minoverlap",
         help=paste(
             "Min peakset overlap. Only include peaks that are present in at least",
-            "this many peaksets when generating consensus peakset. Ignored if",
+            "this many datasets when generating consensus set of peaks. Ignored if",
             "--groupby was provided. Default: 2"
         ),
         type="integer", default=2
@@ -784,8 +780,9 @@ get_args <- function(){
     parser$add_argument(
         "--groupby",
         help=paste(
-            "Should include items from this list Tissue, Factor, Condition, Treatment,",
-            "Caller, Replicate."
+            "Metadata columns to group datasets when deriving consensus peaks",
+            "as a union of peaks common for each group. Default: do not search",
+            "for common peaks, use --minoverlap parameter instead"
         ),
         type="character", nargs="*"
     )
@@ -793,7 +790,7 @@ get_args <- function(){
         "--design",
         help=paste(
             "Design formula. Should start with ~ and only include terms",
-            "from the --metadata table."
+            "from the --metadata table columns."
         ),
         type="character", required="True"
     )
@@ -821,8 +818,7 @@ get_args <- function(){
         "--method",
         help=paste(
             "Method by which to analyze differential binding affinity. Should",
-            "be equal to either edger or deseq2",
-            "Default: deseq2"
+            "be equal to either edger or deseq2. Default: deseq2"
         ),
         type="character", choices=c("edger", "deseq2"),
         default="deseq2"
