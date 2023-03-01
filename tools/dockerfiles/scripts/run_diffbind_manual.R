@@ -23,6 +23,7 @@ suppressMessages(library(SummarizedExperiment))
 
 theme_set(theme_classic())                       # set classic theme for all ggplot generated graphics
 
+
 D40_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", "#E8B4BD", "#FD00EA", "#0DD1FE", "#FF9B0D", "#0D601C", "#C50D69", "#CACA16", "#722A91", "#00DEBF", "#863B00", "#5D7C91", "#FD84D8", "#C100FB", "#8499FC", "#FD6658", "#83D87A", "#968549", "#DEB6FB", "#832E60", "#A8CAB0", "#FE8F95", "#FE1CBB", "#DF7CF8", "#FF0078", "#F9B781", "#4D493B", "#1C5198", "#7C32CE", "#EFBC16", "#7CD2DE", "#B30DA7", "#9FC0F6", "#7A940D", "#9B0000", "#946D9B", "#C8C2D9", "#94605A")
 ALL_CRITERIA <- c("Tissue", "Factor", "Condition", "Treatment", "Caller", "Replicate")
 
@@ -221,6 +222,7 @@ export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=F
         }
     )
 }
+
 
 export_overlap_plot <- function(data, rootname, plot_title, highlight=NULL, pdf=FALSE, width=600, height=600, resolution=100){
     tryCatch(
@@ -645,6 +647,11 @@ assert_args <- function(args){
         quit(save = "no", status = 1, runLast = FALSE)
     }
 
+    if(args$method == "edger" && is.null(args$contrast)){
+        print("EdgeR can't be used without --contrast. Select DESeq2 or provide contrast.")
+        quit(save = "no", status = 1, runLast = FALSE)
+    }
+
     args$method <- switch(
         args$method,
         "deseq2" = DBA_DESEQ2,
@@ -808,8 +815,9 @@ get_args <- function(){
         help=paste(
             "Contrast applied to the analysis results when calculating log2 fold changes.",
             "It should be formatted as a mathematical formula of values present in the",
-            "metadata table. If not provided, the last term from the design formula will",
-            "be used."
+            "metadata table. It is a required parameter if --method is set to edger. If not",
+            "provided and --method is set to deseq2, the last term from the design formula",
+            "will be used."
         ),
         type="character"
     )
@@ -1077,19 +1085,41 @@ export_corr_heatmap(
     pdf=args$pdf
 )
 
-print("Defining the contrast")
+print("Defining correct base levels to reorder DBA metadata")
+correct_base_levels <- list()
+for (i in 1:length(colnames(metadata$raw))){
+    current_column <- colnames(metadata$raw)[i]
+    current_levels <- levels(metadata$raw[[current_column]])
+    correct_base_levels[[current_column]] <- current_levels[1]
+}
+print(correct_base_levels)
 
+print("Reordering DBA metadata levels")
+dba_data <- dba.contrast(                                # we need it only to make DBA object include correct metadata
+    dba_data,                                            # otherwise it will use some default order which we can't reproduce
+    design=args$design,
+    reorderMeta=correct_base_levels
+)
+
+print(dba_data)
+
+print("Defining the contrast")
 if(is.null(args$contrast)){
-    print(paste(
-        "Contrast is not provided. The last term",
-        "from the design formula will be used."
-    ))
+    print(
+        paste(
+            "Contrast is not provided. The last term",
+            "from the design formula will be used."
+        )
+    )
     available_contrasts <- dba.contrast(
         dba_data,
         design=args$design,
         bGetCoefficients=TRUE
     )
+    print("Available contrasts")
+    print(available_contrasts)
     selected_contrast <- available_contrasts[length(available_contrasts)]
+    print("Selected contrast")
     print(selected_contrast)
 } else {
     print("Using user-provided contrast.")
