@@ -583,8 +583,8 @@ export_pca_plot <- function(data, pcs, rootname, plot_title, legend_title, color
 export_plots <- function(data, metadata, args){
     export_volcano_plot(
         data=data,
-        x_axis="Fold",
-        y_axis="FDR",
+        x_axis="log2FoldChange",
+        y_axis="padj",
         x_cutoff=0,
         y_cutoff=args$padj,
         x_label=bquote(~Log[2]~"fold change"),
@@ -597,7 +597,7 @@ export_plots <- function(data, metadata, args){
     )
 
     export_ma_plot(
-        data=data %>% mutate(baseMean=Conc, log2FoldChange=Fold, padj=FDR),
+        data=data,
         fdr_cutoff=args$padj,
         y_cutoff=0,
         x_label=bquote(~Log[2]~"base mean"),
@@ -1156,6 +1156,9 @@ norm_counts_data <- dba.report(
 ) %>% drop_na() %>%
       filter_all(all_vars(!is.infinite(.))) %>%
       mutate(feature=paste(Chr, paste(Start, End, sep="-"), sep=":")) %>%
+      dplyr::rename("log2FoldChange"="Fold") %>%
+      dplyr::rename("padj"="FDR") %>%
+      dplyr::rename("baseMean"="Conc") %>%
       remove_rownames() %>% column_to_rownames("feature")
 
 print(head(norm_counts_data))
@@ -1165,14 +1168,14 @@ export_plots(norm_counts_data, metadata$raw, args)
 print("Exporting differential binding sites")
 export_data(
     norm_counts_data,                                                          # this is not filtered differentially expressed features
-    location=paste(args$output, "diff_bind_sites.tsv", sep="_"),
+    location=paste(args$output, "diff_sts.tsv", sep="_"),
     digits=5
 )
 
 row_metadata <- norm_counts_data %>%
-                select(Fold, FDR) %>%
-                filter(.$FDR <= args$padj) %>%
-                arrange(desc(Fold))
+                select(log2FoldChange, padj) %>%
+                filter(.$padj <= args$padj) %>%
+                arrange(desc(log2FoldChange))
 col_metadata <- metadata$raw %>%
                 mutate_at(colnames(.), as.vector)                              # need to convert to vector, because in our metadata everything was a factor
 
