@@ -697,7 +697,7 @@ assert_args <- function(args){
         args$groupby <- dba_groupby
         print(
             paste(
-                "Setting --minoverlap to 1 as --groupby parameter was provided.",
+                "Setting --minoverlap to 1 as --groupby parameter was provided."
             )
         )
         args$minoverlap = 1
