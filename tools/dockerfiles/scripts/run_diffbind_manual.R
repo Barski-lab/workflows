@@ -21,10 +21,8 @@ suppressMessages(library(EnhancedVolcano))
 suppressMessages(library(SummarizedExperiment))
 
 
-# why to choose -log10(pvalue) instead of peak enrichment column from MACS2
-# - https://support.bioconductor.org/p/66628/
-
 theme_set(theme_classic())                       # set classic theme for all ggplot generated graphics
+
 D40_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", "#E8B4BD", "#FD00EA", "#0DD1FE", "#FF9B0D", "#0D601C", "#C50D69", "#CACA16", "#722A91", "#00DEBF", "#863B00", "#5D7C91", "#FD84D8", "#C100FB", "#8499FC", "#FD6658", "#83D87A", "#968549", "#DEB6FB", "#832E60", "#A8CAB0", "#FE8F95", "#FE1CBB", "#DF7CF8", "#FF0078", "#F9B781", "#4D493B", "#1C5198", "#7C32CE", "#EFBC16", "#7CD2DE", "#B30DA7", "#9FC0F6", "#7A940D", "#9B0000", "#946D9B", "#C8C2D9", "#94605A")
 ALL_CRITERIA <- c("Tissue", "Factor", "Condition", "Treatment", "Caller", "Replicate")
 
@@ -308,7 +306,7 @@ export_corr_heatmap <- function(data, rootname, plot_title, score=NULL, padj=1, 
 }
 
 
-export_profile_heatmap <- function(data, rootname, method, plot_title, merge=NULL, padj=1, max_sites=1000, pdf=FALSE, width=800, height=800, resolution=100){
+export_profile_heatmap <- function(data, rootname, method, merge=NULL, padj=1, pdf=FALSE, width=800, height=800, resolution=100){
     tryCatch(
         expr = {
 
@@ -323,19 +321,25 @@ export_profile_heatmap <- function(data, rootname, method, plot_title, merge=NUL
                     bLoss=TRUE,
                     bAll=FALSE
                 ),
-                normalize=TRUE,
-                merge=merge,
-                maxSites=max_sites
+                scores="Fold",
+                merge=merge
             )
-            print(head(profiles_data))
 
             png(filename=paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
-            dba.plotProfile(profiles_data)
+            dba.plotProfile(
+                profiles_data,
+                scores="Fold",                    # sorted by log2FC
+                merge=merge
+            )
             dev.off()
 
             if (!is.null(pdf) && pdf) {
                 pdf(file=paste(rootname, ".pdf", sep=""), width=round(width/resolution), height=round(height/resolution))
-                dba.plotProfile(profiles_data)
+                dba.plotProfile(
+                    profiles_data,
+                    scores="Fold",                # sorted by log2FC
+                    merge=merge
+                )
                 dev.off()
             }
 
@@ -637,7 +641,7 @@ export_plots <- function(data, metadata, args){
 
 assert_args <- function(args){
     if (length(args$alignments) != length(args$peaks) || length(args$alignments) != length(args$aliases)){
-        print("--alignments, --peaks and/or --aliases have different number of values")
+        print("--alignments, --peaks and/or --aliases parameters have different number of values")
         quit(save = "no", status = 1, runLast = FALSE)
     }
 
@@ -691,7 +695,12 @@ assert_args <- function(args){
             )
         }
         args$groupby <- dba_groupby
-        args$minoverlap = 1                      # force it to 1 as we will be using our common peaks as a way to define consensus peaks
+        print(
+            paste(
+                "Setting --minoverlap to 1 as --groupby parameter was provided.",
+            )
+        )
+        args$minoverlap = 1
     }
 
     return (args)
@@ -702,50 +711,49 @@ get_args <- function(){
     parser <- ArgumentParser(description="DiffBind Multi-factor Analysis")
     parser$add_argument(
         "--alignments",
-        help=paste(
-            "Path to the sorted and indexed alignment files in bam format."
-        ),
+        help="Sorted and indexed alignment files in bam format.",
         type="character", required="True", nargs="+"
     )
     parser$add_argument(
         "--peaks",
         help=paste(
-            "Path to the peak files in the MACS2 xls format. Number and",
-            "order of the files should correspond to the values",
-            "provided in --alignments."
+            "Peak files in the MACS2 xls format. Number and order of the",
+            "files should correspond to the files provided in --alignments",
+            "parameter."
         ),
         type="character", required="True", nargs="+"
     )
     parser$add_argument(
         "--aliases",
         help=paste(
-            "Unique names for files provided in --alignments, no special",
-            "characters or spaces are allowed. Number and order of the",
-            "names should correspond to the values provided in --alignments."
+            "Unique names for datasets provided in --alignments and --peaks",
+            "parameters, no special characters or spaces are allowed. Number",
+            "and order of the names should correspond to the values provided",
+            "in --alignments and --peaks parameters."
         ),
         type="character", required="True", nargs="+"
     )
     parser$add_argument(
         "--metadata",
         help=paste(
-            "Path to the TSV/CSV file to provide metadata for the",
-            "samples from the --alignments input. First column should",
-            "have the name 'sample', all other columns names should be",
-            "selected from the following list: Tissue, Factor, Condition,",
-            "Treatment, Caller, Replicate. The values from the 'sample'",
-            "column should correspond to the values used in --aliases.",
-            "For a proper --contrast intepretation, values defined in",
-            "each column should not be used in other columns. All metadata",
-            "columns are treated as factors (no covariates are supported)."
+            "TSV/CSV metadata file to describe datasets provided in --alignments",
+            "and --peaks parameters. First column should have the name 'sample',",
+            "all other columns names should be selected from the following list:",
+            "Tissue, Factor, Condition, Treatment, Caller, Replicate. The values",
+            "from the 'sample' column should correspond to the values provided in",
+            "--aliases parameter. For a proper --contrast intepretation, values",
+            "defined in each metadata column should not be used in any of the other",
+            "columns. All metadata columns are treated as factors (no covariates",
+            "are supported)."
         ),
         type="character", required="True"
     )
     parser$add_argument(
         "--scoreby",
         help=paste(
-            "Score metrics to calculate peak overlap correlation and",
-            "exclude low quality peaks based on the value provided",
-            "in --score. Default: pvalue"
+            "Score metrics to build peak overlap correlation heatmap and exclude low",
+            "quality peaks based on the threshold provided in --score parameter.",
+            "Default: pvalue"                                                              # https://support.bioconductor.org/p/66628/
         ),
         type="character",
         choices=c("pvalue", "qvalue"),
@@ -754,8 +762,8 @@ get_args <- function(){
     parser$add_argument(
         "--score",
         help=paste(
-            "Keep only those peaks where the metric selected in --scoreby",
-            "is less or equal than the provided value.",
+            "Filtering threshold to keep only those peaks where the metric selected",
+            "in --scoreby parameter is less than or equal to the provided value.",
             "Default: 0.05"
         ),
         type="double", default=0.05
@@ -763,43 +771,44 @@ get_args <- function(){
     parser$add_argument(
         "--minrpkm",
         help=paste(
-            "Keep only those peaks where the max RPKM for all datasets is",          # NOTE:  in fact, this filter will be applied to DBA_SCORE_RPKM_MINUS,
-            "bigger or equal to this value. Default: 1"                              #        but we don't have any controls so it's the same as DBA_SCORE_RPKM 
+            "Filtering threshold to keep only those peaks where the max RPKM for",         # in fact, this filter will be applied to DBA_SCORE_RPKM_MINUS,
+            "all datasets is bigger than or equal to the provided value. Default: 1"       # but we don't have any controls so it's the same as DBA_SCORE_RPKM 
         ),
         type="double", default=1
     )
     parser$add_argument(
         "--minoverlap",
         help=paste(
-            "Min peakset overlap. Only include peaks that are present in at least",
-            "this many datasets when generating consensus set of peaks. Ignored if",
-            "--groupby was provided. Default: 2"
+            "Filtering threshold to keep only those peaks that are present in at",
+            "least this many datasets when generating consensus set of peaks.",
+            "Ignored if --groupby is provided. Default: 2"
         ),
         type="integer", default=2
     )
     parser$add_argument(
         "--groupby",
         help=paste(
-            "Metadata columns to group datasets when deriving consensus peaks",
-            "as a union of peaks common for each group. Default: do not search",
-            "for common peaks, use --minoverlap parameter instead"
+            "Column(s) from the metadata table to define datasets groups for obtaining",
+            "the common peaks within each of them. Union of such common peaks will be",
+            "used as consensus peaks. Default: do not search for common peaks, use",
+            "--minoverlap parameter instead."
         ),
         type="character", nargs="*"
     )
     parser$add_argument(
         "--design",
         help=paste(
-            "Design formula. Should start with ~ and only include terms",
-            "from the --metadata table columns."
+            "Design formula comprised of the metadata columns names.",
+            "It should start with ~."
         ),
         type="character", required="True"
     )
     parser$add_argument(
         "--contrast",
         help=paste(
-            "Contrast to be be applied for the output, formatted as",
-            "a mathematical formula of values from the --metadata table.",
-            "If not provided, the last term from the design formula will",
+            "Contrast applied to the analysis results when calculating log2 fold changes.",
+            "It should be formatted as a mathematical formula of values present in the",
+            "metadata table. If not provided, the last term from the design formula will",
             "be used."
         ),
         type="character"
@@ -807,18 +816,17 @@ get_args <- function(){
     parser$add_argument(
         "--base",
         help=paste(
-            "Value(s) from each metadata file column(s) to be set as",
-            "the base level(s). Number and order of provided values should",
-            "correspond the order of columns in --metadata file. Default:",
-            "define base levels alphabetically for each metadata column."
+            "Base levels for each of the metadata columns. Number and order of the provided",
+            "values should correspond to the metadata columns. Default: define base levels",
+            "alphabetically."
         ),
         type="character", nargs="*"
     )
     parser$add_argument(
         "--method",
         help=paste(
-            "Method by which to analyze differential binding affinity. Should",
-            "be equal to either edger or deseq2. Default: deseq2"
+            "Method used in the differential binding analysis. Should be equal to either edger",
+            "or deseq2. Default: deseq2"
         ),
         type="character", choices=c("edger", "deseq2"),
         default="deseq2"
@@ -826,8 +834,8 @@ get_args <- function(){
     parser$add_argument(
         "--norm",
         help=paste(
-            "Normalization method to be used before running differential binding",
-            "analysis. When set to auto selects rle for deseq2 and tmm for edger.",
+            "Normalization technique applied to the read counts before running differential",
+            "binding analysis. When set to auto selects rle for deseq2 and tmm for edger.",
             "Default: auto"
         ),
         type="character", choices=c("auto", "rle", "tmm", "lib"),
@@ -836,16 +844,16 @@ get_args <- function(){
     parser$add_argument(
         "--padj",
         help=paste(
-            "Output only differentially bound sites with adjusted P-value",
-            "not bigger than this value. Default: 0.05"
+            "Filtering threshold to report only differentially bound sites with adjusted",
+            "P-value less than or equal to the provided value. Default: 0.05"
         ),
         type="double", default=0.05
     )
     parser$add_argument(
         "--cluster",
         help=paste(
-            "Hopach clustering method to be run on normalized read counts for the",
-            "exploratory visualization analysis. Default: do not run clustering"
+            "Hopach clustering method to be run on normalized read counts. Default:",
+            "do not run clustering"
         ),
         type="character",
         choices=c("row", "column", "both")
@@ -871,7 +879,7 @@ get_args <- function(){
     parser$add_argument(
         "--center",
         help=paste(
-            "Apply mean centering for feature expression prior to running",
+            "Apply mean centering for normalized read counts prior to running",
             "clustering by row. Ignored when --cluster is not row or both.",
             "Default: do not centered"
         ),
@@ -911,7 +919,6 @@ metadata <- get_metadata(args)
 print("Constructing DBA object")
 # peaks will be filtered by --scoreby column to include only >= args$score values.
 # Then Score column will be somehow normalized
-
 dba_default_params <- list(
     minOverlap=args$minoverlap,
     peakCaller="macs",                          # we don't set peakFormat and scoreCol as they will be derived from the peakCaller value
@@ -963,7 +970,6 @@ if(!is.null(args$groupby)){
         )
     )
     print(dba_data_temp)
-    print(str(dba_data_temp))
 
     selected_mask <- dba_data_temp$masks$All                             # default value in case each group consists of exactly one sample
     if ("Consensus" %in% names(dba_data_temp$masks)){
@@ -977,7 +983,7 @@ if(!is.null(args$groupby)){
         padj=args$padj,
         plot_title="Consensus peaks",
         rootname=paste(
-            args$output, "venn", sep="_"
+            args$output, "pk_venn", sep="_"
         ),
         pdf=args$pdf
     )
@@ -993,7 +999,6 @@ if(!is.null(args$groupby)){
         )
     )
     print(dba_data_temp)
-    print(str(dba_data_temp))
 
     consensus_peaks <- do.call(
         dba.peakset,
@@ -1040,7 +1045,7 @@ export_corr_heatmap(                              # how it is calculated https:/
 print("Counting reads in peaks")
 dba_count_default_params <- list(
     DBA=dba_data,
-    minOverlap=args$minoverlap,                   # can be forced to be 1 when we use common peaks
+    minOverlap=args$minoverlap,                   # can be already set to 1 when we use common peaks
     bRemoveDuplicates=FALSE,                      # set to FALSE because with bUseSummarizeOverlaps duplicates should be removed in advance
     bUseSummarizeOverlaps=TRUE,                   # this is a default value but we set it here explicitely, fragmentSize will be ignored
     summits=200,                                  # default value, will make all consensus peaks have the same size 2*summits+s1
@@ -1071,8 +1076,6 @@ export_corr_heatmap(
     ),
     pdf=args$pdf
 )
-
-print(dba_data)
 
 print("Defining the contrast")
 
@@ -1131,14 +1134,13 @@ dba_data <- dba.analyze(
 )
 print(dba_data)
 
+# Peak profile sorted by log2FC, only 1000 sites
 export_profile_heatmap(
     data=dba_data,
     method=args$method,
     padj=args$padj,
-    merge=NULL,                                                  # each sample separately
-    plot_title="Profile plot (normalized reads)",
     rootname=paste(
-        args$output, "nr_prfl", sep="_"
+        args$output, "pk_prfl", sep="_"
     ),
     pdf=args$pdf
 )
@@ -1157,6 +1159,7 @@ norm_counts_data <- dba.report(
       remove_rownames() %>% column_to_rownames("feature")
 
 print(head(norm_counts_data))
+
 export_plots(norm_counts_data, metadata$raw, args)
 
 print("Exporting differential binding sites")
