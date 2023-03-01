@@ -1159,6 +1159,7 @@ norm_counts_data <- dba.report(
       dplyr::rename("log2FoldChange"="Fold") %>%
       dplyr::rename("padj"="FDR") %>%
       dplyr::rename("baseMean"="Conc") %>%
+      dplyr::rename("p-value"="pvalue") %>%
       remove_rownames() %>% column_to_rownames("feature")
 
 print(head(norm_counts_data))
