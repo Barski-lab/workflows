@@ -204,6 +204,9 @@ export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=F
             if (!is.null(digits)){
                 data <- format(data, digits=digits)
             }
+            data <- data %>%                                             # to remove leading and trailing spaces when exporting to TSV
+                    mutate(across(everything(), as.character)) %>%
+                    mutate(across(everything(), str_trim))
             write.table(
                 data,
                 file=location,
