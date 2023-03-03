@@ -1260,5 +1260,5 @@ export_gct(
     counts_mat=norm_counts_mat,
     row_metadata=row_metadata,                                        # includes features as row names
     col_metadata=col_metadata,                                        # includes samples as row names
-    location=paste(args$output, "nr_rds.gct", sep="")
+    location=paste(args$output, "nr_rds.gct", sep="_")
 )
