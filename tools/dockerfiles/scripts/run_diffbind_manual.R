@@ -6,19 +6,16 @@ options(error=function(){traceback(3); quit(save="no", status=1, runLast=FALSE)}
 
 suppressMessages(library(cmapR))
 suppressMessages(library(dplyr))
-suppressMessages(library(DESeq2))
 suppressMessages(library(Glimma))
 suppressMessages(library(hopach))
 suppressMessages(library(ggpubr))
 suppressMessages(library(ggplot2))
-suppressMessages(library(ggrepel))
 suppressMessages(library(argparse))
 suppressMessages(library(DiffBind))
 suppressMessages(library(tidyverse))
 suppressMessages(library(htmlwidgets))
 suppressMessages(library(BiocParallel))
 suppressMessages(library(EnhancedVolcano))
-suppressMessages(library(SummarizedExperiment))
 
 
 theme_set(theme_classic())                       # set classic theme for all ggplot generated graphics
