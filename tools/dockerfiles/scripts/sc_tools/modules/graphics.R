@@ -258,7 +258,7 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
                     get_theme(theme)
 
             if (show_lm){ plot <- plot + ggplot2::stat_smooth(method=stats::lm) }
-            if (show_density){ plot <- plot + ggplot2::geom_density_2d() }
+            if (show_density){ plot <- plot + ggplot2::geom_density_2d(colour="darkgrey", linetype="solid", alpha=0.75) }
 
             if (!is.null(y_high_intercept)){
                 plot <- plot +

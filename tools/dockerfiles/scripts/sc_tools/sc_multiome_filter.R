@@ -303,6 +303,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         plot_title=paste("UMI per cell correlation for RNA vs ATAC assays (", suffix, ") ", peak_type, sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
+        show_density=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         rootname=paste(args$output, suffix, "rna_atac_umi_corr", sep="_"),
