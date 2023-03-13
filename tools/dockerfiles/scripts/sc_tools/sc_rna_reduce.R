@@ -594,10 +594,10 @@ seurat_data <- analyses$rna_analyze(seurat_data, args, cell_cycle_data)   # adds
 seurat_data <- filter$collapse_fragments_list(seurat_data)                # collapse repetitive fragments if ATAC assay was present in the Seurat object and was splitted
 debug$print_info(seurat_data, args)
 
-print("Quantifying QC metrics to evaluate unwanted sources of variation")
+print("Quantifying QC metrics")
 seurat_data <- qc$quartile_qc_metrics(
     seurat_data=seurat_data,
-    features=c("nCount_RNA", "nFeature_RNA", "mito_percentage"),          # use only those QC metrics that we allow to regress out
+    features=c("nCount_RNA", "nFeature_RNA", "mito_percentage"),
     prefix="quartile"                                                     # we will use this prefix in ucsc$export_cellbrowser function
 )
 debug$print_info(seurat_data, args)
