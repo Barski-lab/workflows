@@ -138,7 +138,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
             }
 
             if (scale_x_log10){ plot <- plot + ggplot2::scale_x_log10() + ggplot2::annotation_logticks(sides="b", alpha=0.3) }
-            if (scale_y_log10){ plot <- plot + ggplot2::scale_y_log10() }
+            if (scale_y_log10){ plot <- plot + ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides="l", alpha=0.3) }
 
             if (zoom_on_intercept) {
                 zoomed_plot <- ggplot2::ggplot(data, ggplot2::aes_string(x=x_axis, color=color_by)) +
@@ -166,7 +166,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                     zoomed_plot <- zoomed_plot + ggplot2::coord_cartesian(xlim=c(NA, max(intercept_data$x_left)))
                 }
                 if (scale_x_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_x_log10() + ggplot2::annotation_logticks(sides="b", alpha=0.3) }
-                if (scale_y_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_y_log10() }
+                if (scale_y_log10){ zoomed_plot <- zoomed_plot + ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides="l", alpha=0.3) }
                 plot <- plot / zoomed_plot
             }
 
@@ -177,7 +177,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
                                ggplot2::geom_point(show.legend=FALSE, size=0.5) +
                                ggplot2::xlab(ranked_x_label) +
                                ggplot2::ylab(x_label) +
-                               ggplot2::scale_y_log10() +
+                               ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides="l", alpha=0.3) +
                                ggplot2::scale_color_manual(values=palette_colors) +
                                ggplot2::geom_hline(intercept_data, mapping=ggplot2::aes(yintercept=x_left), color=intercept_data$color, alpha=0.7) +
                                ggrepel::geom_label_repel(
@@ -1245,7 +1245,7 @@ volcano_plot <- function(data, rootname, x_axis, y_axis, x_cutoff, y_cutoff, x_l
                         drawConnectors=TRUE,
                         widthConnectors=0.75
                     ) +
-                    ggplot2::scale_y_log10() +
+                    ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides="l", alpha=0.3) +
                     get_theme(theme) +
                     ggplot2::theme(legend.position="none", plot.subtitle=ggplot2::element_text(size=8, face="italic", color="gray30"))
 
