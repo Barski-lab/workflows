@@ -217,7 +217,7 @@ geom_density_plot <- function(data, rootname, x_axis, color_by, facet_by, x_left
     )
 }
 
-geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, show_lm=FALSE, show_density=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_intercept, y_low_intercept, color_by, gradient_colors, color_limits, color_break, x_label, y_label, legend_title, plot_title, highlight_rows=NULL, highlight_color="black", highlight_shape=4, y_high_intercept=NULL, scale_x_log10=FALSE, scale_y_log10=FALSE, show_lm=FALSE, show_density=FALSE, alpha=0.2, alpha_intercept=0.5, palette_colors=D40_COLORS, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
             intercept_data <- data %>%
@@ -259,6 +259,14 @@ geom_point_plot <- function(data, rootname, x_axis, y_axis, facet_by, x_left_int
 
             if (show_lm){ plot <- plot + ggplot2::stat_smooth(method=stats::lm) }
             if (show_density){ plot <- plot + ggplot2::geom_density_2d(colour="darkgrey", linetype="solid", alpha=0.75) }
+            if (!is.null(highlight_rows) && length(highlight_rows) > 0){
+                plot <- plot + ggplot2::geom_point(
+                    data=data[highlight_rows, ],
+                    shape=highlight_shape,
+                    color=highlight_color,
+                    alpha=0.5
+                )
+            }
 
             if (!is.null(y_high_intercept)){
                 plot <- plot +
@@ -791,7 +799,8 @@ fragments_hist <- function(data, rootname, plot_title, split_by, group_by_value=
                 }
                 plots[[current_identity]] <- Signac::FragmentHistogram(
                         filtered_data,
-                        group.by=group_by
+                        group.by=group_by,
+                        region = "chr1-1-100000000"                       # need to set longer region because of https://github.com/stuart-lab/signac/issues/199
                     ) +
                     get_theme(theme) +
                     ggplot2::ggtitle(current_identity) +

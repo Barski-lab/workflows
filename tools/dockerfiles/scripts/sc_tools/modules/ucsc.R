@@ -48,7 +48,7 @@ write_matrix <- function(inMat, outFname, sliceSize=1000){
     base::unlink(fnames)
 }
 
-cb_build <- function(object, slot, short_label, rootname, label_field, show_labels, features, markers, meta_fields, meta_fields_names, is_nested, dot_radius, dot_alpha) {
+cb_build <- function(object, slot, short_label, rootname, label_field, show_labels, features, markers, meta_fields, meta_fields_names, is_nested, dot_radius, dot_alpha, color_data) {
     if (!base::dir.exists(rootname)) {
         base::dir.create(rootname, recursive=TRUE)
     }
@@ -173,6 +173,22 @@ coords=%s'
         )
     }
 
+    if (!is.null(color_data)){
+        utils::write.table(
+            color_data,
+            sep=",",
+            file=base::file.path(rootname, "colors.csv"),
+            quote=FALSE,
+            row.names=FALSE,
+            col.names=FALSE
+        )
+        local_config <- base::paste(
+            local_config,
+            'colors="colors.csv"',
+            sep="\n"
+        )
+    }
+
     html_data_dir <- base::file.path(rootname, "html_data")
     if (is_nested){
         local_config <- base::paste(local_config, 'dataRoot="../"', sep="\n")
@@ -197,28 +213,69 @@ coords=%s'
     cb$cellbrowser$build(rootname, html_data_dir)
 }
 
-export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, features=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, short_label="cellbrowser", is_nested=FALSE, meta_fields=NULL, meta_fields_names=NULL){
+get_color_data <- function(seurat_data, metadata_column, palette_colors){
+    categories <- base::levels(seurat_data@meta.data[[metadata_column]])
+    if (is.null(categories)) {                                                 # not a factor
+        categories <- base::sort(                                              # alphabetically sorted
+            base::unique(
+                base::as.vector(
+                    as.character(seurat_data@meta.data[[metadata_column]])
+                )
+            )
+        )
+    }
+    color_data <- base::data.frame(
+        category=categories,
+        color=palette_colors[1:length(categories)],
+        check.names=FALSE,
+        stringsAsFactors=FALSE
+    )
+    return (color_data)
+}
+
+
+export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, features=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, palette_colors=NULL, short_label="cellbrowser", is_nested=FALSE, meta_fields=NULL, meta_fields_names=NULL){
     base::tryCatch(
         expr = {
             backup_assay <- SeuratObject::DefaultAssay(seurat_data)
             SeuratObject::DefaultAssay(seurat_data) <- assay                 # safety measure
             SeuratObject::Idents(seurat_data) <- "new.ident"                 # safety measure
 
+            color_data <- base::data.frame(                                 # here we will collect all colors if palette_colors was provided
+                category=character(),
+                color=character(),
+                check.names=FALSE,
+                stringsAsFactors=FALSE
+            )
+
             if (is.null(meta_fields) || is.null(meta_fields_names)){
-                meta_fields <-       c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score",    "Phase", "nCount_ATAC", "nFeature_ATAC", "TSS.enrichment",       "nucleosome_signal", "frip", "blacklist_fraction")
-                meta_fields_names <- c("RNA UMIs",   "Genes",        "Mitochondrial %", "Novelty score",            "S score", "G to M score", "Phase", "ATAC UMIs",   "Peaks",         "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
+                meta_fields <-       c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score",    "Phase", "rna_doublets", "atac_doublets", "nCount_ATAC", "nFeature_ATAC", "TSS.enrichment",       "nucleosome_signal", "frip", "blacklist_fraction")
+                meta_fields_names <- c("RNA UMIs",   "Genes",        "Mitochondrial %", "Novelty score",            "S score", "G to M score", "Phase", "RNA doublets", "ATAC doublets", "ATAC UMIs",   "Peaks",         "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
             }
 
             if (length(base::unique(base::as.vector(as.character(seurat_data@meta.data$new.ident)))) > 1){
                 meta_fields <- base::append(meta_fields, "new.ident", 0)
-                meta_fields_names <- base::append(meta_fields_names, "Identity", 0)
+                meta_fields_names <- base::append(meta_fields_names, "Dataset", 0)
+                if (!is.null(palette_colors)){
+                    color_data <- base::rbind(
+                        color_data,
+                        get_color_data(seurat_data, "new.ident", palette_colors)
+                    )
+                }
             }
+
             if (
                 all(base::as.vector(as.character(seurat_data@meta.data$new.ident)) != base::as.vector(as.character(seurat_data@meta.data$condition))) &&
                 length(base::unique(base::as.vector(as.character(seurat_data@meta.data$condition)))) > 1
             ){
                 meta_fields <- base::append(meta_fields, "condition", 1)
                 meta_fields_names <- base::append(meta_fields_names, "Condition", 1)
+                if (!is.null(palette_colors)){
+                    color_data <- base::rbind(
+                        color_data,
+                        get_color_data(seurat_data, "condition", palette_colors)
+                    )
+                }
             }
 
             clustering_fields <- base::grep("_res\\.", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
@@ -235,16 +292,40 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
             )
             meta_fields <- base::append(meta_fields, clustering_fields)
             meta_fields_names <- base::append(meta_fields_names, clustering_fields_names)
+            if (!is.null(palette_colors)){
+                for (i in 1:length(clustering_fields)){                                                    # should be ok if clustering_fields is empty
+                    color_data <- base::rbind(
+                        color_data,
+                        get_color_data(seurat_data, clustering_fields[i], palette_colors)
+                    )
+                }
+            }
 
             custom_fields <- base::grep("^custom_", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
             custom_fields_names <- base::gsub("custom_", "Custom ", custom_fields)
             meta_fields <- base::append(meta_fields, custom_fields)
             meta_fields_names <- base::append(meta_fields_names, custom_fields_names)
+            if (!is.null(palette_colors)){
+                for (i in 1:length(custom_fields)){                                                        # should be ok if custom_fields is empty
+                    color_data <- base::rbind(
+                        color_data,
+                        get_color_data(seurat_data, custom_fields[i], palette_colors)
+                    )
+                }
+            }
 
             quartile_fields <- base::grep("^quartile_", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
             quartile_fields_names <- base::gsub("quartile_", "Quartile ", quartile_fields)
             meta_fields <- base::append(meta_fields, quartile_fields)
             meta_fields_names <- base::append(meta_fields_names, quartile_fields_names)
+            if (!is.null(palette_colors)){
+                for (i in 1:length(quartile_fields)){                                                      # should be ok if quartile_fields is empty
+                    color_data <- base::rbind(
+                        color_data,
+                        get_color_data(seurat_data, quartile_fields[i], palette_colors)
+                    )
+                }
+            }
 
             show_labels <- TRUE                                                      # by default we try to show labels, but we hide them if cluster_field wasn't provided
             if (is.null(label_field) || !(label_field %in% (meta_fields_names))){    # either not provided or not correct label_field
@@ -274,6 +355,9 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                 features <- base::unique(features)                                   # some of the genes may be identical for several clusters so we want to remove them
             }
 
+            color_data <- color_data %>%                                             # to make sure we don't have duplicates
+                          dplyr::distinct(category, .keep_all=TRUE)
+
             cb_build(
                 seurat_data,
                 slot=slot,
@@ -287,7 +371,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                 meta_fields_names=meta_fields_names,
                 is_nested=is_nested,
                 dot_radius=dot_radius,
-                dot_alpha=dot_alpha
+                dot_alpha=dot_alpha,
+                color_data=if(base::nrow(color_data) > 0) color_data else NULL
             )
             base::print(base::paste("Exporting UCSC Cellbrowser data to", rootname, sep=" "))
         },

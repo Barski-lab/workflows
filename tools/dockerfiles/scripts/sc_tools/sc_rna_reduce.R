@@ -27,7 +27,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
     graphics$elbow_plot(
         data=seurat_data,
         ndims=50,
-        reduction="pca",
+        reduction="qcpca",                                 # when integrating with Harmony, this will be the PCA that we run before intergration
         plot_title="Elbow plot (from cells PCA)",
         theme=args$theme,
         rootname=paste(args$output, "elbow", sep="_"),
@@ -35,7 +35,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
     )
     graphics$corr_plot(
         data=seurat_data,
-        reduction="pca",
+        reduction="qcpca",                                 # when integrating with Harmony, this will be the PCA that we run before intergration
         highlight_dims=args$dimensions,
         qc_columns=selected_features,
         qc_labels=selected_labels,
@@ -607,6 +607,12 @@ export_all_dimensionality_plots(
     args=args
 )
 
+if ("qcpca" %in% names(seurat_data@reductions)){                          # we only needed it for elbow and qc correlation plots
+    print("Removing qcpca reduction")
+    seurat_data[["qcpca"]] <- NULL
+    debug$print_info(seurat_data, args)
+}
+
 if(args$cbbuild){
     print("Exporting RNA assay to UCSC Cellbrowser")
     print("Reordering reductions to have rnaumap on the first place")                      # will be shown first in UCSC Cellbrowser
@@ -619,6 +625,7 @@ if(args$cbbuild){
         assay="RNA",
         slot="counts",
         short_label="RNA",
+        palette_colors=graphics$D40_COLORS,                                                # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep=""),
     )
 }

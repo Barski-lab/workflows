@@ -538,12 +538,23 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
     }
     base::print(
         base::paste(
-            "Performing PCA reduction on",
-            SeuratObject::DefaultAssay(seurat_data), "assay using 50 principal",
-            "components for UMAP projection"
+            "Performing PCA reduction on", SeuratObject::DefaultAssay(seurat_data),
+            "assay using 50 principal components for Elbow and QC correlation plots, and",
+            max(args$dimensions), "principal components for UMAP projection"
         )
     )
-    seurat_data <- Seurat::RunPCA(seurat_data, npcs=50, verbose=FALSE)          # add "pca" reduction that should be used in UMAP
+    seurat_data <- Seurat::RunPCA(                # add "qcpca" reduction to be used in elbow and QC correlation plots
+        seurat_data,
+        npcs=50,
+        reduction.name="qcpca",
+        verbose=FALSE
+    )
+    seurat_data <- Seurat::RunPCA(                # add "pca" reduction to be used in UMAP and Harmony integration
+        seurat_data,
+        npcs=max(args$dimensions),                # need to take the max because dimensions was already adjusted to array of values
+        reduction.name="pca",
+        verbose=FALSE
+    )
     if (args$ntgr == "harmony"){
         if (is.null(args$ntgrby) || length(base::unique(base::as.vector(as.character(SeuratObject::Idents(seurat_data))))) == 1){
             base::print(
@@ -566,7 +577,7 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
                 group.by.vars=args$ntgrby,
                 reduction="pca",
                 reduction.save="pca",                                  # overwriting old pca reduction
-                dims.use=args$dimensions,
+                dims.use=args$dimensions,                              # keep it, but it looks like it doesn't influence anything https://github.com/immunogenomics/harmony/issues/82
                 assay.use=SeuratObject::DefaultAssay(seurat_data),     # can be both RNA or SCT depending on --norm parameter
                 verbose=FALSE
             )
@@ -812,6 +823,12 @@ atac_preprocess <- function(seurat_data, args) {
         min.cutoff=args$minvarpeaks,
         verbose=FALSE
     )
+    processed_seurat_data <- Signac::RunSVD(
+        processed_seurat_data,
+        n=50,
+        reduction.name="qclsi",                                                                 # adding "qclsi" for QC correlation plots
+        verbose=FALSE
+    )
 
     splitted_seurat_data <- Seurat::SplitObject(seurat_data, split.by="new.ident")              # need to use original seurat_data for possible integration below
     if (args$ntgr == "none" | args$ntgr == "harmony" | length(splitted_seurat_data) == 1){
@@ -824,8 +841,8 @@ atac_preprocess <- function(seurat_data, args) {
         )
         processed_seurat_data <- Signac::RunSVD(
             processed_seurat_data,
-            n=50,                                                                               # by default computes 50 singular values
-            reduction.name="atac_lsi",                                                          # adding "atac_lsi" for consistency
+            n=max(args$dimensions),                                                             # using the max because args$dimensions is already array
+            reduction.name="atac_lsi",                                                          # adding "atac_lsi" for UMAP
             verbose=FALSE
         )
         if (args$ntgr == "harmony"){
@@ -850,7 +867,7 @@ atac_preprocess <- function(seurat_data, args) {
                     group.by.vars=args$ntgrby,
                     reduction="atac_lsi",
                     reduction.save="atac_lsi",                                    # overwriting old atac_lsi reduction
-                    dims.use=args$dimensions,
+                    dims.use=args$dimensions,                                     # keed it, but it doesn't actually used anywhere inside RunHarmony function
                     assay.use=SeuratObject::DefaultAssay(processed_seurat_data),
                     project.dim=FALSE,                                            # for ATAC we don't need to project
                     verbose=FALSE
@@ -861,7 +878,7 @@ atac_preprocess <- function(seurat_data, args) {
         base::print("Running datasets integration using Signac on splitted data.")
         processed_seurat_data <- Signac::RunSVD(
             processed_seurat_data,
-            n=50,                                                                               # by default computes 50 singular values
+            n=max(args$dimensions),                                                             # using the max because args$dimensions is already array
             reduction.name="lsi",                                                               # adding "lsi" as it will be used in integration
             verbose=FALSE
         )
@@ -889,7 +906,7 @@ atac_preprocess <- function(seurat_data, args) {
             )
             splitted_seurat_data[[i]] <- Signac::RunSVD(
                 splitted_seurat_data[[i]],
-                n=50,                                                                           # by default computes 50 singular values
+                n=max(args$dimensions),                                                         # using the max because args$dimensions is already array
                 reduction.name="lsi",                                                           # adding "lsi" to be used in FindIntegrationAnchors
                 verbose=FALSE
             )
@@ -906,10 +923,12 @@ atac_preprocess <- function(seurat_data, args) {
             reductions=processed_seurat_data[["lsi"]],
             new.reduction.name="atac_lsi",                                                      # adding "atac_lsi" for consistency
             k.weight=min(get_min_ident_size(splitted_seurat_data), 100),                        # k.weight 100 by default, but shouldn't be bigger than the min number of cells among all identities after filtering
-            dims.to.integrate=args$dimensions                                                   # don't need to use more than we are going to use in UMAP
+            dims.to.integrate=args$dimensions                                                   # even if we include 1 dimension it won't influence on the results because we didn't use it in FindIntegrationAnchors
         )
+        qclsi_reduction <- processed_seurat_data[["qclsi"]]                                     # need it for QC correlation plots
         processed_seurat_data <- integrated_seurat_data
-        base::rm(integration_anchors, integrated_seurat_data)                                   # remove unused data
+        processed_seurat_data[["qclsi"]] <- qclsi_reduction
+        base::rm(integration_anchors, integrated_seurat_data, qclsi_reduction)                  # remove unused data
     }
     base::rm(splitted_seurat_data)
     base::gc(verbose=FALSE)

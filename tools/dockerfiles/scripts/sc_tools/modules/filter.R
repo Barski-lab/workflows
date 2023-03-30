@@ -75,7 +75,11 @@ apply_rna_qc_filters <- function(seurat_data, args) {
     base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
     merged_seurat_data <- NULL
     SeuratObject::Idents(seurat_data) <- "new.ident"                                                 # safety measure
-    sorted_identities <- sort(unique(as.vector(as.character(Idents(seurat_data)))))                  # alphabetically sorted identities A -> Z
+    sorted_identities <- base::sort(                                                                 # alphabetically sorted identities A -> Z
+        base::unique(
+            base::as.vector(as.character(SeuratObject::Idents(seurat_data)))
+        )
+    )
     for (i in 1:length(args$rnaminumi)){
         identity <- sorted_identities[i]
 
@@ -99,6 +103,14 @@ apply_rna_qc_filters <- function(seurat_data, args) {
                    (log10_gene_per_log10_umi >= minnovelty) &
                    (mito_percentage <= args$maxmt)
         )
+
+        if (!is.null(args$removedoublets) && args$removedoublets){
+            base::print("  Removing RNA doublets")
+            filtered_seurat_data <- base::subset(
+                filtered_seurat_data,
+                subset=(rna_doublets == "singlet")
+            )
+        }
 
         if (is.null(merged_seurat_data)){
             merged_seurat_data <- filtered_seurat_data
@@ -137,6 +149,14 @@ apply_atac_qc_filters <- function(seurat_data, args) {
                    (nucleosome_signal <= maxnuclsignal) &
                    (TSS.enrichment >= mintssenrich)
         )
+
+        if (!is.null(args$removedoublets) && args$removedoublets){
+            base::print("  Removing ATAC doublets")
+            filtered_seurat_data <- base::subset(
+                filtered_seurat_data,
+                subset=(atac_doublets == "singlet")
+            )
+        }
 
         if (is.null(merged_seurat_data)){
             merged_seurat_data <- filtered_seurat_data

@@ -185,6 +185,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         y_low_intercept=args$mingenes,
         y_high_intercept=args$maxgenes,
         color_by="mito_percentage",
+        highlight_rows=which(seurat_data@meta.data$rna_doublets == "doublet" | seurat_data@meta.data$atac_doublets == "doublet"),    # need a single |
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
@@ -296,6 +297,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         y_low_intercept=args$rnaminumi,
         alpha_intercept=1,
         color_by="mito_percentage",
+        highlight_rows=which(seurat_data@meta.data$rna_doublets == "doublet" | seurat_data@meta.data$atac_doublets == "doublet"),    # need a single |
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
@@ -320,6 +322,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         y_low_intercept=args$mintssenrich,
         alpha_intercept=1,
         color_by="mito_percentage",
+        highlight_rows=which(seurat_data@meta.data$rna_doublets == "doublet" | seurat_data@meta.data$atac_doublets == "doublet"),    # need a single |
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
@@ -349,6 +352,66 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         rootname=paste(args$output, suffix, "qc_mtrcs_dnst", sep="_"),
         pdf=args$pdf
     )
+
+    if (nrow(seurat_data@meta.data[seurat_data@meta.data$rna_doublets == "doublet", ]) > 0){      # show plot only if not all rna doublets have been removed
+        graphics$composition_plot(
+            data=seurat_data,
+            plot_title=paste("Percentage of RNA doublets per dataset (", suffix, ")", sep=""),
+            legend_title="Dataset",
+            group_by="rna_doublets",
+            split_by="new.ident",
+            x_label="Dataset",
+            y_label="Cells percentage",
+            palette_colors=c("#00AEAE", "#0BFFFF"),
+            theme=args$theme,
+            rootname=paste(args$output, suffix, "rnadbl", sep="_"),
+            pdf=args$pdf
+        )
+    }
+
+    if (nrow(seurat_data@meta.data[seurat_data@meta.data$atac_doublets == "doublet", ]) > 0){      # show plot only if not all atac doublets have been removed
+        graphics$composition_plot(
+            data=seurat_data,
+            plot_title=paste("Percentage of ATAC doublets per dataset (", suffix, ")", sep=""),
+            legend_title="Dataset",
+            group_by="atac_doublets",
+            split_by="new.ident",
+            x_label="Dataset",
+            y_label="Cells percentage",
+            palette_colors=c("#008080", "#0BFFFF"),
+            theme=args$theme,
+            rootname=paste(args$output, suffix, "atacdbl", sep="_"),
+            pdf=args$pdf
+        )
+    }
+
+    if (
+        nrow(seurat_data@meta.data[seurat_data@meta.data$rna_doublets == "doublet", ]) > 0 && 
+        nrow(seurat_data@meta.data[seurat_data@meta.data$atac_doublets == "doublet", ]) > 0
+    ){
+        seurat_data@meta.data <- seurat_data@meta.data %>%                                                # temporary column to see doublets overlap between RNA and ATAC
+                                 dplyr::mutate(
+                                     doublets_overlap = dplyr::case_when(
+                                        rna_doublets == "singlet" & atac_doublets == "singlet" ~ "Singlet",
+                                        rna_doublets == "doublet" & atac_doublets == "singlet" ~ "Only RNA",
+                                        rna_doublets == "singlet" & atac_doublets == "doublet" ~ "Only ATAC",
+                                        rna_doublets == "doublet" & atac_doublets == "doublet" ~ "RNA and ATAC"
+                                     )
+                                 )
+        graphics$composition_plot(
+            data=seurat_data,
+            plot_title=paste("Doublets overlap for RNA and ATAC assays per dataset (", suffix, ")", sep=""),
+            legend_title="Dataset",
+            group_by="doublets_overlap",
+            split_by="new.ident",
+            x_label="Dataset",
+            y_label="Cells percentage",
+            palette_colors=c("#008080", "#00AEAE", "#00DCDC", "#0BFFFF"),
+            theme=args$theme,
+            rootname=paste(args$output, suffix, "vrlpdbl", sep="_"),
+            pdf=args$pdf
+        )
+    }
 
     backup_assay <- DefaultAssay(seurat_data)
     DefaultAssay(seurat_data) <- "ATAC"
@@ -704,6 +767,52 @@ get_args <- function(){
         type="character"
     )
     parser$add_argument(
+        "--removedoublets",
+        help=paste(
+            "Remove cells that were identified as doublets in either RNA",
+            "or ATAC assays. Default: do not remove doublets"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--rnadbr",
+        help=paste(
+            "Expected RNA doublet rate. Default: 1 percent per thousand",
+            "cells captured with 10x genomics"
+        ),
+        type="double"
+    )
+    parser$add_argument(
+        "--rnadbrsd",
+        help=paste(
+            "Uncertainty range in the RNA doublet rate, interpreted as",
+            "a +/- around the value provided in --rnadbr. Set to 0 to",
+            "disable. Set to 1 to make the threshold depend entirely",
+            "on the misclassification rate. Default: 40 percents of the",
+            "value provided in --rnadbr"
+        ),
+        type="double"
+    )
+    parser$add_argument(
+        "--atacdbr",
+        help=paste(
+            "Expected ATAC doublet rate. Default: 1 percent per thousand",
+            "cells captured with 10x genomics"
+        ),
+        type="double"
+    )
+    parser$add_argument(
+        "--atacdbrsd",
+        help=paste(
+            "Uncertainty range in the ATAC doublet rate, interpreted as",
+            "a +/- around the value provided in --atacdbr. Set to 0 to",
+            "disable. Set to 1 to make the threshold depend entirely",
+            "on the misclassification rate. Default: 40 percents of the",
+            "value provided in --atacdbr"
+        ),
+        type="double"
+    )
+    parser$add_argument(
         "--pdf",
         help="Export plots in PDF. Default: false",
         action="store_true"
@@ -844,7 +953,7 @@ print(args)
 print("Adding RNA QC metrics for not filtered datasets")
 seurat_data <- qc$add_rna_qc_metrics(seurat_data, args)
 print("Adding ATAC QC metrics for not filtered datasets")
-seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)
+seurat_data <- qc$add_atac_qc_metrics(seurat_data, args, estimate_doublets=TRUE)         # we want to estimate ATAC doublets only for unfiltered cells
 print("Adding peak QC metrics for peaks called by Cell Ranger ARC")
 seurat_data <- qc$add_peak_qc_metrics(seurat_data, blacklist_data, args)
 debug$print_info(seurat_data, args)
@@ -939,6 +1048,7 @@ if(args$cbbuild){
         slot="counts",
         short_label="RNA",
         is_nested=TRUE,
+        palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser/rna", sep=""),
     )
     ucsc$export_cellbrowser(
@@ -947,11 +1057,12 @@ if(args$cbbuild){
         slot="counts",
         short_label="ATAC",
         is_nested=TRUE,
+        palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser/atac", sep=""),
     )
 }
 
-DefaultAssay(seurat_data) <- "RNA"                                                       # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
+DefaultAssay(seurat_data) <- "RNA"                                       # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
 print("Exporting results to RDS file")
 io$export_rds(seurat_data, paste(args$output, "_data.rds", sep=""))
 if(args$h5seurat){

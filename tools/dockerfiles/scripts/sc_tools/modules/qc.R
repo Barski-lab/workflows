@@ -5,9 +5,11 @@ import("Seurat", attach=FALSE)
 import("Signac", attach=FALSE)
 import("tibble", attach=FALSE)
 import("data.table", attach=FALSE)
+import("scDblFinder", attach=FALSE)
 import("bestNormalize", attach=FALSE)
 import("GenomicRanges", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
+import("SingleCellExperiment", attach=FALSE)
 
 export(
     "qc_metrics_pca",
@@ -97,15 +99,67 @@ counts_pca <- function(counts_data){
 
 add_rna_qc_metrics <- function(seurat_data, args){
     backup_assay <- SeuratObject::DefaultAssay(seurat_data)
-    SeuratObject::DefaultAssay(seurat_data) <- "RNA"
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"                                        # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                                        # safety measure
+
     seurat_data$log10_gene_per_log10_umi <- log10(seurat_data$nFeature_RNA) / log10(seurat_data$nCount_RNA)
     seurat_data$mito_percentage <- Seurat::PercentageFeatureSet(seurat_data, pattern=args$mitopattern)
+
+    doublets_data <- NULL                                                                   # to keep RNA doublets
+    identities <- base::unique(base::as.vector(as.character(SeuratObject::Idents(seurat_data))))
+    for (i in 1:length(identities)){
+        base::print(base::paste("Searching for RNA doublets in", identities[i], "dataset"))
+        sce_data <- scDblFinder::scDblFinder(
+            Seurat::as.SingleCellExperiment(
+                base::subset(
+                    seurat_data,
+                    idents=identities[i],                                                   # to run scDblFinder for each sample completely independently
+                    subset=(nCount_RNA >= 200)                                              # scDblFinder says that we need to have this filter
+                ),
+                assay="RNA"
+            ),
+            dbr=args$rnadbr,                                                                # if NULL scDblFinder uses default parameters
+            dbr.sd=args$rnadbrsd,                                                           # if NULL scDblFinder uses default parameters
+            verbose=args$verbose
+        )
+        sce_data <- base::as.data.frame(SingleCellExperiment::colData(sce_data)) %>%        # somehow fails if not explicitely converted to data.frame
+                    dplyr::select(scDblFinder.class) %>%
+                    dplyr::rename("rna_doublets"="scDblFinder.class") %>%
+                    tibble::rownames_to_column(var="barcode")                               # need to have this column for left_join
+        if (is.null(doublets_data)) {
+            doublets_data <- sce_data
+        } else {
+            doublets_data <- base::rbind(doublets_data, sce_data)
+        }
+    }
+    doublets_data <- base::data.frame(SeuratObject::Cells(seurat_data)) %>%                 # create a dataframe with only one column and all cells
+                     dplyr::rename("barcode"=1) %>%                                         # rename that column to "barcode"
+                     dplyr::left_join(doublets_data, by="barcode") %>%                      # intersect by "barcode"
+                     tibble::remove_rownames() %>%
+                     tibble::column_to_rownames("barcode") %>%
+                     replace(is.na(.), "singlet") %>%                                       # all not doublets (including cells with nCount_RNA < 200) will be "singlet"
+                     dplyr::mutate(                                                         # need to use factor for a proper order of levels on the plots
+                         rna_doublets=base::factor(
+                             rna_doublets,
+                             levels=base::sort(                                             # we can have only one category, that's why we need sort
+                                 base::unique(rna_doublets),
+                                 decreasing=TRUE                                            # will result in "doublet", "singlet" order if both are present
+                             )
+                         )
+                     )
+
+    seurat_data <- SeuratObject::AddMetaData(
+        seurat_data,
+        doublets_data[SeuratObject::Cells(seurat_data), , drop=FALSE]                       # to guarantee the proper cells order
+    )
+
     SeuratObject::DefaultAssay(seurat_data) <- backup_assay
+    base::rm(doublets_data, identities)
     base::gc(verbose=FALSE)
     return (seurat_data)
 }
 
-add_atac_qc_metrics <- function(seurat_data, args){
+add_atac_qc_metrics <- function(seurat_data, args, estimate_doublets=FALSE){
     backup_assay <- SeuratObject::DefaultAssay(seurat_data)
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"
     seurat_data <- Signac::NucleosomeSignal(seurat_data, verbose=FALSE)
@@ -119,9 +173,63 @@ add_atac_qc_metrics <- function(seurat_data, args){
     seurat_data <- Signac::TSSEnrichment(
         seurat_data,
         tss.positions=tss_positions,
-        fast=FALSE,                                                                    # set fast=FALSE, because we want to build TSS Enrichment plot later
+        fast=FALSE,                                                                         # set fast=FALSE, because we want to build TSS Enrichment plot later
         verbose=FALSE
     )
+
+    if (estimate_doublets){
+        doublets_data <- NULL                                                               # to keep ATAC doublets
+        identities <- base::unique(base::as.vector(as.character(SeuratObject::Idents(seurat_data))))
+        for (i in 1:length(identities)){
+            base::print(base::paste("Searching for ATAC doublets in", identities[i], "dataset"))
+            sce_data <- scDblFinder::scDblFinder(
+                Seurat::as.SingleCellExperiment(
+                    base::subset(
+                        seurat_data,
+                        idents=identities[i]                                                # to run scDblFinder for each sample completely independently
+                        # subset=(nCount_RNA >= 200)                                        # scDblFinder says that we need to have this filter
+                    ),
+                    assay="ATAC"
+                ),
+                aggregateFeatures=TRUE,                                                     # perform feature aggregation (recommended for ATAC)
+                processing="normFeatures",                                                  # uses normalized features without PCA
+                dbr=args$atacdbr,                                                           # if NULL scDblFinder uses default parameters
+                dbr.sd=args$atacdbrsd,                                                      # if NULL scDblFinder uses default parameters
+                verbose=args$verbose
+            )
+            sce_data <- base::as.data.frame(SingleCellExperiment::colData(sce_data)) %>%    # somehow fails if not explicitely converted to data.frame
+                        dplyr::select(scDblFinder.class) %>%
+                        dplyr::rename("atac_doublets"="scDblFinder.class") %>%
+                        tibble::rownames_to_column(var="barcode")                           # need to have this column for left_join
+            if (is.null(doublets_data)) {
+                doublets_data <- sce_data
+            } else {
+                doublets_data <- base::rbind(doublets_data, sce_data)
+            }
+        }
+        doublets_data <- base::data.frame(SeuratObject::Cells(seurat_data)) %>%             # create a dataframe with only one column and all cells
+                         dplyr::rename("barcode"=1) %>%                                     # rename that column to "barcode"
+                         dplyr::left_join(doublets_data, by="barcode") %>%                  # intersect by "barcode"
+                         tibble::remove_rownames() %>%
+                         tibble::column_to_rownames("barcode") %>%
+                         replace(is.na(.), "singlet") %>%                                   # all not "doublet" will be "singlet"
+                         dplyr::mutate(                                                     # need to use factor for a proper order of levels on the plots
+                             atac_doublets=base::factor(
+                                 atac_doublets,
+                                 levels=base::sort(                                         # we can have only one category, that's why we need sort
+                                     base::unique(atac_doublets),
+                                     decreasing=TRUE                                        # will result in "doublet", "singlet" order if both are present
+                                 )
+                             )
+                         )
+
+        seurat_data <- SeuratObject::AddMetaData(
+            seurat_data,
+            doublets_data[SeuratObject::Cells(seurat_data), , drop=FALSE]                   # to guarantee the proper cells order
+        )
+        base::rm(doublets_data, identities)
+    }
+
     SeuratObject::DefaultAssay(seurat_data) <- backup_assay
     base::gc(verbose=FALSE)
     return (seurat_data)

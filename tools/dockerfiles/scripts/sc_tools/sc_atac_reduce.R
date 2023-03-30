@@ -26,7 +26,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
 
     graphics$corr_plot(
         data=seurat_data,
-        reduction="atac_lsi",
+        reduction="qclsi",
         highlight_dims=args$dimensions,
         qc_columns=selected_features,
         qc_labels=selected_labels,
@@ -462,6 +462,12 @@ export_all_dimensionality_plots(
     args=args
 )
 
+if ("qclsi" %in% names(seurat_data@reductions)){                            # we only needed it for qc correlation plots
+    print("Removing qclsi reduction")
+    seurat_data[["qclsi"]] <- NULL
+    debug$print_info(seurat_data, args)
+}
+
 if(args$cbbuild){
     print("Exporting ATAC assay to UCSC Cellbrowser")
     print("Reordering reductions to have atacumap on the first place")                      # will be shown first in UCSC Cellbrowser
@@ -474,6 +480,7 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
+        palette_colors=graphics$D40_COLORS,                                                 # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep=""),
     )
 }

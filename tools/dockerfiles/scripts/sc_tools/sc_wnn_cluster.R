@@ -314,6 +314,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
                     extend_downstream=2500,
                     show_annotation=TRUE,
                     show_peaks=TRUE,
+                    show_tile=TRUE,
                     palette_colors=graphics$D40_COLORS,
                     theme=args$theme,
                     rootname=paste(args$output, "cvrg_res", current_resolution, current_gene, sep="_"),
@@ -348,6 +349,10 @@ export_heatmaps <- function(seurat_data, markers, args){
                 length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
             ){
                 column_annotations <- c(column_annotations, "condition")                           # several conditions found
+            }
+            custom_fields <- grep("^custom_", colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
+            if (length(custom_fields) > 0){
+                column_annotations <- c(column_annotations, custom_fields)                         # adding all custom fields
             }
             graphics$feature_heatmap(                                                              # install.packages("magick") for better rasterization
                 data=seurat_data,
@@ -825,6 +830,7 @@ if(args$cbbuild){
         markers=all_rna_markers,                                                   # can be NULL
         label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),          # always use only the first resolution
         is_nested=TRUE,
+        palette_colors=graphics$D40_COLORS,                                        # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser/rna", sep="")
     )
 
@@ -833,9 +839,10 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
-        markers=all_atac_markers,                                               # can be NULL
-        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),       # always use only the first resolution
+        markers=all_atac_markers,                                                  # can be NULL
+        label_field=paste0("Clustering (wsnn ", args$resolution[1], ")"),          # always use only the first resolution
         is_nested=TRUE,
+        palette_colors=graphics$D40_COLORS,                                        # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser/atac", sep="")
     )
 }

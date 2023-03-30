@@ -262,6 +262,7 @@ export_all_coverage_plots <- function(seurat_data, args) {
                 extend_downstream=2500,
                 show_annotation=TRUE,
                 show_peaks=TRUE,
+                show_tile=TRUE,
                 palette_colors=graphics$D40_COLORS,
                 theme=args$theme,
                 rootname=paste(args$output, "cvrg", current_gene, sep="_"),
@@ -361,6 +362,10 @@ export_heatmaps <- function(seurat_data, markers, args){
         length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
     ){
         column_annotations <- c(column_annotations, "condition")                           # several conditions found
+    }
+    custom_fields <- grep("^custom_", colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
+    if (length(custom_fields) > 0){
+        column_annotations <- c(column_annotations, custom_fields)                         # adding all custom fields
     }
     graphics$feature_heatmap(                                                              # install.packages("magick") for better rasterization
         data=seurat_data,
@@ -770,6 +775,7 @@ if(args$cbbuild){
             markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/rna", sep="")
         )
         ucsc$export_cellbrowser(
@@ -780,6 +786,7 @@ if(args$cbbuild){
             markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/atac", sep="")
         )
     } else if ("RNA" %in% names(seurat_data@assays)){
@@ -791,6 +798,7 @@ if(args$cbbuild){
             short_label="RNA",
             markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep="")
         )
     } else {
@@ -802,6 +810,7 @@ if(args$cbbuild){
             short_label="ATAC",
             markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep="")
         )
     }

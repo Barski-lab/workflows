@@ -312,6 +312,10 @@ export_heatmaps <- function(seurat_data, markers, args){
             ){
                 column_annotations <- c(column_annotations, "condition")                           # several conditions found
             }
+            custom_fields <- grep("^custom_", colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
+            if (length(custom_fields) > 0){
+                column_annotations <- c(column_annotations, custom_fields)                         # adding all custom fields
+            }
             graphics$feature_heatmap(                                                              # install.packages("magick") for better rasterization
                 data=seurat_data,
                 assay="RNA",
@@ -603,6 +607,7 @@ if(args$cbbuild){
         slot="counts",
         short_label="RNA",
         markers=all_markers,                                                               # can be NULL
+        palette_colors=graphics$D40_COLORS,                                                # to have colors correspond to the plots
         label_field=paste0("Clustering (rna ", args$resolution[1], ")"),                   # always use only the first resolution
         rootname=paste(args$output, "_cellbrowser", sep="")
     )

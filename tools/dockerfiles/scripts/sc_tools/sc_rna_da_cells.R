@@ -377,8 +377,9 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                   # can be NULL
+            features=args$genes,                                             # can be NULL
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/rna", sep=""),
         )
         ucsc$export_cellbrowser(
@@ -386,8 +387,9 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            features=nearest_peaks,                               # use nearest to the genes if interest peaks
+            features=nearest_peaks,                                          # use nearest to the genes if interest peaks
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/atac", sep=""),
         )
     } else {
@@ -397,7 +399,8 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            features=args$genes,                                   # can be NULL
+            features=args$genes,                                             # can be NULL
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep=""),
         )
     }

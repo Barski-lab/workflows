@@ -2,20 +2,26 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.15
+# Software Version: v0.0.16
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.1.0
-# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.15 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.15
-# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.15 /bin/bash
+# Build Cmd:        docker build --no-cache --rm -t biowardrobe2/sc-tools:v0.0.16 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull biowardrobe2/sc-tools:v0.0.16
+# Run Cmd:          docker run --rm -ti biowardrobe2/sc-tools:v0.0.16 /bin/bash
 ##########################################################################################################
 #
 # Notes:
 # - if you have problems compiling Harmony
 #   https://github.com/immunogenomics/harmony/pull/165
+#
+# v0.0.16
+# - Add doublets identification and removal for RNA and ATAC
+# - Use a separate reduction for Elbow plot, run PCA and SVD
+#   with that number of dimensions that user specified
+# - Export colors to UCSC Cell Browser
 #
 # v0.0.15
 # - Export feature markers to UCSC Cell Browser
@@ -176,7 +182,7 @@ RUN apt-get update && \
                                  'S4Vectors', 'SingleCellExperiment', 'SummarizedExperiment', \
                                  'batchelor', 'Matrix.utils', 'DESeq2', 'Rsamtools', 'rtracklayer', \
                                  'glmGamPoi', 'Nebulosa', 'limma', 'EnhancedVolcano', 'LoomExperiment', \
-                                 'hopach', 'Glimma', 'dittoSeq', 'cmapR', 'ComplexHeatmap'))" && \
+                                 'hopach', 'Glimma', 'dittoSeq', 'cmapR', 'ComplexHeatmap', 'scDblFinder'))" && \
     R -e 'install.packages("fastmatch")' && \
     R -e 'install.packages("RcppRoll")' && \
     R -e 'install.packages("Signac", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \

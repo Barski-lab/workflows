@@ -123,6 +123,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         y_low_intercept=args$mingenes,
         y_high_intercept=args$maxgenes,
         color_by="mito_percentage",
+        highlight_rows=which(seurat_data@meta.data$rna_doublets == "doublet"),
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
@@ -186,6 +187,23 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         rootname=paste(args$output, suffix, "qc_mtrcs_dnst", sep="_"),
         pdf=args$pdf
     )
+
+    if (nrow(seurat_data@meta.data[seurat_data@meta.data$rna_doublets == "doublet", ]) > 0){      # show plot only if we still have doublets
+        graphics$composition_plot(
+            data=seurat_data,
+            plot_title=paste("Percentage of RNA doublets per dataset (", suffix, ")", sep=""),
+            legend_title="Dataset",
+            group_by="rna_doublets",
+            split_by="new.ident",
+            x_label="Dataset",
+            y_label="Cells percentage",
+            palette_colors=c("#00AEAE", "#0BFFFF"),
+            theme=args$theme,
+            rootname=paste(args$output, suffix, "rnadbl", sep="_"),
+            pdf=args$pdf
+        )
+    }
+
     if (
         all(as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))) &&
         length(unique(as.vector(as.character(seurat_data@meta.data$condition)))) > 1
@@ -368,11 +386,39 @@ get_args <- function(){
     parser$add_argument(
         "--maxmt",
         help=paste(
-            "Include cells with the percentage of transcripts mapped to mitochondrial",
-            "genes not bigger than this value.",
+            "Include cells with the percentage of transcripts mapped",
+            "to mitochondrial genes not bigger than this value.",
             "Default: 5 (applied to all datasets)"
         ),
         type="double", default=5
+    )
+    parser$add_argument(
+        "--removedoublets",
+        help=paste(
+            "Remove cells that were identified as doublets. Cells with",            # from scDblFinder: it might be necessary to remove cells with
+            "RNA UMI < 200 will not be evaluated. Default: do not remove",          # a very low coverage (e.g. <200 reads) to avoid errors
+            "doublets"
+        ),
+        action="store_true"
+    )
+    parser$add_argument(
+        "--rnadbr",
+        help=paste(
+            "Expected RNA doublet rate. Default: 1 percent per thousand",
+            "cells captured with 10x genomics"
+        ),
+        type="double"
+    )
+    parser$add_argument(
+        "--rnadbrsd",
+        help=paste(
+            "Uncertainty range in the RNA doublet rate, interpreted as",
+            "a +/- around the value provided in --rnadbr. Set to 0 to",
+            "disable. Set to 1 to make the threshold depend entirely",
+            "on the misclassification rate. Default: 40 percents of the",
+            "value provided in --rnadbr"
+        ),
+        type="double"
     )
     parser$add_argument(
         "--pdf",
@@ -531,7 +577,7 @@ export_all_qc_plots(                                                            
 print("Adding genes vs RNA UMI per cell correlation as gene_rnaumi dimensionality reduction")
 seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
     embeddings=as.matrix(
-        seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%           # can't be include into the add_rna_qc_metrics function
+        seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%           # can't be included into the add_rna_qc_metrics function
         dplyr::rename("GRU_1"="nCount_RNA", "GRU_2"="nFeature_RNA") %>%                    # as apply_rna_qc_filters removes all reductions
         dplyr::mutate(GRU_1=log10(GRU_1), GRU_2=log10(GRU_2))
     ),
@@ -546,6 +592,7 @@ if(args$cbbuild){
         assay="RNA",
         slot="counts",
         short_label="RNA",
+        palette_colors=graphics$D40_COLORS,                                                # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep=""),
     )
 }

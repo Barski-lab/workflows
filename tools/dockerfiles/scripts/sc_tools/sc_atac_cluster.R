@@ -500,6 +500,7 @@ if(args$cbbuild){
         short_label="ATAC",
         markers=all_markers,                                                        # can be NULL
         label_field=paste0("Clustering (atac ", args$resolution[1], ")"),           # always use only the first resolution
+        palette_colors=graphics$D40_COLORS,                                         # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep="")
     )
 }

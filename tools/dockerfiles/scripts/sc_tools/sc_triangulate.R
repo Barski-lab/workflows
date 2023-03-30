@@ -240,6 +240,7 @@ if(args$cbbuild){
             slot="counts",
             short_label="RNA",
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/rna", sep=""),
         )
         ucsc$export_cellbrowser(
@@ -248,6 +249,7 @@ if(args$cbbuild){
             slot="counts",
             short_label="ATAC",
             is_nested=TRUE,
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/atac", sep=""),
         )
     } else if ("RNA" %in% names(seurat_data@assays)){
@@ -257,6 +259,7 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep=""),
         )
     } else {
@@ -266,6 +269,7 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
+            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep=""),
         )
     }
