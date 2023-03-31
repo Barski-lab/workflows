@@ -292,8 +292,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
             )
             meta_fields <- base::append(meta_fields, clustering_fields)
             meta_fields_names <- base::append(meta_fields_names, clustering_fields_names)
-            if (!is.null(palette_colors)){
-                for (i in 1:length(clustering_fields)){                                                    # should be ok if clustering_fields is empty
+            if (!is.null(palette_colors) && length(clustering_fields) > 0){                                # need to check if clustering_fields is not empty
+                for (i in 1:length(clustering_fields)){
                     color_data <- base::rbind(
                         color_data,
                         get_color_data(seurat_data, clustering_fields[i], palette_colors)
@@ -305,8 +305,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
             custom_fields_names <- base::gsub("custom_", "Custom ", custom_fields)
             meta_fields <- base::append(meta_fields, custom_fields)
             meta_fields_names <- base::append(meta_fields_names, custom_fields_names)
-            if (!is.null(palette_colors)){
-                for (i in 1:length(custom_fields)){                                                        # should be ok if custom_fields is empty
+            if (!is.null(palette_colors) && length(custom_fields) > 0){                                    # need to check if custom_fields is not empty
+                for (i in 1:length(custom_fields)){
                     color_data <- base::rbind(
                         color_data,
                         get_color_data(seurat_data, custom_fields[i], palette_colors)
@@ -318,8 +318,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
             quartile_fields_names <- base::gsub("quartile_", "Quartile ", quartile_fields)
             meta_fields <- base::append(meta_fields, quartile_fields)
             meta_fields_names <- base::append(meta_fields_names, quartile_fields_names)
-            if (!is.null(palette_colors)){
-                for (i in 1:length(quartile_fields)){                                                      # should be ok if quartile_fields is empty
+            if (!is.null(palette_colors) && length(quartile_fields) > 0){                                  # need to check if quartile_fields is not empty
+                for (i in 1:length(quartile_fields)){
                     color_data <- base::rbind(
                         color_data,
                         get_color_data(seurat_data, quartile_fields[i], palette_colors)
