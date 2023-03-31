@@ -281,8 +281,8 @@ get_args <- function(){
             "Dimensionality to use for datasets integration and UMAP projection (from 2 to 50).",
             "If single value N is provided, use from 2 to N LSI components. If multiple values are",
             "provided, subset to only selected LSI components. In combination with --ntgr set to",
-            "harmony, selected principle components will be used in Harmony integration.",
-            "Default: from 2 to 10"
+            "harmony, multiple values will result in using all dimensions starting from 1(!) to",
+            "the max of the provided values. Default: from 2 to 10"
         ),
         type="integer", default=10, nargs="*"
     )

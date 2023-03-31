@@ -400,9 +400,9 @@ get_args <- function(){
         help=paste(
             "Dimensionality to use in UMAP projection (from 1 to 50). If single value N",
             "is provided, use from 1 to N PCs. If multiple values are provided, subset to",
-            "only selected PCs. In combination with --ntgr set to harmony, selected principle",
-            "components will be used in Harmony integration.",
-            "Default: from 1 to 10"
+            "only specified PCs. In combination with --ntgr set to harmony, multiple values",
+            "will result in using all principal components starting from 1 to the max of",
+            "the provided values. Default: from 1 to 10"
         ),
         type="integer", default=10, nargs="*"
     )
