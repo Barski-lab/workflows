@@ -468,7 +468,7 @@ outputs:
     outputBinding:
       glob: "*_umap_spl_blck.png"
     doc: |
-      Split by the FRiP cells UMAP.
+      Split by the genomic blacklist regions fraction cells UMAP.
       PNG format
 
   umap_spl_blck_plot_pdf:
@@ -476,7 +476,7 @@ outputs:
     outputBinding:
       glob: "*_umap_spl_blck.pdf"
     doc: |
-      Split by the FRiP cells UMAP.
+      Split by the genomic blacklist regions fraction cells UMAP.
       PDF format
 
   ucsc_cb_config_data:
