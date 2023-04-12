@@ -22,7 +22,7 @@ suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
 suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 
-call_peaks <- function(seurat_data, args) {
+call_peaks <- function(seurat_data, seqinfo_data, args) {
     backup_assay <- DefaultAssay(seurat_data)
     tryCatch(
         expr = {
@@ -57,7 +57,8 @@ call_peaks <- function(seurat_data, args) {
                 fragments=Fragments(seurat_data),
                 min.cells=0,                                                        # setting something other than 0 will update nCount_ATAC, which bring some discrepancy to the QC plots
                 min.features=-1,                                                    # as they check ncount.cell > min.features and by default it's 0, we will remove cells without peaks and won't be able to add new assay to our seurat_data
-                annotation=genome_annotation
+                annotation=genome_annotation,
+                genome=seqinfo_data                                                 # we will need it later when exporing genome coverage to bigWig files
             )
             rm(macs2_counts, genome_annotation)                                     # remove unused data
             seurat_data[["ATAC"]] <- atac_assay
@@ -600,6 +601,11 @@ get_args <- function(){
         type="character", required="True"
     )
     parser$add_argument(
+        "--seqinfo",
+        help="Path to the headerless chromosome length file in TSV format",
+        type="character", required="True"
+    )
+    parser$add_argument(
         "--grouping",
         help=paste(
             "Path to the TSV/CSV file to define datasets grouping. First column - 'library_id'",
@@ -892,13 +898,17 @@ grouping_data <- io$load_grouping_data(args$grouping, cell_identity_data)
 print(paste("Loading genomic blacklist regions from", args$blacklist))
 blacklist_data <- io$load_blacklist_data(args$blacklist)
 
+print(paste("Loading chromosome length information from", args$seqinfo))
+seqinfo_data <- io$load_seqinfo_data(args$seqinfo)
+
 print(paste("Loading gene/peak-barcode matrices from", args$mex))
 print(paste("Loading fragments from", args$fragments))
 print(paste("Loading annotations from", args$annotations))
 seurat_data <- io$load_10x_multiome_data(                                                # identities are set to the "new.ident" column
     args=args,
     cell_identity_data=cell_identity_data,
-    grouping_data=grouping_data
+    grouping_data=grouping_data,
+    seqinfo_data=seqinfo_data
 )
 debug$print_info(seurat_data, args)
 
@@ -974,7 +984,7 @@ debug$print_info(seurat_data, args)
 
 if (!is.null(args$callby)){
     print("Forced to replace Cell Ranger ARC peaks with MACS2 peaks")
-    seurat_data <- call_peaks(seurat_data, args)
+    seurat_data <- call_peaks(seurat_data, seqinfo_data, args)
     debug$print_info(seurat_data, args)
     print("Updating ATAC QC metrics after calling MACS2 peaks")
     seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)                             # with the new peaks, we have different number of ATAC UMI counted per cell, so all the metrics should be updated

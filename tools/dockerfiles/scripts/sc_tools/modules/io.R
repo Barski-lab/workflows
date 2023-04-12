@@ -8,6 +8,7 @@ import("sceasy", attach=FALSE)
 import("SeuratDisk", attach=FALSE)
 import("SCopeLoomR", attach=FALSE)
 import("rtracklayer", attach=FALSE)
+import("GenomeInfoDb", attach=FALSE)
 import("GenomicRanges", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
 
@@ -26,6 +27,7 @@ export(
     "assign_identities",
     "load_10x_multiome_data",
     "load_10x_rna_data",
+    "load_seqinfo_data",
     "export_h5seurat",
     "export_h5ad",
     "export_scope_loom",
@@ -368,6 +370,23 @@ load_blacklist_data <- function(location) {
     return (default_blacklist_data)
 }
 
+load_seqinfo_data <- function(location) {
+    raw_data <- utils::read.table(
+        location,
+        sep=get_file_type(location),
+        header=FALSE,
+        check.names=FALSE,
+        stringsAsFactors=FALSE
+    )
+    seqinfo_data <- GenomeInfoDb::Seqinfo(
+        seqnames=raw_data[[1]],
+        seqlengths=raw_data[[2]],
+        isCircular=rep(FALSE, length(raw_data[[1]]))                                      # to be able to use trim on GenomicRanges object
+    )
+    base::print(base::paste("Chromosome length data is successfully loaded from ", location))
+    return (seqinfo_data)
+}
+
 assign_identities <- function(seurat_data, cell_identity_data, grouping_data){
     SeuratObject::Idents(seurat_data) <- "orig.ident"                                     # safety measure to make sure we get correct Idents
     idents <- as.numeric(as.character(SeuratObject::Idents(seurat_data)))                 # need to properly convert factor to numeric vector
@@ -387,7 +406,7 @@ assign_identities <- function(seurat_data, cell_identity_data, grouping_data){
     return (seurat_data)
 }
 
-load_10x_multiome_data <- function(args, cell_identity_data, grouping_data) {
+load_10x_multiome_data <- function(args, cell_identity_data, grouping_data, seqinfo_data) {
     base::suppressMessages(raw_data <- Seurat::Read10X(data.dir=args$mex))
     seurat_data <- SeuratObject::CreateSeuratObject(
         counts=raw_data$`Gene Expression`,
@@ -450,7 +469,8 @@ load_10x_multiome_data <- function(args, cell_identity_data, grouping_data) {
         sep=c("-", "-"),
         fragments=fragments,
         min.cells=args$atacmincells,
-        annotation=annotation
+        annotation=annotation,
+        genome=seqinfo_data                                                               # we will need it when we want to export genome coverage to bigWig files
     )
     base::print("Assigning new dataset identities")
     seurat_data <- assign_identities(seurat_data, cell_identity_data, grouping_data)
