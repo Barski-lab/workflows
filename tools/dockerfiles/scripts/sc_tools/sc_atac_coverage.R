@@ -171,9 +171,13 @@ print(paste("Loading fragments data from", args$fragments))
 seurat_data <- io$replace_fragments(args$fragments, seurat_data)
 debug$print_info(seurat_data, args)
 
-peaks_location <- paste0(args$output, "_peaks.bed")
+peaks_location <- paste0(args$output, "_peaks.bigBed")
 print(paste("Exporting peaks data to", peaks_location))
-export.bed(seurat_data[["ATAC"]]@ranges, peaks_location)
+peaks_data <- seurat_data[["ATAC"]]@ranges
+seqlevels(peaks_data) <- seqlevels(seqinfo_data)
+seqinfo(peaks_data) <- seqinfo_data
+peaks_data$score <- 0
+export.bb(peaks_data, peaks_location)
 
 print(
     paste(

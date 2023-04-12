@@ -123,16 +123,19 @@ inputs:
 
 outputs:
 
-  peaks_bed_file:
+  peaks_bigbed_file:
     type: File
     outputBinding:
-      glob: "*_peaks.bed"
+      glob: "*_peaks.bigBed"
     doc: |
       Locations of open-chromatin regions ("peaks")
-      in BED format
+      in bigBed format
 
   cut_sites_bigwig_file:
-    type: File[]
+    type:
+    - "null"
+    - type: array
+      items: File
     outputBinding:
       glob: "*_cut_cov.bigWig"
     doc: |
@@ -140,7 +143,10 @@ outputs:
       in bigWig format
 
   fragments_bigwig_file:
-    type: File[]
+    type:
+    - "null"
+    - type: array
+      items: File
     outputBinding:
       glob: "*_frg_cov.bigWig"
     doc: |
