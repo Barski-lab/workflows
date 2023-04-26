@@ -379,7 +379,7 @@ if(args$cbbuild){
             short_label="RNA",
             features=args$genes,                                             # can be NULL
             is_nested=TRUE,
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
+            label_field=paste0("Clustering (da_", args$second, "_vs_", args$first, " ", args$resolution[1], ")"),                   # always use only the first resolution
             rootname=paste(args$output, "_cellbrowser/rna", sep=""),
         )
         ucsc$export_cellbrowser(
@@ -389,7 +389,7 @@ if(args$cbbuild){
             short_label="ATAC",
             features=nearest_peaks,                                          # use nearest to the genes if interest peaks
             is_nested=TRUE,
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
+            label_field=paste0("Clustering (da_", args$second, "_vs_", args$first, " ", args$resolution[1], ")"),                   # always use only the first resolution
             rootname=paste(args$output, "_cellbrowser/atac", sep=""),
         )
     } else {
@@ -400,7 +400,7 @@ if(args$cbbuild){
             slot="counts",
             short_label="RNA",
             features=args$genes,                                             # can be NULL
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
+            label_field=paste0("Clustering (da_", args$second, "_vs_", args$first, " ", args$resolution[1], ")"),                   # always use only the first resolution
             rootname=paste(args$output, "_cellbrowser", sep=""),
         )
     }
