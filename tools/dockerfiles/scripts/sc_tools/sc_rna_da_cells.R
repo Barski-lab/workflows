@@ -325,7 +325,7 @@ if (!is.null(args$metadata)){
 }
 
 print("Filtering Seurat object to include only selected groups of cells")
-seurat_data <- filter$apply_metadata_filters(seurat_data, args$splitby, c(args$first, args$second))
+seurat_data <- io$apply_metadata_filters(seurat_data, args$splitby, c(args$first, args$second))
 debug$print_info(seurat_data, args)
 
 print(

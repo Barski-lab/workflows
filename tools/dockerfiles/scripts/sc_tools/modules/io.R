@@ -21,6 +21,7 @@ export(
     "load_cell_identity_data",
     "extend_metadata",
     "extend_metadata_by_barcode",
+    "apply_metadata_filters",
     "refine_metadata_levels",
     "load_grouping_data",
     "load_blacklist_data",
@@ -289,6 +290,22 @@ refine_metadata_levels <- function(seurat_data){
     return (seurat_data)
 }
 
+apply_metadata_filters <- function(seurat_data, target_column, target_values){
+    base::print(
+        base::paste(
+            "Include only", base::paste(target_values, collapse=", "),
+            "values from the", target_column, "metadata column."
+        )
+    )
+    base::print(base::paste("Cells before filtering", base::nrow(seurat_data@meta.data)))
+    SeuratObject::Idents(seurat_data) <- target_column
+    seurat_data <- base::subset(seurat_data, idents=target_values)
+    seurat_data <- refine_metadata_levels(seurat_data)                                    # to drop empty levels
+    SeuratObject::Idents(seurat_data) <- "new.ident"
+    base::print(base::paste("Cells after filtering", base::nrow(seurat_data@meta.data)))
+    return (seurat_data)
+}
+
 extend_metadata_by_barcode <- function(seurat_data, location, filter=FALSE){
     metadata <- utils::read.table(
         location,
@@ -554,20 +571,26 @@ replace_fragments <- function(location, seurat_data){
     return(seurat_data)
 }
 
-export_gct <- function(counts_mat, row_metadata, col_metadata, location){
+export_gct <- function(counts_mat, location, row_metadata=NULL, col_metadata=NULL){
     base::tryCatch(
         expr = {
-            row_metadata <- row_metadata %>%
-                            tibble::rownames_to_column("id") %>%
-                            dplyr::mutate_at("id", base::as.vector)
-            col_metadata <- col_metadata %>%
-                            tibble::rownames_to_column("id") %>%
-                            dplyr::mutate_at("id", base::as.vector)
+            if (!is.null(row_metadata)){
+                row_metadata <- row_metadata %>%
+                                tibble::rownames_to_column("id") %>%
+                                dplyr::mutate_at("id", base::as.vector)
+                counts_mat <- counts_mat[row_metadata$id, ]                      # to guarantee the order and number of rows
+            }
+            if (!is.null(col_metadata)){
+                col_metadata <- col_metadata %>%
+                                tibble::rownames_to_column("id") %>%
+                                dplyr::mutate_at("id", base::as.vector)
+                counts_mat <- counts_mat[, col_metadata$id]                      # to guarantee the order and number of columns
+            }
             gct_data <- methods::new(
                 "GCT",
-                mat=counts_mat[row_metadata$id, col_metadata$id],       # to guarantee the order and number of row/columns
-                rdesc=row_metadata,
-                cdesc=col_metadata
+                mat=counts_mat,
+                rdesc=row_metadata,                                              # can be NULL
+                cdesc=col_metadata                                               # can be NULL
             )
             cmapR::write_gct(
                 ds=gct_data,
