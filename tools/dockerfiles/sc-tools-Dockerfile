@@ -16,6 +16,7 @@
 # Notes:
 # - if you have problems compiling Harmony
 #   https://github.com/immunogenomics/harmony/pull/165
+# - fix bug in cell cycle genes removal
 #
 # v0.0.19
 # - Updated sc_rna_de_pseudobulk.R script to support

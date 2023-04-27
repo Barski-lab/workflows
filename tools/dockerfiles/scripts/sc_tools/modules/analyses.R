@@ -209,7 +209,7 @@ rna_sct_single <- function(seurat_data, args, cell_cycle_data=NULL){
                     cell_cycle_data
                 )
                 vars_to_regress <- get_vars_to_regress(seurat_data, args)                              # may or may not include S.Score, G2M.Score, and CC.Difference
-                if (all(c("S.Score", "G2M.Score", "CC.Difference", "Phase") %in% vars_to_regress)){    # need to rerun SCTransform to regress all variables at once
+                if (all(c("S.Score", "G2M.Score", "CC.Difference") %in% vars_to_regress)){             # need to rerun SCTransform to regress all variables at once
                     seurat_data <- sc_transform_helper(
                         seurat_data=seurat_data,
                         args=args,
@@ -377,8 +377,8 @@ rna_sct_integrated <- function(splitted_seurat_data, args, cell_cycle_data=NULL)
                             "SCT",
                             cell_cycle_data
                         )
-                        vars_to_regress <- get_vars_to_regress(splitted_seurat_data[[i]], args)                # may or may not include S.Score, G2M.Score, and CC.Difference
-                        if (all(c("S.Score", "G2M.Score", "CC.Difference", "Phase") %in% vars_to_regress)){    # need to rerun SCTransform to regress all variables at once
+                        vars_to_regress <- get_vars_to_regress(splitted_seurat_data[[i]], args)          # may or may not include S.Score, G2M.Score, and CC.Difference
+                        if (all(c("S.Score", "G2M.Score", "CC.Difference") %in% vars_to_regress)){       # need to rerun SCTransform to regress all variables at once
                             splitted_seurat_data[[i]] <- sc_transform_helper(
                                 seurat_data=splitted_seurat_data[[i]],
                                 args=args,
@@ -415,7 +415,7 @@ rna_sct_integrated <- function(splitted_seurat_data, args, cell_cycle_data=NULL)
         for (i in 1:length(splitted_seurat_data)){
             vars_to_regress <- get_vars_to_regress(splitted_seurat_data[[i]], args)               # may or may not include S.Score, G2M.Score, and CC.Difference
             splitted_seurat_data[[i]] <- clean_cell_cycle_scores(splitted_seurat_data[[i]])       # remove cell cycle score columns after we know what we attempted to regress
-            if (all(c("S.Score", "G2M.Score", "CC.Difference", "Phase") %in% vars_to_regress)){   # it means we attempted to regress cell cycle scores for this dataset
+            if (all(c("S.Score", "G2M.Score", "CC.Difference") %in% vars_to_regress)){            # it means we attempted to regress cell cycle scores for this dataset
                 vars_to_regress <- get_vars_to_regress(splitted_seurat_data[[i]], args)           # here it won't include S.Score, G2M.Score, and CC.Difference columns anymore
                 splitted_seurat_data[[i]] <- sc_transform_helper(
                     seurat_data=splitted_seurat_data[[i]],
