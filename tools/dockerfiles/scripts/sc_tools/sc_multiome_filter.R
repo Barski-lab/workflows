@@ -379,7 +379,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             split_by="new.ident",
             x_label="Dataset",
             y_label="Cells percentage",
-            palette_colors=c("#008080", "#0BFFFF"),
+            palette_colors=c("#00AEAE", "#0BFFFF"),
             theme=args$theme,
             rootname=paste(args$output, suffix, "atacdbl", sep="_"),
             pdf=args$pdf
@@ -407,7 +407,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             split_by="new.ident",
             x_label="Dataset",
             y_label="Cells percentage",
-            palette_colors=c("#008080", "#00AEAE", "#00DCDC", "#0BFFFF"),
+            palette_colors=c("#0BFFFF", "#00AEAE", "#00DCDC", "#008080"),
             theme=args$theme,
             rootname=paste(args$output, suffix, "vrlpdbl", sep="_"),
             pdf=args$pdf
