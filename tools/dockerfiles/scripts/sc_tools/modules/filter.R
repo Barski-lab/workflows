@@ -2,6 +2,7 @@ import("Seurat")
 import("Signac")
 
 export(
+    "remove_doublets",
     "apply_rna_qc_filters",
     "apply_atac_qc_filters",
     "apply_peak_qc_filters",
@@ -55,6 +56,37 @@ collapse_fragments_list <- function(seurat_data){
 #     return (filtered_seurat_data)
 # }
 
+remove_doublets <- function(seurat_data, what_to_remove) {
+    base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
+    if (what_to_remove == "union"){
+        base::print("Removing doublets identified in either of RNA or ATAC assays")
+        seurat_data <- base::subset(
+            seurat_data,
+            subset=(rna_doublets == "singlet") & (atac_doublets == "singlet")
+        )
+    } else if (what_to_remove == "onlyrna"){
+        base::print("Removing only RNA doublets")
+        seurat_data <- base::subset(
+            seurat_data,
+            subset=(rna_doublets == "singlet")
+        )
+    } else if (what_to_remove == "onlyatac"){
+        base::print("Removing only ATAC doublets")
+        seurat_data <- base::subset(
+            seurat_data,
+            subset=(atac_doublets == "singlet")
+        )
+    } else if (what_to_remove == "intersect"){
+        base::print("Removing doublets identified as common for RNA and ATAC assays")
+        seurat_data <- base::subset(
+            seurat_data,
+            subset=(rna_doublets == "singlet") | (atac_doublets == "singlet")
+        )
+    }
+    base::print(base::paste("Cells after filtering:", length(SeuratObject::Cells(seurat_data))))
+    return (seurat_data)
+}
+
 apply_rna_qc_filters <- function(seurat_data, args) {
     base::print(base::paste("Cells before filtering:", length(SeuratObject::Cells(seurat_data))))
     merged_seurat_data <- NULL
@@ -87,14 +119,6 @@ apply_rna_qc_filters <- function(seurat_data, args) {
                    (log10_gene_per_log10_umi >= minnovelty) &
                    (mito_percentage <= args$maxmt)
         )
-
-        if (!is.null(args$removedoublets) && args$removedoublets){
-            base::print("  Removing RNA doublets")
-            filtered_seurat_data <- base::subset(
-                filtered_seurat_data,
-                subset=(rna_doublets == "singlet")
-            )
-        }
 
         if (is.null(merged_seurat_data)){
             merged_seurat_data <- filtered_seurat_data
@@ -133,14 +157,6 @@ apply_atac_qc_filters <- function(seurat_data, args) {
                    (nucleosome_signal <= maxnuclsignal) &
                    (TSS.enrichment >= mintssenrich)
         )
-
-        if (!is.null(args$removedoublets) && args$removedoublets){
-            base::print("  Removing ATAC doublets")
-            filtered_seurat_data <- base::subset(
-                filtered_seurat_data,
-                subset=(atac_doublets == "singlet")
-            )
-        }
 
         if (is.null(merged_seurat_data)){
             merged_seurat_data <- filtered_seurat_data

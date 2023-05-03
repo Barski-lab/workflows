@@ -379,7 +379,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             split_by="new.ident",
             x_label="Dataset",
             y_label="Cells percentage",
-            palette_colors=c("#00AEAE", "#0BFFFF"),
+            palette_colors=c("#00DCDC", "#0BFFFF"),
             theme=args$theme,
             rootname=paste(args$output, suffix, "atacdbl", sep="_"),
             pdf=args$pdf
@@ -387,7 +387,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
     }
 
     if (
-        nrow(seurat_data@meta.data[seurat_data@meta.data$rna_doublets == "doublet", ]) > 0 && 
+        nrow(seurat_data@meta.data[seurat_data@meta.data$rna_doublets == "doublet", ]) > 0 &&             # no reason to show this plot if not both doublets are present
         nrow(seurat_data@meta.data[seurat_data@meta.data$atac_doublets == "doublet", ]) > 0
     ){
         seurat_data@meta.data <- seurat_data@meta.data %>%                                                # temporary column to see doublets overlap between RNA and ATAC
@@ -398,6 +398,12 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
                                         rna_doublets == "singlet" & atac_doublets == "doublet" ~ "Only ATAC",
                                         rna_doublets == "doublet" & atac_doublets == "doublet" ~ "RNA and ATAC"
                                      )
+                                 ) %>%
+                                 dplyr::mutate(
+                                     doublets_overlap=base::factor(
+                                         doublets_overlap,
+                                         levels=c("Only RNA", "RNA and ATAC", "Only ATAC", "Singlet")     # it sage to set all 4 levels even if some are removed from data
+                                     )
                                  )
         graphics$composition_plot(
             data=seurat_data,
@@ -407,7 +413,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             split_by="new.ident",
             x_label="Dataset",
             y_label="Cells percentage",
-            palette_colors=c("#0BFFFF", "#00AEAE", "#00DCDC", "#008080"),
+            palette_colors=c("#00AEAE", "#008080", "#00DCDC", "#0BFFFF"),
             theme=args$theme,
             rootname=paste(args$output, suffix, "vrlpdbl", sep="_"),
             pdf=args$pdf
@@ -775,10 +781,11 @@ get_args <- function(){
     parser$add_argument(
         "--removedoublets",
         help=paste(
-            "Remove cells that were identified as doublets in either RNA",
-            "or ATAC assays. Default: do not remove doublets"
+            "Remove cells that were identified as doublets. For RNA assay cells",
+            "with UMI < 200 will not be evaluated. Default: do not remove doublets"
         ),
-        action="store_true"
+        type="character",
+        choices=c("union", "onlyrna", "onlyatac", "intersect")
     )
     parser$add_argument(
         "--rnadbr",
@@ -912,6 +919,22 @@ seurat_data <- io$load_10x_multiome_data(                                       
 )
 debug$print_info(seurat_data, args)
 
+seurat_data <- qc$estimate_doublets(                                                    # we want to search for doublets before we applied any filters
+    seurat_data=seurat_data,
+    assay="RNA",
+    target_column="rna_doublets",
+    dbl_rate=args$rnadbr,
+    dbl_rate_sd=args$rnadbrsd
+)
+seurat_data <- qc$estimate_doublets(                                                    # we want to search for doublets before we applied any filters
+    seurat_data=seurat_data,
+    assay="ATAC",
+    target_column="atac_doublets",
+    dbl_rate=args$atacdbr,
+    dbl_rate_sd=args$atacdbrsd
+)
+debug$print_info(seurat_data, args)
+
 idents_before_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))    # A->Z sorted identities
 if (!is.null(args$barcodes)){
     print("Applying cell filters based on the barcodes of interest")
@@ -963,7 +986,7 @@ print(args)
 print("Adding RNA QC metrics for not filtered datasets")
 seurat_data <- qc$add_rna_qc_metrics(seurat_data, args)
 print("Adding ATAC QC metrics for not filtered datasets")
-seurat_data <- qc$add_atac_qc_metrics(seurat_data, args, estimate_doublets=TRUE)         # we want to estimate ATAC doublets only for unfiltered cells
+seurat_data <- qc$add_atac_qc_metrics(seurat_data, args)
 print("Adding peak QC metrics for peaks called by Cell Ranger ARC")
 seurat_data <- qc$add_peak_qc_metrics(seurat_data, blacklist_data, args)
 debug$print_info(seurat_data, args)
@@ -981,6 +1004,18 @@ debug$print_info(seurat_data, args)
 print("Applying filters based on ATAC QC metrics")
 seurat_data <- filter$apply_atac_qc_filters(seurat_data, args)                           # cleans up all reductions
 debug$print_info(seurat_data, args)
+
+if (
+    !is.null(args$removedoublets) &&
+    ( args$removedoublets %in% c("union", "onlyrna", "onlyatac", "intersect") )
+){
+    print("Filtering by estimated doublets")
+    seurat_data <- filter$remove_doublets(
+        seurat_data,
+        what_to_remove=args$removedoublets
+    )
+    debug$print_info(seurat_data, args)
+}
 
 if (!is.null(args$callby)){
     print("Forced to replace Cell Ranger ARC peaks with MACS2 peaks")

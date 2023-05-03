@@ -507,6 +507,15 @@ seurat_data <- io$load_10x_rna_data(                                            
 )
 debug$print_info(seurat_data, args)
 
+seurat_data <- qc$estimate_doublets(                                                    # we want to search for doublets before we apply any filters
+    seurat_data=seurat_data,
+    assay="RNA",
+    target_column="rna_doublets",
+    dbl_rate=args$rnadbr,
+    dbl_rate_sd=args$rnadbrsd
+)
+debug$print_info(seurat_data, args)
+
 idents_before_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)))))    # A->Z sorted identities
 if (!is.null(args$barcodes)){
     print("Applying cell filters based on the barcodes of interest")
@@ -567,6 +576,15 @@ export_all_qc_plots(
 print("Applying filters based on QC metrics")
 seurat_data <- filter$apply_rna_qc_filters(seurat_data, args)                              # cleans up all reductions
 debug$print_info(seurat_data, args)
+
+if (!is.null(args$removedoublets) && args$removedoublets){
+    print("Filtering by estimated doublets")
+    seurat_data <- filter$remove_doublets(
+        seurat_data,
+        what_to_remove="onlyrna"
+    )
+    debug$print_info(seurat_data, args)
+}
 
 export_all_qc_plots(                                                                       # after all filters have been applied
     seurat_data=seurat_data,
