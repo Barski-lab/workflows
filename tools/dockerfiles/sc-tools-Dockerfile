@@ -2,21 +2,24 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.20
+# Software Version: v0.0.21
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:4.1.0
-# Build Cmd:        docker build --platform linux/amd64 --no-cache --rm -t biowardrobe2/sc-tools:v0.0.20 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull --platform linux/amd64 biowardrobe2/sc-tools:v0.0.20
-# Run Cmd:          docker run --platform linux/amd64 --rm -ti biowardrobe2/sc-tools:v0.0.20 /bin/bash
+# Build Cmd:        docker build --platform linux/amd64 --no-cache --rm -t biowardrobe2/sc-tools:v0.0.21 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull --platform linux/amd64 biowardrobe2/sc-tools:v0.0.21
+# Run Cmd:          docker run --platform linux/amd64 --rm -ti biowardrobe2/sc-tools:v0.0.21 /bin/bash
 ##########################################################################################################
 #
 # Notes:
 # - if you have problems compiling Harmony
 #   https://github.com/immunogenomics/harmony/pull/165
 # - fix bug in cell cycle genes removal
+#
+# v0.0.21
+# - Add Differential Binding Analysis for scATAC data
 #
 # v0.0.20
 # - Make doublets removal configurable to include only
@@ -168,6 +171,7 @@ COPY ./scripts/sc_tools/sc_atac_reduce.R /usr/local/bin/sc_atac_reduce.R
 COPY ./scripts/sc_tools/sc_rna_cluster.R /usr/local/bin/sc_rna_cluster.R
 COPY ./scripts/sc_tools/sc_atac_cluster.R /usr/local/bin/sc_atac_cluster.R
 COPY ./scripts/sc_tools/sc_atac_coverage.R /usr/local/bin/sc_atac_coverage.R
+COPY ./scripts/sc_tools/sc_atac_dbinding.R /usr/local/bin/sc_atac_dbinding.R
 COPY ./scripts/sc_tools/sc_wnn_cluster.R /usr/local/bin/sc_wnn_cluster.R
 COPY ./scripts/sc_tools/sc_ctype_assign.R /usr/local/bin/sc_ctype_assign.R
 COPY ./scripts/sc_tools/sc_rna_de_pseudobulk.R /usr/local/bin/sc_rna_de_pseudobulk.R
@@ -189,6 +193,7 @@ RUN apt-get update && \
     pip3 install anndata && \
     pip3 install cellbrowser==${CB_VERSION} && \
     pip3 install -U numba && \
+    pip3 install MAnorm2-utils && \
     git clone --depth 1 --branch v${MACS2_VERSION} ${MACS2_URL} && \
     cd MACS && \
     sed -i -e 's/numpy>=/numpy /g' setup.py && \
@@ -219,6 +224,7 @@ RUN apt-get update && \
     R -e 'install.packages("bestNormalize", repo = "https://cloud.r-project.org/", dependencies = FALSE)' && \
     R -e 'install.packages("harmony")' && \
     R -e 'install.packages("magick")' && \
+    R -e 'install.packages("MAnorm2")' && \
 ### Installing R scripts
     chmod +x /usr/local/bin/sc_rna_filter.R && \
     chmod +x /usr/local/bin/sc_multiome_filter.R && \
@@ -227,6 +233,7 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_rna_cluster.R && \
     chmod +x /usr/local/bin/sc_atac_cluster.R && \
     chmod +x /usr/local/bin/sc_atac_coverage.R && \
+    chmod +x /usr/local/bin/sc_atac_dbinding.R && \
     chmod +x /usr/local/bin/sc_wnn_cluster.R && \
     chmod +x /usr/local/bin/sc_ctype_assign.R && \
     chmod +x /usr/local/bin/sc_rna_de_pseudobulk.R && \

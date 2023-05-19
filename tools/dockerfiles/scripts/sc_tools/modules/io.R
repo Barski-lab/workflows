@@ -32,6 +32,8 @@ export(
     "export_h5seurat",
     "export_h5ad",
     "export_scope_loom",
+    "export_fragments_coverage",
+    "export_coverage",
     "load_cell_cycle_data",
     "replace_fragments"
 )
@@ -86,6 +88,37 @@ load_cell_cycle_data <- function(location){
     }
     base::print("Cell cycle data is not provided.")
     return (NULL)
+}
+
+export_fragments_coverage <- function(fragments_data, location){
+    base::tryCatch(
+        expr = {
+            coverage_data <- methods::as(
+                base::lapply(
+                    GenomicRanges::coverage(fragments_data),
+                    function(x) signif(10^6 * x/length(fragments_data), 3)               # scale to RPM mapped
+                ),
+                "SimpleRleList"
+            )
+            rtracklayer::export.bw(coverage_data, location)
+            base::print(base::paste("Exporting fragments coverage data to", location, sep=" "))
+        },
+        error = function(e){
+            base::print(base::paste("Failed to export fragments coverage data to", location, "due to", e))
+        }
+    )
+}
+
+export_coverage <- function(coverage_data, location){
+    base::tryCatch(
+        expr = {
+            rtracklayer::export.bw(coverage_data, location)
+            base::print(base::paste("Exporting coverage data to", location, sep=" "))
+        },
+        error = function(e){
+            base::print(base::paste("Failed to export coverage data to", location, "due to", e))
+        }
+    )
 }
 
 export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=FALSE){

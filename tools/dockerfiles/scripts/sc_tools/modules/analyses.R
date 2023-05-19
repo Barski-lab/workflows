@@ -6,6 +6,7 @@ import("Signac", attach=FALSE)
 import("sceasy", attach=FALSE)
 import("hopach", attach=FALSE)
 import("DESeq2", attach=FALSE)
+import("MAnorm2", attach=FALSE)
 import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
@@ -34,6 +35,7 @@ export(
     "atac_analyze",
     "add_wnn_clusters",
     "rna_de_analyze",
+    "atac_dbinding_analyze",
     "da_analyze",
     "get_de_sample_data",
     "get_de_cell_data",
@@ -1121,6 +1123,199 @@ get_clustered_data <- function(expression_data, center_row, dist, transpose) {
             clusters=clusters
         )
     )
+}
+
+atac_dbinding_analyze <- function(seurat_data, args){
+    SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                                   # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                                    # safety measure
+
+    base::print(
+        base::paste0(
+            "Running ", args$second, " vs ", args$first,
+            " differential binding analysis using ", args$test,
+            " test for cells split by ", args$splitby,
+            base::ifelse(
+                (!is.null(args$groupby) && !is.null(args$subset)),
+                paste(
+                    " subsetted to", base::paste(args$subset, collapse=", "),
+                    "values from", args$groupby, "column."
+                ),
+                "."
+            )
+        )
+    )
+
+    results <- list(db_sites=NULL)                                          # to collect all outputs
+
+    if(args$test == "manorm2"){
+        base::print("Counting reads in reference genomic bins")
+        profile_bins_args <- c(
+            base::paste0(
+                "--peaks=",
+                args$tmp_locations$macs2$peaks_narrow$second, ",",
+                args$tmp_locations$macs2$peaks_narrow$first
+            ),
+            base::paste0(
+                "--reads=",
+                args$tmp_locations$macs2$cut_sites$second, ",",
+                args$tmp_locations$macs2$cut_sites$first
+            ),
+            base::paste0(
+                "--summits=",
+                args$tmp_locations$macs2$peaks_summit$second, ",",
+                args$tmp_locations$macs2$peaks_summit$first
+            ),
+            base::paste0("--typical-bin-size=", args$binsize),
+            base::paste0("--min-peak-gap=", args$minpeakgap),
+            "--labs=second,first",
+            "--shiftsize=0",
+            "--keep-dup=all",
+            "-n", "peak"
+        )
+        if (!is.null(args$blacklist)){
+            profile_bins_args <- c(profile_bins_args, base::paste0("--filter=", args$blacklist))
+        }
+        if (!is.null(args$maxpeaks)){
+            profile_bins_args <- c(profile_bins_args, base::paste0("--keep-peaks=", args$maxpeaks))
+        }
+        exit_code <- sys::exec_wait(
+            cmd="profile_bins",                                             # if it's not found in PATH, R will fail with error
+            args=profile_bins_args
+        )
+        if (exit_code != 0){                                                # we were able to run profile_bins, but something went wrong
+            base::print(
+                base::paste0(
+                    "Failed to count reads in reference genomic ",
+                    "bins with exit code ", exit_code, ". Exiting."
+                )
+            )
+            base::quit(save="no", status=1, runLast=FALSE)                  # force R to exit with error
+        }
+
+        base::print("Loadind read counts data")
+        read_counts_data <- utils::read.table(
+            "peak_profile_bins.xls",
+            sep="\t",
+            header=TRUE,
+            check.names=FALSE,
+            stringsAsFactors=FALSE
+        )
+        base::print(utils::head(read_counts_data))
+
+        base::print(
+            base::paste(
+                "Normalizing read counts data excluding chrX and chrY",
+                "from being searched for common reference genomic bins."
+            )
+        )
+        read_counts_data <- MAnorm2::normalize(                                              # baseline should be selected automaticaly so the order of columns doesn't matter
+            read_counts_data,
+            count=c("second.read_cnt", "first.read_cnt"),                                    # columns with read counts
+            occupancy=c("second.occupancy", "first.occupancy"),                              # shows which reference genomic bins are overlapped by peaks
+            common.peak.regions=!(read_counts_data$chrom %in% c("chrX", "chrY", "X", "Y"))   # to exclude chrX and Y from being searched for common regions
+        )
+        base::print(
+            base::paste(
+                "Automatically selected as a baseline:",
+                attr(read_counts_data, "baseline")
+            )
+        )
+        base::print(utils::head(read_counts_data))
+
+        base::print("Adding biological conditions")
+        bio_conditions <- list(
+            second = MAnorm2::bioCond(
+                norm.signal=read_counts_data$second.read_cnt,
+                occupancy=read_counts_data$second.occupancy,
+                meta.info=read_counts_data[, c("chrom", "start", "end")],                    # to have reference genomic bins coordinates embedded (not used by MAnorm2)
+                name="second"
+            ),
+            first = MAnorm2::bioCond(
+                norm.signal=read_counts_data$first.read_cnt,
+                occupancy=read_counts_data$first.occupancy,
+                name="first"
+            ),
+            common = MAnorm2::bioCond(
+                norm.signal=read_counts_data[, c("second.read_cnt", "first.read_cnt")],
+                occupancy=read_counts_data[, c("second.occupancy", "first.occupancy")],
+                occupy.num=2,                                                                # include only reference genomic bins occupied by all conditions
+                name="common"
+            )
+        )
+        base::rm(read_counts_data)
+        base::print("Fitting mean-variance curve based on the common bins")
+        bio_conditions <- MAnorm2::fitMeanVarCurve(                                          # will add fit.info field to the bioCond objects
+            bio_conditions,                                                                  # only "common" contains replicates, so it will be used for fitting MVC
+            method="parametric fit",
+            occupy.only=TRUE,
+            init.coef=c(0.1, 10)                                                             # per manual it is expected to suit most practical datasets
+        )
+
+        base::print("Running differential test")
+        db_sites <- MAnorm2::diffTest(                                                       # data frame without coordinates, Mval is calculated as Y/X
+                        x=bio_conditions$first,
+                        y=bio_conditions$second,
+                    ) %>%
+                    tibble::rownames_to_column(var="rowname") %>%                            # we need it to join with coordinates
+                    dplyr::left_join(
+                        bio_conditions$second$meta.info %>%                                  # we take the coordinates from the meta.info of the second bio condition
+                        tibble::rownames_to_column(var="rowname") %>%
+                        tidyr::unite(peak, chrom:start:end, sep="-", remove=TRUE),           # peak columns will look like chrom-start-end
+                        by="rowname"
+                    ) %>%
+                    stats::na.omit() %>%                                                     # we shouldn't have any NAs, but filter just in case 
+                    dplyr::rename(
+                        "pvalue"="pval",
+                        "log2FoldChange"="Mval",
+                        "lfcSE"="Mval.se",                                                   # to have the name similar to what DESeq2 reports
+                        "padj"="padj"
+                    ) %>%
+                    dplyr::mutate(
+                        "baseMean"=(first.mean + second.mean) / 2                            # to have the same column name as DESeq2 reports
+                    ) %>%
+                    dplyr::select(-c("rowname", "Mval.t", "first.mean", "second.mean"))      # removing not relevant columns
+        base::print(
+            base::paste(
+                "Number of differentially bound sites:",
+                base::nrow(db_sites)
+            )
+        )
+        base::rm(bio_conditions)
+        results$db_sites <- db_sites                               # not filtered differentialy bound sites
+    } else {
+        SeuratObject::Idents(seurat_data) <- args$splitby
+        db_sites <- Seurat::FindMarkers(
+                        seurat_data,
+                        assay="ATAC",
+                        slot="data",                               # using normalized counts
+                        ident.1=args$second,
+                        ident.2=args$first,                        # this is the reference as logFC = ident.1 / ident.2
+                        logfc.threshold=0.25,                      # only to make it less computationaly heavy
+                        min.pct=0.05,                              # for ATAC we need smaller value
+                        min.diff.pct=-Inf,                         # using default value
+                        only.pos=FALSE,                            # we want to have positive and negative results
+                        test.use=args$test,                        # this will always be something that supports latent.vars
+                        latent.vars="nCount_ATAC",                 # recommended for ATAC
+                        base=2,                                    # to make sure we use log2 scale
+                        verbose=FALSE
+                    ) %>%
+                    stats::na.omit() %>%                           # we shouldn't have any NAs, but filter just in case 
+                    tibble::rownames_to_column(var="peak") %>%     # peak, p_val, avg_log2FC, pct.1, pct.2, p_val_adj
+                    dplyr::rename(                                 # peak, pvalue, log2FoldChange, pct.1, pct.2, padj
+                        "pvalue"="p_val",
+                        "log2FoldChange"="avg_log2FC",
+                        "padj"="p_val_adj"
+                    )
+        SeuratObject::Idents(seurat_data) <- "new.ident"
+        base::print(
+            base::paste(
+                "Number of differentially bound sites:",
+                base::nrow(db_sites)
+            )
+        )
+        results$db_sites <- db_sites                                                    # not filtered differentialy bound sites
+    }
+    return (results)
 }
 
 rna_de_analyze <- function(seurat_data, args, excluded_genes=NULL){

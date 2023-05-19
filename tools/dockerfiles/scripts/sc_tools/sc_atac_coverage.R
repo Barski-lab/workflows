@@ -209,35 +209,21 @@ for (i in 1:length(groups)){
                 format="BED",
                 genome=seqinfo_data
             )
-            coverage_data <- as(
-                lapply(
-                    coverage(fragments_data),
-                    function(x) signif(10^6 * x/length(fragments_data), 3)               # scale to RPM mapped
-                ),
-                "SimpleRleList"
+            io$export_fragments_coverage(
+                fragments_data=fragments_data,
+                location=fragments_cov_location
             )
-            print(paste("Exporting fragments coverage to", fragments_cov_location))
-            export.bw(coverage_data, fragments_cov_location)
-
-            coverage_data <- as(
-                lapply(
-                    coverage(
-                        unlist(
-                            as(
-                                list(
-                                    flank(fragments_data, args$flank, both=TRUE, start=TRUE, ignore.strand=TRUE),
-                                    flank(fragments_data, args$flank, both=TRUE, start=FALSE, ignore.strand=TRUE)
-                                ),
-                                "GRangesList"
-                            )
-                        )
-                    ),
-                    function(x) signif(10^6 * x/length(fragments_data), 3)               # scale to RPM mapped
+            fragments_data <- unlist(as(
+                list(
+                    flank(fragments_data, args$flank, both=TRUE, start=TRUE, ignore.strand=TRUE),
+                    flank(fragments_data, args$flank, both=TRUE, start=FALSE, ignore.strand=TRUE)
                 ),
-                "SimpleRleList"
+                "GRangesList"
+            ))
+            io$export_fragments_coverage(
+                fragments_data=fragments_data,
+                location=cut_sites_cov_location
             )
-            print(paste("Exporting cut sites coverage to", cut_sites_cov_location))
-            export.bw(coverage_data, cut_sites_cov_location)
         },
         error = function(e){
             print(
