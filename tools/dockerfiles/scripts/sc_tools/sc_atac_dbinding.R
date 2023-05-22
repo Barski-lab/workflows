@@ -197,11 +197,6 @@ export_browser_tracks <- function(db_results, seqinfo_data, args){
     )
     db_sites <- db_results$db_sites %>%
                 dplyr::filter(.$padj <= args$padj) %>%
-                tidyr::separate(
-                    col="peak",
-                    into=c("chr", "start", "end"),
-                    sep="-"
-                ) %>%
                 dplyr::mutate(
                     "name"=paste0(
                         "padj=", format(padj, digits=3, trim=TRUE),
@@ -261,7 +256,7 @@ export_processed_plots <- function(seurat_data, db_results, args){
         y_cutoff=args$padj,
         x_label="log2FC",
         y_label="-log10Padj",
-        label_column="peak",
+        label_column="chr",                                             # doesn't matter what to set as label because features=NA
         plot_title="Differentially bound sites",
         plot_subtitle=paste0(
             args$second, " vs ", args$first, " for cells split by ", args$splitby, ". ",

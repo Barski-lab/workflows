@@ -1259,8 +1259,7 @@ atac_dbinding_analyze <- function(seurat_data, args){
                     tibble::rownames_to_column(var="rowname") %>%                            # we need it to join with coordinates
                     dplyr::left_join(
                         bio_conditions$second$meta.info %>%                                  # we take the coordinates from the meta.info of the second bio condition
-                        tibble::rownames_to_column(var="rowname") %>%
-                        tidyr::unite(peak, chrom:start:end, sep="-", remove=TRUE),           # peak columns will look like chrom-start-end
+                        tibble::rownames_to_column(var="rowname"),
                         by="rowname"
                     ) %>%
                     stats::na.omit() %>%                                                     # we shouldn't have any NAs, but filter just in case 
@@ -1268,12 +1267,16 @@ atac_dbinding_analyze <- function(seurat_data, args){
                         "pvalue"="pval",
                         "log2FoldChange"="Mval",
                         "lfcSE"="Mval.se",                                                   # to have the name similar to what DESeq2 reports
-                        "padj"="padj"
+                        "padj"="padj",
+                        "chr"="chrom"                                                        # for consistency
                     ) %>%
                     dplyr::mutate(
                         "baseMean"=(first.mean + second.mean) / 2                            # to have the same column name as DESeq2 reports
                     ) %>%
-                    dplyr::select(-c("rowname", "Mval.t", "first.mean", "second.mean"))      # removing not relevant columns
+                    dplyr::select(-c("rowname", "Mval.t", "first.mean", "second.mean")) %>%  # removing not relevant columns
+                    dplyr::select(                                                           # to have a proper coliumns order
+                        c("chr", "start", "end", "baseMean", "log2FoldChange", "lfcSE", "pvalue", "padj")
+                    )
         base::print(
             base::paste(
                 "Number of differentially bound sites:",
@@ -1301,10 +1304,19 @@ atac_dbinding_analyze <- function(seurat_data, args){
                     ) %>%
                     stats::na.omit() %>%                           # we shouldn't have any NAs, but filter just in case 
                     tibble::rownames_to_column(var="peak") %>%     # peak, p_val, avg_log2FC, pct.1, pct.2, p_val_adj
+                    tidyr::separate(
+                        col="peak",
+                        into=c("chr", "start", "end"),
+                        sep="-",
+                        remove=TRUE
+                    ) %>%
                     dplyr::rename(                                 # peak, pvalue, log2FoldChange, pct.1, pct.2, padj
                         "pvalue"="p_val",
                         "log2FoldChange"="avg_log2FC",
                         "padj"="p_val_adj"
+                    ) %>%
+                    dplyr::select(                                 # to have a proper coliumns order
+                        c("chr", "start", "end", "log2FoldChange", "pct.1", "pct.2", "pvalue", "padj")
                     )
         SeuratObject::Idents(seurat_data) <- "new.ident"
         base::print(
