@@ -116,7 +116,7 @@ estimate_doublets <- function(seurat_data, assay, target_column, dbl_rate=NULL, 
             )
         )
         if (assay == "RNA"){
-            base::print(base::paste("Subsetting to nCount_RNA >= 200"))
+            base::print(base::paste("Subsetting to transcripts per cell >= 200"))
             subsetted_data <- base::subset(
                 seurat_data,
                 idents=identities[i],

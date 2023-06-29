@@ -22,7 +22,7 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 export_all_dimensionality_plots <- function(seurat_data, args) {
     Idents(seurat_data) <- "new.ident"                                                                                         # safety measure
     selected_features=c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score")
-    selected_labels=c("UMI", "Genes", "Mitochondrial %", "Novelty score", "S score", "G to M score")
+    selected_labels=c("Transcripts", "Genes", "Mitochondrial %", "Novelty score", "S score", "G to M score")
 
     graphics$elbow_plot(
         data=seurat_data,
@@ -118,7 +118,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
     graphics$dim_plot(
         data=seurat_data,
         reduction="rnaumap",
-        plot_title="Split by the UMI per cell counts cells UMAP",
+        plot_title="Split by the transcripts per cell counts cells UMAP",
         legend_title="Dataset",
         group_by="new.ident",
         split_by="quartile_nCount_RNA",
@@ -238,7 +238,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         graphics$dim_plot(
             data=seurat_data,
             reduction="rnaumap",
-            plot_title="Grouped by condition split by the UMI per cell counts cells UMAP",
+            plot_title="Grouped by condition split by the transcripts per cell counts cells UMAP",
             legend_title="Condition",
             group_by="condition",
             split_by="quartile_nCount_RNA",

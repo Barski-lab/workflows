@@ -507,8 +507,8 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
         "atacumap",
         "wnnumap",
         "gene_rnaumi",
-        "rnaumi_atacumi",
-        "tss_atacumi"
+        "rnaumi_atacfrgm",
+        "tss_atacfrgm"
     )
     if (is.null(cell_cycle_data)){                                              # we are not planning to run cell cycle score assignment, so we want to keep "ccpca"
         reduction_names <- append(reduction_names, "ccpca")
@@ -958,8 +958,8 @@ atac_analyze <- function(seurat_data, args){
         "rnaumap",
         "wnnumap",
         "gene_rnaumi",
-        "rnaumi_atacumi",
-        "tss_atacumi"
+        "rnaumi_atacfrgm",
+        "tss_atacfrgm"
     )
     for (reduction_name in reduction_names){
         if (reduction_name %in% names(seurat_data@reductions)){

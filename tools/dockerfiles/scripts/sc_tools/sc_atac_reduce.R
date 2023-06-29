@@ -22,7 +22,7 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 export_all_dimensionality_plots <- function(seurat_data, args) {
     Idents(seurat_data) <- "new.ident"                                                                                         # safety measure
     selected_features=c("nCount_ATAC", "nFeature_ATAC", "TSS.enrichment", "nucleosome_signal", "frip", "blacklist_fraction")
-    selected_labels=c("UMI", "Peaks", "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
+    selected_labels=c("Fragments in peaks", "Peaks", "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
 
     graphics$corr_plot(
         data=seurat_data,
@@ -103,7 +103,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
     graphics$dim_plot(
         data=seurat_data,
         reduction="atacumap",
-        plot_title="Split by the UMI per cell counts cells UMAP",
+        plot_title="Split by the fragments in peaks per cell counts cells UMAP",
         legend_title="Dataset",
         group_by="new.ident",
         split_by="quartile_nCount_ATAC",
@@ -111,7 +111,7 @@ export_all_dimensionality_plots <- function(seurat_data, args) {
         alpha=0.5,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, "umap_spl_umi", sep="_"),
+        rootname=paste(args$output, "umap_spl_frgm", sep="_"),
         pdf=args$pdf
     )
 

@@ -96,26 +96,26 @@ apply_rna_qc_filters <- function(seurat_data, args) {
             base::as.vector(as.character(SeuratObject::Idents(seurat_data)))
         )
     )
-    for (i in 1:length(args$rnaminumi)){
+    for (i in 1:length(args$minumis)){
         identity <- sorted_identities[i]
 
         mingenes <- args$mingenes[i]
         maxgenes <- args$maxgenes[i]
-        rnaminumi <- args$rnaminumi[i]
+        minumis <- args$minumis[i]
         minnovelty <- args$minnovelty[i]
 
         base::print(base::paste("Filtering", identity))
         base::print(base::paste(" ", mingenes, "<= Genes per cell <=", maxgenes))
-        base::print(base::paste(" ", "RNA UMIs per cell >=", rnaminumi))
-        base::print(base::paste(" ", "RNA novelty score >=", minnovelty))
-        base::print(base::paste(" ", "Percentage of RNA transcripts mapped to mitochondrial genes <=", args$maxmt))
+        base::print(base::paste(" ", "Transcripts per cell >=", minumis))
+        base::print(base::paste(" ", "Novelty score >=", minnovelty))
+        base::print(base::paste(" ", "Percentage of transcripts mapped to mitochondrial genes <=", args$maxmt))
 
         filtered_seurat_data <- base::subset(
             seurat_data,
             idents=identity,
             subset=(nFeature_RNA >= mingenes) &
                    (nFeature_RNA <= maxgenes) &
-                   (nCount_RNA >= rnaminumi) &
+                   (nCount_RNA >= minumis) &
                    (log10_gene_per_log10_umi >= minnovelty) &
                    (mito_percentage <= args$maxmt)
         )
@@ -138,22 +138,22 @@ apply_atac_qc_filters <- function(seurat_data, args) {
     merged_seurat_data <- NULL
     SeuratObject::Idents(seurat_data) <- "new.ident"                                                 # safety measure
     sorted_identities <- sort(unique(as.vector(as.character(Idents(seurat_data)))))                  # alphabetically sorted identities A -> Z
-    for (i in 1:length(args$atacminumi)){
+    for (i in 1:length(args$minfragments)){
         identity <- sorted_identities[i]
 
-        atacminumi <- args$atacminumi[i]
+        minfragments <- args$minfragments[i]
         maxnuclsignal <- args$maxnuclsignal[i]
         mintssenrich <- args$mintssenrich[i]
 
         base::print(base::paste("Filtering", identity))
-        base::print(base::paste(" ", "ATAC UMIs per cell >=", atacminumi))
+        base::print(base::paste(" ", "Fragments in peaks per cell >=", minfragments))
         base::print(base::paste(" ", "Nucleosome signal <=", maxnuclsignal))
         base::print(base::paste(" ", "TSS enrichment score >=", mintssenrich))
 
         filtered_seurat_data <- base::subset(
             seurat_data,
             idents=identity,
-            subset=(nCount_ATAC >= atacminumi) &
+            subset=(nCount_ATAC >= minfragments) &
                    (nucleosome_signal <= maxnuclsignal) &
                    (TSS.enrichment >= mintssenrich)
         )

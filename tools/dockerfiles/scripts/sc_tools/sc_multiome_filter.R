@@ -82,8 +82,8 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
     peak_type <- ifelse(macs2_peaks, "- MACS2", "- 10x")
     selected_features=c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "nCount_ATAC", "TSS.enrichment", "nucleosome_signal", "nFeature_ATAC", "frip", "blacklist_fraction")
     selected_labels=c(
-        "UMI(RNA)", "Genes", "Mitochondrial %", "Novelty score",
-        paste(c("UMI(ATAC)", "TSS enrichment score", "Nucl. signal", "Peaks", "FRiP", "Bl. regions"), peak_type)
+        "Transcripts", "Genes", "Mitochondrial %", "Novelty score",
+        paste(c("Fragments in peaks", "TSS enrichment score", "Nucl. signal", "Peaks", "FRiP", "Bl. regions"), peak_type)
     )
 
     qc_metrics_pca <- qc$qc_metrics_pca(
@@ -146,16 +146,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         x_axis="nCount_RNA",
         color_by="new.ident",
         facet_by="new.ident",
-        x_left_intercept=args$rnaminumi,
-        x_label="UMI per cell",
+        x_left_intercept=args$minumis,
+        x_label="Transcripts per cell",
         y_label="Density",
         legend_title="Dataset",
-        plot_title=paste("UMI per cell density for RNA assay (", suffix, ")", sep=""),
+        plot_title=paste("Transcripts per cell density (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "rna_umi_dnst", sep="_"),
+        rootname=paste(args$output, suffix, "umi_dnst", sep="_"),
         pdf=args$pdf
     )
     graphics$geom_density_plot(
@@ -182,7 +182,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
         facet_by="new.ident",
-        x_left_intercept=args$rnaminumi,
+        x_left_intercept=args$minumis,
         y_low_intercept=args$mingenes,
         y_high_intercept=args$maxgenes,
         color_by="mito_percentage",
@@ -190,16 +190,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
-        x_label="UMI per cell",
+        x_label="Transcripts per cell",
         y_label="Genes per cell",
         legend_title="Mitochondrial %",
-        plot_title=paste("Genes vs UMI per cell correlation for RNA assay (", suffix, ")", sep=""),
+        plot_title=paste("Genes vs transcripts per cell (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
         show_lm=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "gene_umi_corr", sep="_"),
+        rootname=paste(args$output, suffix, "gene_umi", sep="_"),
         pdf=args$pdf
     )
     graphics$geom_density_plot(
@@ -239,16 +239,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         x_axis="nCount_ATAC",
         color_by="new.ident",
         facet_by="new.ident",
-        x_left_intercept=args$atacminumi,
-        x_label="UMI per cell",
+        x_left_intercept=args$minfragments,
+        x_label="Fragments in peaks per cell",
         y_label="Density",
         legend_title="Dataset",
-        plot_title=paste("UMI per cell density for ATAC assay (", suffix, ") ", peak_type, sep=""),
+        plot_title=paste("Fragments in peaks per cell density (", suffix, ") ", peak_type, sep=""),
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "atac_umi_dnst", sep="_"),
+        rootname=paste(args$output, suffix, "frgm_dnst", sep="_"),
         pdf=args$pdf
     )
     graphics$geom_density_plot(
@@ -291,11 +291,11 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         data=seurat_data@meta.data,
         facet_by="new.ident",
         x_axis="nCount_ATAC",
-        x_label="UMI(ATAC) per cell",
+        x_label="Fragments in peaks per cell (ATAC)",
         y_axis="nCount_RNA",
-        y_label="UMI(RNA) per cell",
-        x_left_intercept=args$atacminumi,
-        y_low_intercept=args$rnaminumi,
+        y_label="Transcripts per cell (RNA)",
+        x_left_intercept=args$minfragments,
+        y_low_intercept=args$minumis,
         alpha_intercept=1,
         color_by="mito_percentage",
         highlight_rows=which(seurat_data@meta.data$rna_doublets == "doublet" | seurat_data@meta.data$atac_doublets == "doublet"),    # need a single |
@@ -303,23 +303,23 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         color_limits=c(0, 100),
         color_break=args$maxmt,
         legend_title="Mitochondrial %",
-        plot_title=paste("UMI per cell correlation for RNA vs ATAC assays (", suffix, ") ", peak_type, sep=""),
+        plot_title=paste("Transcripts vs fragments in peaks per cell (", suffix, ") ", peak_type, sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
         show_density=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "rna_atac_umi_corr", sep="_"),
+        rootname=paste(args$output, suffix, "rna_atac_cnts", sep="_"),
         pdf=args$pdf
     )
     graphics$geom_point_plot(
         data=seurat_data@meta.data,
         facet_by="new.ident",
         x_axis="nCount_ATAC",
-        x_label="UMI(ATAC) per cell",
+        x_label="Fragments in peaks per cell",
         y_axis="TSS.enrichment",
         y_label="TSS enrichment score",
-        x_left_intercept=args$atacminumi,
+        x_left_intercept=args$minfragments,
         y_low_intercept=args$mintssenrich,
         alpha_intercept=1,
         color_by="mito_percentage",
@@ -328,13 +328,13 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
         color_limits=c(0, 100),
         color_break=args$maxmt,
         legend_title="Mitochondrial %",
-        plot_title=paste("TSS enrichment score vs UMI per cell correlation for ATAC assay (", suffix, ") ", peak_type, sep=""),
+        plot_title=paste("TSS enrichment score vs fragments in peaks per cell (", suffix, ") ", peak_type, sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=FALSE,
         show_density=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "tss_atac_umi_corr", sep="_"),
+        rootname=paste(args$output, suffix, "tss_frgm", sep="_"),
         pdf=args$pdf
     )
     graphics$vln_plot(
@@ -453,16 +453,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             x_axis="nCount_RNA",
             color_by="new.ident",
             facet_by="condition",
-            x_left_intercept=args$rnaminumi,
-            x_label="UMI per cell",
+            x_left_intercept=args$minumis,
+            x_label="Transcripts per cell",
             y_label="Density",
             legend_title="Dataset",
-            plot_title=paste("Split by grouping condition UMI per cell density for RNA assay (", suffix, ")", sep=""),
+            plot_title=paste("Split by grouping condition transcripts per cell density (", suffix, ")", sep=""),
             scale_x_log10=TRUE,
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
-            rootname=paste(args$output, suffix, "rna_umi_dnst_spl_cnd", sep="_"),
+            rootname=paste(args$output, suffix, "umi_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
         graphics$geom_density_plot(
@@ -521,16 +521,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args, macs2_peaks=FALSE){
             x_axis="nCount_ATAC",
             color_by="new.ident",
             facet_by="condition",
-            x_left_intercept=args$atacminumi,
-            x_label="UMI per cell",
+            x_left_intercept=args$minfragments,
+            x_label="Fragments in peaks per cell",
             y_label="Density",
             legend_title="Dataset",
-            plot_title=paste("Split by grouping condition UMI per cell density for ATAC assay (", suffix, ") ", peak_type, sep=""),
+            plot_title=paste("Split by grouping condition fragments in peaks per cell density (", suffix, ") ", peak_type, sep=""),
             scale_x_log10=TRUE,
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
-            rootname=paste(args$output, suffix, "atac_umi_dnst_spl_cnd", sep="_"),
+            rootname=paste(args$output, suffix, "frgm_dnst_spl_cnd", sep="_"),
             pdf=args$pdf
         )
         graphics$geom_density_plot(
@@ -666,11 +666,11 @@ get_args <- function(){
         type="integer", default=5000, nargs="*"
     )
     parser$add_argument(
-        "--rnaminumi",
+        "--minumis",
         help=paste(
-            "Include cells where at least this many UMI (RNA transcripts) are detected.",
-            "If multiple values provided, each of them will be applied to the correspondent",
-            "dataset from the '--mex' input based on the '--identity' file.",
+            "Include cells where at least this many UMI (transcripts) are detected.",
+            "If multiple values provided, each of them will be applied to the",
+            "correspondent dataset from the '--mex' input based on the '--identity' file.",
             "Default: 500 (applied to all datasets)"
         ),
         type="integer", default=500, nargs="*"
@@ -711,12 +711,13 @@ get_args <- function(){
         ),
         type="integer", default=5
     )
-    parser$add_argument(
-        "--atacminumi",
+    parser$add_argument(                                                                    # when loading Cell Ranger data we have cut sites
+        "--minfragments",                                                                   # per peak so we recalculate it to have fragments
         help=paste(
-            "Include cells where at least this many UMI (ATAC transcripts) are detected.",
-            "If multiple values provided, each of them will be applied to the correspondent",
-            "dataset from the '--mex' input based on the '--identity' file.",
+            "Include cells where at least this many fragments in peaks are",
+            "detected. If multiple values provided, each of them will be",
+            "applied to the correspondent dataset from the '--mex' input",
+            "based on the '--identity' file.",
             "Default: 1000 (applied to all datasets)"
         ),
         type="integer", default=1000, nargs="*"
@@ -946,7 +947,7 @@ idents_after_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)
 print("Adjusting input parameters")
 idents_count <- length(unique(as.vector(as.character(Idents(seurat_data)))))
 for (key in names(args)){
-    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty", "atacminumi", "maxnuclsignal", "mintssenrich", "minfrip", "maxblacklist")){
+    if (key %in% c("mingenes", "maxgenes", "minumis", "minnovelty", "minfragments", "maxnuclsignal", "mintssenrich", "minfrip", "maxblacklist")){
         if (length(args[[key]]) == 1){
             print(paste("Extending filtering parameter", key, "to have a proper size"))
             args[[key]] <- rep(args[[key]][1], length(idents_after_filtering))           # we use number of identities after filtering as we may have potentially removed some of them
@@ -1052,7 +1053,7 @@ export_all_qc_plots(                                                            
     macs2_peaks=!is.null(args$callby)                                                    # can be both from 10x or MACS2
 )
 
-print("Adding genes vs RNA UMI per cell correlation as gene_rnaumi dimensionality reduction")
+print("Adding genes vs transcripts per cell as gene_rnaumi dimensionality reduction")
 seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
     embeddings=as.matrix(
         seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%
@@ -1063,8 +1064,8 @@ seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
     assay="RNA"
 )
 
-print("Adding RNA UMI vs ATAC UMI per cell correlation as rnaumi_atacumi dimensionality reduction")
-seurat_data@reductions[["rnaumi_atacumi"]] <- CreateDimReducObject(
+print("Adding transcripts vs fragments in peaks per cell as rnaumi_atacfrgm dimensionality reduction")
+seurat_data@reductions[["rnaumi_atacfrgm"]] <- CreateDimReducObject(
     embeddings=as.matrix(
         seurat_data@meta.data[, c("nCount_ATAC", "nCount_RNA"), drop=FALSE] %>%
         dplyr::rename("RAU_1"="nCount_ATAC", "RAU_2"="nCount_RNA") %>%
@@ -1074,8 +1075,8 @@ seurat_data@reductions[["rnaumi_atacumi"]] <- CreateDimReducObject(
     assay="RNA"
 )
 
-print("Adding TSS enrichment score vs ATAC UMI per cell correlation as tss_atacumi dimensionality reduction")
-seurat_data@reductions[["tss_atacumi"]] <- CreateDimReducObject(
+print("Adding TSS enrichment score vs fragments in peaks per cell as tss_atacfrgm dimensionality reduction")
+seurat_data@reductions[["tss_atacfrgm"]] <- CreateDimReducObject(
     embeddings=as.matrix(
         seurat_data@meta.data[, c("nCount_ATAC", "TSS.enrichment"), drop=FALSE] %>%
         dplyr::rename("TAU_1"="nCount_ATAC", "TAU_2"="TSS.enrichment") %>%

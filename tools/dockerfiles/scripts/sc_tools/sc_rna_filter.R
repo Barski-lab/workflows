@@ -21,7 +21,7 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 export_all_qc_plots <- function(seurat_data, suffix, args){
     Idents(seurat_data) <- "new.ident"                                                                # safety measure
     selected_features=c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi")
-    selected_labels=c("UMI", "Genes", "Mitochondrial %", "Novelty score")
+    selected_labels=c("Transcripts", "Genes", "Mitochondrial %", "Novelty score")
 
     qc_metrics_pca <- qc$qc_metrics_pca(
         seurat_data=seurat_data,
@@ -83,11 +83,11 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         x_axis="nCount_RNA",
         color_by="new.ident",
         facet_by="new.ident",
-        x_left_intercept=args$rnaminumi,
-        x_label="UMI per cell",
+        x_left_intercept=args$minumis,
+        x_label="Transcripts per cell",
         y_label="Density",
         legend_title="Dataset",
-        plot_title=paste("UMI per cell density (", suffix, ")", sep=""),
+        plot_title=paste("Transcripts per cell density (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         zoom_on_intercept=TRUE,
         palette_colors=graphics$D40_COLORS,
@@ -119,7 +119,7 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
         facet_by="new.ident",
-        x_left_intercept=args$rnaminumi,
+        x_left_intercept=args$minumis,
         y_low_intercept=args$mingenes,
         y_high_intercept=args$maxgenes,
         color_by="mito_percentage",
@@ -127,16 +127,16 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
         gradient_colors=c("lightslateblue", "red", "green"),
         color_limits=c(0, 100),
         color_break=args$maxmt,
-        x_label="UMI per cell",
+        x_label="Transcripts per cell",
         y_label="Genes per cell",
         legend_title="Mitochondrial %",
-        plot_title=paste("Genes vs UMI per cell correlation (", suffix, ")", sep=""),
+        plot_title=paste("Genes vs transcripts per cell (", suffix, ")", sep=""),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
         show_lm=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, suffix, "gene_umi_corr", sep="_"),
+        rootname=paste(args$output, suffix, "gene_umi", sep="_"),
         pdf=args$pdf
     )
     graphics$geom_density_plot(
@@ -213,11 +213,11 @@ export_all_qc_plots <- function(seurat_data, suffix, args){
             x_axis="nCount_RNA",
             color_by="new.ident",
             facet_by="condition",
-            x_left_intercept=args$rnaminumi,
-            x_label="UMI per cell",
+            x_left_intercept=args$minumis,
+            x_label="Transcripts per cell",
             y_label="Density",
             legend_title="Dataset",
-            plot_title=paste("Split by grouping condition UMI per cell density (", suffix, ")", sep=""),
+            plot_title=paste("Split by grouping condition transcripts per cell density (", suffix, ")", sep=""),
             scale_x_log10=TRUE,
             zoom_on_intercept=TRUE,
             palette_colors=graphics$D40_COLORS,
@@ -355,11 +355,12 @@ get_args <- function(){
         type="integer", default=5000, nargs="*"
     )
     parser$add_argument(
-        "--rnaminumi",
+        "--minumis",
         help=paste(
             "Include cells where at least this many UMI (transcripts) are detected.",
-            "If multiple values provided, each of them will be applied to the correspondent",
-            "dataset from the '--mex' input based on the '--identity' file.",
+            "If multiple values provided, each of them will be applied to the",
+            "correspondent dataset from the '--mex' input based on the '--identity'",
+            "file.",
             "Default: 500 (applied to all datasets)"
         ),
         type="integer", default=500, nargs="*"
@@ -526,7 +527,7 @@ idents_after_filtering <- sort(unique(as.vector(as.character(Idents(seurat_data)
 
 print("Adjusting input parameters")
 for (key in names(args)){
-    if (key %in% c("mingenes", "maxgenes", "rnaminumi", "minnovelty")){
+    if (key %in% c("mingenes", "maxgenes", "minumis", "minnovelty")){
         if (length(args[[key]]) == 1){
             print(paste("Extending filtering parameter", key, "to have a proper size"))
             args[[key]] <- rep(args[[key]][1], length(idents_after_filtering))           # we use number of identities after filtering as we may have potentially removed some of them
@@ -592,7 +593,7 @@ export_all_qc_plots(                                                            
     args=args
 )
 
-print("Adding genes vs RNA UMI per cell correlation as gene_rnaumi dimensionality reduction")
+print("Adding genes vs transcripts per cell as gene_rnaumi dimensionality reduction")
 seurat_data@reductions[["gene_rnaumi"]] <- CreateDimReducObject(
     embeddings=as.matrix(
         seurat_data@meta.data[, c("nCount_RNA", "nFeature_RNA"), drop=FALSE] %>%           # can't be included into the add_rna_qc_metrics function

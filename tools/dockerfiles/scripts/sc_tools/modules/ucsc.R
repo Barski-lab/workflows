@@ -249,8 +249,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
             )
 
             if (is.null(meta_fields) || is.null(meta_fields_names)){
-                meta_fields <-       c("nCount_RNA", "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score",    "Phase", "rna_doublets", "atac_doublets", "nCount_ATAC", "nFeature_ATAC", "TSS.enrichment",       "nucleosome_signal", "frip", "blacklist_fraction")
-                meta_fields_names <- c("RNA UMIs",   "Genes",        "Mitochondrial %", "Novelty score",            "S score", "G to M score", "Phase", "RNA doublets", "ATAC doublets", "ATAC UMIs",   "Peaks",         "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
+                meta_fields <-       c("nCount_RNA",   "nFeature_RNA", "mito_percentage", "log10_gene_per_log10_umi", "S.Score", "G2M.Score",    "Phase", "rna_doublets", "atac_doublets", "nCount_ATAC",        "nFeature_ATAC", "TSS.enrichment",       "nucleosome_signal", "frip", "blacklist_fraction")
+                meta_fields_names <- c("Transcripts",  "Genes",        "Mitochondrial %", "Novelty score",            "S score", "G to M score", "Phase", "RNA doublets", "ATAC doublets", "Fragments in peaks", "Peaks",         "TSS enrichment score", "Nucleosome signal", "FRiP", "Bl. regions")
             }
 
             if (length(base::unique(base::as.vector(as.character(seurat_data@meta.data$new.ident)))) > 1){
