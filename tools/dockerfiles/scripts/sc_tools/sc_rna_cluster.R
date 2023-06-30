@@ -296,9 +296,13 @@ export_heatmaps <- function(seurat_data, markers, args){
         grouped_markers <- markers %>%
                            dplyr::filter(.$resolution==current_resolution) %>%                     # shouldn't fail even if resolution is not present
                            dplyr::select(-c("resolution")) %>%
+                           dplyr::filter(.$p_val_adj <= 0.05) %>%                                  # to have only significant gene markers 
+                           dplyr::filter(.$pct.1 >= 0.1) %>%                                       # to have at least 10% of cells expressing this gene
                            dplyr::group_by(cluster) %>%
+                           dplyr::top_frac(n=-0.25, wt=p_val_adj) %>%                              # get 25% of the most significant gene markers
                            dplyr::top_n(
-                               n=tidyselect::all_of(floor(60/length(unique(markers$cluster)))),
+                               n=10,                                                               # 10 genes per cluster
+                               # n=tidyselect::all_of(floor(600/length(unique(markers$cluster)))),
                                wt=avg_log2FC
                            )
         if (nrow(grouped_markers) > 0){                                                            # in case we don't have any markers for specific resolution
@@ -330,6 +334,7 @@ export_heatmaps <- function(seurat_data, markers, args){
                 plot_title=paste(
                     "Normalized gene expression heatmap. Resolution", current_resolution
                 ),
+                height=12*length(grouped_markers$feature),
                 rootname=paste(args$output, "xpr_htmp_res", current_resolution, sep="_"),
                 pdf=args$pdf
             )

@@ -348,9 +348,12 @@ export_heatmaps <- function(seurat_data, markers, args){
     DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     Idents(seurat_data) <- "new.ident"                            # safety measure
     grouped_markers <- markers %>%
+                       dplyr::filter(.$p_val_adj <= 0.05) %>%                                  # to have only significant gene markers 
+                       dplyr::filter(.$pct.1 >= 0.1) %>%                                       # to have at least 10% of cells expressing this gene
                        dplyr::group_by(cluster) %>%
+                       dplyr::top_frac(n=-0.25, wt=p_val_adj) %>%                              # get 25% of the most significant gene markers
                        dplyr::top_n(
-                           n=tidyselect::all_of(floor(60/length(unique(markers$cluster)))),
+                           n=10,                                                               # 10 genes per cluster
                            wt=avg_log2FC
                        )
     column_annotations <- c(args$target)
@@ -379,6 +382,7 @@ export_heatmaps <- function(seurat_data, markers, args){
         palette_colors=graphics$D40_COLORS,
         heatmap_colors=c("black", "yellow"),
         plot_title="Normalized gene expression heatmap",
+        height=12*length(grouped_markers$feature),
         rootname=paste(args$output, "xpr_htmp", sep="_"),
         pdf=args$pdf
     )
