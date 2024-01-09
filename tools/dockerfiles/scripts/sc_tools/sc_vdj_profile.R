@@ -11,6 +11,7 @@ HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly
 suppressMessages(debug <- modules::use(file.path(HERE, "modules/debug.R")))
 suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R")))
 suppressMessages(io <- modules::use(file.path(HERE, "modules/io.R")))
+suppressMessages(qc <- modules::use(file.path(HERE, "modules/qc.R")))
 suppressMessages(prod <- modules::use(file.path(HERE, "modules/prod.R")))
 suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
@@ -18,6 +19,7 @@ set.seed(42)
 
 # Book chapter with the related materials
 # https://www.ncbi.nlm.nih.gov/books/NBK27130/#:~:text=The%20antigen%20receptors%20on%20B,cell%20receptor%E2%80%94that%20are%20associated
+# https://www.sc-best-practices.org/air_repertoire/ir_profiling.html#raw-data
 
 
 export_all_plots <- function(seurat_data, args){
@@ -25,43 +27,39 @@ export_all_plots <- function(seurat_data, args){
     datasets_count <- length(unique(as.vector(as.character(seurat_data@meta.data$new.ident))))
     conditions_count <- length(unique(as.vector(as.character(seurat_data@meta.data$condition))))
 
-    graphics$clonotype_bar_plot(
+    graphics$clonotype_bar_plot(                                 # all NA are not taken into account
         data=seurat_data,
         clone_by=args$cloneby,
-        chains="both",
+        chains=c(seurat_data@misc$vdj$chains, "both"),
         x_label="Dataset",
-        y_label="Clonotypes %",
+        y_label="Unique clonotypes %",
         legend_title="Dataset",
-        plot_title=paste(
-            "Unique clonotypes,",
-            "split by dataset"
-        ),
+        plot_title="Percentage of unique clonotyps per dataset",
         split_by="new.ident",
-        scale=TRUE,
+        scale=TRUE,                                              # before calculating the percentage we exclude all the cells that don't have any clonotypes assigned
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         combine_guides="collect",
-        rootname=paste(args$output, "count_spl_idnt", sep="_"),
+        width=1800,
+        rootname=paste(args$output, "count_gr_idnt", sep="_"),
         pdf=args$pdf
     )
 
-    graphics$clonotype_bar_plot(
+    graphics$clonotype_bar_plot(                                 # all NA are not taken into account
         data=seurat_data,
         clone_by=args$cloneby,
-        chains="both",
+        chains=c(seurat_data@misc$vdj$chains, "both"),
         x_label="Cluster",
-        y_label="Clonotypes %",
+        y_label="Unique clonotypes %",
         legend_title="Cluster",
-        plot_title=paste(
-            "Unique clonotypes,",
-            "split by cluster"
-        ),
+        plot_title="Percentage of unique clonotyps per cluster",
         split_by=args$source,
         scale=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
         combine_guides="collect",
-        rootname=paste(args$output, "count_spl_clst", sep="_"),
+        width=1800,
+        rootname=paste(args$output, "count_gr_clst", sep="_"),
         pdf=args$pdf
     )
 
@@ -219,16 +217,39 @@ export_all_plots <- function(seurat_data, args){
         pdf=args$pdf
     )
 
-    features <- c("V", "D", "J", "C")
+    features <- c("V", "J", "C")
     # if Idents are set to "new.ident" it will be used in
     # group_by(df[,ncol(df)], df[,y.axis], element.names)
     # because the last column in df will be identity
+
+
+    graphics$clonotype_feature_plot(
+        data=seurat_data,
+        feature="D",
+        chains="TRB",          # can't use "both" here
+        plot_title=paste(
+            "Relative usage of D",
+            "genes, split by cluster"
+        ),
+        x_label="Gene",
+        y_label="Mean gene usage",
+        split_by=args$source,
+        order_by="variance",
+        scale=TRUE,
+        theme=args$theme,
+        combine_guides="collect",
+        width=1600,
+        height=600,
+        rootname=paste(args$output, "gene_spl_clst", base::tolower("D"), sep="_"),
+        pdf=args$pdf
+    )
+
     for (i in 1:length(features)){
         current_feature <- features[i]
         graphics$clonotype_feature_plot(
             data=seurat_data,
             feature=current_feature,
-            chains="both",
+            chains=seurat_data@misc$vdj$chains,          # can't use "both" here
             plot_title=paste(
                 "Relative usage of", current_feature,
                 "genes, split by cluster"
@@ -241,14 +262,14 @@ export_all_plots <- function(seurat_data, args){
             theme=args$theme,
             combine_guides="collect",
             width=1600,
-            height=1200,
+            height=600,
             rootname=paste(args$output, "gene_spl_clst", base::tolower(current_feature), sep="_"),
             pdf=args$pdf
         )
         graphics$clonotype_feature_plot(
             data=seurat_data,
             feature=current_feature,
-            chains="both",
+            chains=seurat_data@misc$vdj$chains,          # can't use "both" here
             plot_title=paste(
                 "Relative usage of", current_feature,
                 "genes, split by dataset"
@@ -261,7 +282,7 @@ export_all_plots <- function(seurat_data, args){
             theme=args$theme,
             combine_guides="collect",
             width=1600,
-            height=1200,
+            height=600,
             rootname=paste(args$output, "gene_spl_idnt", base::tolower(current_feature), sep="_"),
             pdf=args$pdf
         )
@@ -310,23 +331,21 @@ export_all_plots <- function(seurat_data, args){
             pdf=args$pdf
         )
 
-        graphics$clonotype_bar_plot(
+        graphics$clonotype_bar_plot(                                 # all NA are not taken into account
             data=seurat_data,
             clone_by=args$cloneby,
-            chains="both",
+            chains=c(seurat_data@misc$vdj$chains, "both"),
             x_label="Condition",
-            y_label="Clonotypes %",
+            y_label="Unique clonotypes %",
             legend_title="Condition",
-            plot_title=paste(
-                "Unique clonotypes,",
-                "split by grouping condition"
-            ),
+            plot_title="Percentage of unique clonotyps per grouping condition",
             split_by="condition",
             scale=TRUE,
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
             combine_guides="collect",
-            rootname=paste(args$output, "count_spl_cnd", sep="_"),
+            width=1800,
+            rootname=paste(args$output, "count_gr_cnd", sep="_"),
             pdf=args$pdf
         )
 
@@ -513,15 +532,23 @@ get_args <- function(){
         type="character", default="new.ident"
     )
     parser$add_argument(
-        "--strictness",
+        "--filter",
         help=paste(
-            "Apply stringency filters. Removemulti: remove any cell",
-            "with more than 2 immune receptor chains. Filtermulti:",
-            "isolate the top 2 expressed chains in cell with multiple",
-            "chains. Default: do not apply any filters."
+            "Stringency filters to be applied.",
+            "cells: remove cells with more than 2 chains.",
+            "chains: remove chains exceeding 2 (select the most expressed ones).",
+            "Default: do not apply any filters."
         ),
         type="character",
-        choices=c("removemulti", "filtermulti")
+        choices=c("cells", "chains")
+    )
+    parser$add_argument(
+        "--removepartial",
+        help=paste(
+            "Remove cells with only one chain detected.",
+            "Default: keep all cells if at least one chain detected"
+        ),
+        action="store_true"
     )
     parser$add_argument(
         "--pdf",
@@ -650,6 +677,13 @@ print("Extending Seurat data with congtigs annotations")
 seurat_data <- io$load_10x_vdj_data(seurat_data, args)
 debug$print_info(seurat_data, args)
 
+print("Quantifying clonotype counts")
+seurat_data <- qc$quartile_qc_metrics(
+    seurat_data=seurat_data,
+    features=c("clntp_counts"),
+    prefix="quartile"                                                                     # we will use this prefix in ucsc$export_cellbrowser function
+)
+
 export_all_plots(
     seurat_data=seurat_data,
     args=args
@@ -674,7 +708,7 @@ if(args$cbbuild){
 
 DefaultAssay(seurat_data) <- "RNA"                                                         # better to stick to RNA assay by default https://www.biostars.org/p/395951/#395954 
 print("Exporting results to RDS file")
-io$export_rds(seurat_data, paste(args$output, "_data.rds", sep=""))
+# io$export_rds(seurat_data, paste(args$output, "_data.rds", sep=""))
 if(args$h5seurat){
     print("Exporting results to h5seurat file")
     io$export_h5seurat(seurat_data, paste(args$output, "_data.h5seurat", sep=""))

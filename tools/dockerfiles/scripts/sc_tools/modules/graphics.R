@@ -107,7 +107,7 @@ clonotype_bar_plot <- function(data, rootname, clone_by, chains, split_by, x_lab
                 ggplot2::guides(fill=ggplot2::guide_legend(legend_title), x=ggplot2::guide_axis(angle=45)) +
                 ggplot2::scale_fill_manual(values=palette_colors) +
                 get_theme(theme)
-                if (current_chain != "both"){
+                if (length(chains) > 1 || current_chain != "both"){
                     plots[[current_chain]] <- plots[[current_chain]] +
                                               ggplot2::ggtitle(current_chain)
                 }
