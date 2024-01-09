@@ -628,14 +628,18 @@ load_10x_vdj_data <- function(seurat_data, args) {
         group.by="new.ident"
     )
 
-    remove_multi=!is.null(args$strictness) && args$strictness == "removemulti"
-    filter_multi=!is.null(args$strictness) && args$strictness == "filtermulti"
-    if (remove_multi || filter_multi){
+    base::print("Raw contigs counts")
+    for(i in seq_along(congtigs_data)) {
+        base::print(nrow(congtigs_data[[i]]))
+    }
+
+    filter_by_cells=!is.null(args$filter) && args$filter == "cells"
+    filter_by_chains=!is.null(args$filter) && args$filter == "chains"
+    if (filter_by_cells || filter_by_chains){
         base::print(
             base::paste(
-                "Applied filtering options:",
-                "remove_multi", remove_multi,
-                "filter_multi", filter_multi
+                "Applying filtering",
+                ifelse(filter_by_cells, "by cells", "by chains")
             )
         )
     }
@@ -645,29 +649,76 @@ load_10x_vdj_data <- function(seurat_data, args) {
         base::print("Combining T Cell receptor contigs")
         congtigs_data <- scRepertoire::combineTCR(
             df=congtigs_data,
-            removeNA=TRUE,                                                     # remove any chain without values
-            removeMulti=remove_multi,
-            filterMulti=filter_multi
+            removeNA=FALSE,                                            # should be FALSE, because of https://github.com/ncborcherding/scRepertoire/issues/293
+            removeMulti=filter_by_cells,
+            filterMulti=filter_by_chains
         )
     } else if (base::identical(c("IGH", "IGL"), detected_chains)){
         base::print("Combining B Cell receptor contigs")
         congtigs_data <- scRepertoire::combineBCR(
             df=congtigs_data,
-            removeNA=TRUE,                                                     # remove any chain without values
-            removeMulti=remove_multi,
-            filterMulti=filter_multi
+            removeNA=FALSE,                                            # not tested for BCR, but better to follow the same logic as for combineTCR
+            removeMulti=filter_by_cells,
+            filterMulti=filter_by_chains
         )
     } else {
         base::print("Not implemented chains detected. Exiting")
         quit(save="no", status=1, runLast=FALSE)
     }
 
+    if (args$removepartial){
+        base::print("Removing cells with only one chain detected")
+        for(i in seq_along(congtigs_data)) {
+            congtigs_data[[i]] <- congtigs_data[[i]] %>%
+                tidyr::drop_na(
+                    tidyselect::any_of(
+                        c("TCR1", "TCR2", "IGH", "IGLC")               # doesn't fail because of the missing columns, so it can be used for both TCR and BCR
+                    )
+                )
+        }
+    }
+
+    base::print(                                                       # otherwise combineExpression calculates Frequencies within each sample independently
+        base::paste(
+            "Combining all contigs into a single list",
+            "after all filters applied"
+        )
+    )
+    congtigs_data <- dplyr::bind_rows(congtigs_data)
+
     seurat_data <- scRepertoire::combineExpression(
         df=congtigs_data,
         sc=seurat_data,
         cloneCall=args$cloneby,
-        group.by=args$groupby                                          # "new.ident" should be equal to "none"
+        proportion=FALSE,                                     # to get clonotypes counts instead of frequency
+        cloneTypes=c(                                         # None (0, 1)
+            single=1,                                         # single (0, 1]
+            multiple=Inf                                      # multiple (1, Inf)
+        ),
+        group.by="none"                                       # to calculate clonotypes Frequencies for all samples jointly
     )
+    seurat_data@misc$vdj <- list(
+        chains=detected_chains                                # will always be either c("TRA", "TRB") or c("IGH", "IGL")
+    )
+    clonotype_column <- switch(
+        args$cloneby,
+        "gene"   = "CTgene",
+        "nt"     = "CTnt",
+        "aa"     = "CTaa",
+        "strict" = "CTstrict"
+    )
+    seurat_data@meta.data <- seurat_data@meta.data %>%
+        dplyr::rename("clntp_counts"="Frequency") %>%
+        tidyr::replace_na(list(clntp_counts=0)) %>%           # to replace all NA with 0 counts
+        dplyr::mutate("clntp"=.[[clonotype_column]]) %>%
+        dplyr::select(-c("barcode"))                          # need to keep "CTgene", "CTnt", "CTaa", "CTstrict", and "cloneType" columns for plots
+
+
+        # dplyr::mutate(CTgene=ifelse(Frequency <= 0.01, "NA", CTgene)) %>%
+        # dplyr::mutate(CTnt=ifelse(Frequency <= 0.01, "NA", CTnt)) %>%
+        # dplyr::mutate(CTaa=ifelse(Frequency <= 0.01, "NA", CTaa)) %>%
+        # dplyr::mutate(CTstrict=ifelse(Frequency <= 0.01, "NA", CTstrict))
+
     base::rm(congtigs_data)
     base::gc(verbose=FALSE)
 

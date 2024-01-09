@@ -289,7 +289,7 @@ RUN apt-get update && \
     R -e 'devtools::install_github("aertslab/SCopeLoomR", upgrade = "never")' && \
     R -e 'devtools::install_github("dynverse/dynfeature", upgrade = "never")' && \
     R -e 'devtools::install_github("dynverse/dynplot", upgrade = "never")' && \
-    R -e 'devtools::install_github("ncborcherding/scRepertoire", upgrade = "never")' && \
+    R -e 'devtools::install_github("ncborcherding/scRepertoire@v1", upgrade = "never")' && \
     R -e 'install.packages("LambertW")' && \
     R -e 'install.packages("nortest")' && \
     R -e 'install.packages("doParallel")' && \

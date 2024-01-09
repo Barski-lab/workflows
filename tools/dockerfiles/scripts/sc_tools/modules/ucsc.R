@@ -265,11 +265,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                     "nucleosome_signal",
                     "frip",
                     "blacklist_fraction",
-                    "CTgene",
-                    "CTnt",
-                    "CTaa",
-                    "CTstrict",
-                    "Frequency",
+                    "clntp",
+                    "clntp_counts",
                     "cloneType"
                 )
                 meta_fields_names <- c(
@@ -288,12 +285,9 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                     "Nucleosome signal",
                     "FRiP",
                     "Bl. regions",
-                    "Cl. VDJC gene seq.",
-                    "Cl. nucl. seq.",
-                    "Cl. amino acid seq.",
-                    "Cl. nucl. & gene seq.",
-                    "Cl. frequency",
-                    "Cl. group"
+                    "Clonotype",
+                    "Clonotype counts",
+                    "Clonotype group"
                 )
             }
 
