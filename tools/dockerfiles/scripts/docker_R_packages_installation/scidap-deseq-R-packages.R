@@ -11,7 +11,7 @@ cran_packages <- c(
 # List of Bioconductor packages to install
 bioc_packages <- c(
   "BiocParallel", "limma", "EnhancedVolcano", "hopach", "cmapR", "XVector",
-  "S4Arrays", "SparseArray", "GenomicRanges", "DelayedArray", "DESeq2"
+  "S4Arrays", "SparseArray", "GenomicRanges", "DelayedArray", "DESeq2", "sva"
 )
 
 # Function to install and check CRAN packages

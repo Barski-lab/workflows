@@ -162,17 +162,18 @@
 
 # Base Image
 FROM r-base:4.4.0
-LABEL maintainer="misha.kotliar@gmail.com"
-ENV DEBIAN_FRONTEND noninteractive
+LABEL maintainer="pavlvalera3301@gmail.com"
+ENV DEBIAN_FRONTEND=noninteractive
 
 ################## BEGIN INSTALLATION ######################
 
-WORKDIR /tmp
+#WORKDIR /tmp
 
 # Copying scripts
 COPY ./scripts/install_from_source.R /tmp/install_from_source.R
 COPY ./scripts/run_deseq.R /usr/local/bin/run_deseq.R
-COPY ./scripts/run_deseq_lrt.R /usr/local/bin/run_deseq_lrt.R
+COPY scripts/run_deseq_lrt_step_1.R /usr/local/bin/run_deseq_lrt_step_1.R
+#COPY scripts/run_deseq_lrt_step_2.R /usr/local/bin/run_deseq_lrt_step_2.R
 COPY ./scripts/get_gene_n_tss.R /usr/local/bin/get_gene_n_tss.R
 # Copy the install_packages.R script into the Docker image
 COPY ./scripts/docker_R_packages_installation/scidap-deseq-R-packages.R /tmp/scidap-deseq-R-packages.R
@@ -203,7 +204,8 @@ RUN apt-get install -y -f python3 python3-pip \
 # Installing run_deseq.R, get_gene_n_tss.R, run_deseq_lrt.R scripts
 # and setting permissions to make them executable
 RUN  chmod +x /usr/local/bin/run_deseq.R && \
-     chmod +x /usr/local/bin/run_deseq_lrt.R && \
+     chmod +x /usr/local/bin/run_deseq_lrt_step_1.R && \
+#     chmod +x /usr/local/bin/run_deseq_lrt_step_2.R && \
      chmod +x /usr/local/bin/get_gene_n_tss.R && \
 # Cleaning
     apt-get clean && \
