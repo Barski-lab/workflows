@@ -1097,16 +1097,6 @@ if (!is.null(args$cluster)) {
 # because when exportin to GCT we use row_metadata and col_metadata
 # to force the proper order of rows and columns
 
-print("Exporting normalized read counts to GCT format")
-export_gct(
-  counts_mat = normCounts,
-  row_metadata = row_metadata,
-  # includes features as row names
-  col_metadata = col_metadata,
-  # includes samples as row names
-  location = paste(args$output, "_counts_all.gct", sep = "")
-)
-
 print("Exporting filtered normalized read counts to GCT format")
 export_gct(
     counts_mat=normCounts,
