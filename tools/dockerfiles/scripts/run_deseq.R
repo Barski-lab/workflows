@@ -1029,6 +1029,18 @@ print(paste("Export DESeq report to ", collected_isoforms_filename,
 ))
 
 print("Exporting all normalized read counts to GCT format")
+
+row_metadata <- collected_isoforms %>%
+                dplyr::mutate_at("GeneId", toupper) %>%
+                dplyr::distinct(GeneId, .keep_all=TRUE) %>%                      # to prevent from failing when input files are not grouped by GeneId
+                remove_rownames() %>%
+                column_to_rownames("GeneId") %>%                                 # fails if GeneId is not unique (when run with not grouped by gene data)
+                dplyr::select(log2FoldChange, pvalue, padj)  %>%                 # we are interested only in these three columns
+                arrange(desc(log2FoldChange))
+
+col_metadata <- column_data %>%
+  mutate_at(colnames(.), as.vector)
+
 export_gct(
     counts_mat=normCounts,
     row_metadata=row_metadata,                                   # includes features as row names
@@ -1047,17 +1059,8 @@ print(
   )
 )
 
-row_metadata <- collected_isoforms %>%
-  dplyr::filter(.$padj <= args$fdr) %>%
-  dplyr::mutate_at("GeneId", toupper) %>%
-  dplyr::distinct(GeneId, .keep_all = TRUE) %>% # to prevent from failing when input files are not grouped by GeneId
-  remove_rownames() %>%
-  column_to_rownames("GeneId") %>% # fails if GeneId is not unique (when run with not grouped by gene data)
-  dplyr::select(log2FoldChange, pvalue, padj) %>% # we are interested only in these three columns
-  arrange(desc(log2FoldChange))
-
-col_metadata <- column_data %>%
-  mutate_at(colnames(.), as.vector) # need to convert to vector, because in our metadata everything was a factor
+row_metadata <- row_metadata %>%
+  dplyr::filter(.$padj <= args$fdr) # need to convert to vector, because in our metadata everything was a factor
 
 print("Size of the normalized read counts matrix before filtering")
 print(read_count_matrix_all_size)
