@@ -1028,6 +1028,17 @@ print(paste("Export DESeq report to ", collected_isoforms_filename,
     ""
 ))
 
+print("Exporting all normalized read counts to GCT format")
+export_gct(
+    counts_mat=normCounts,
+    row_metadata=row_metadata,                                   # includes features as row names
+    col_metadata=col_metadata,                                   # includes samples as row names
+    location=paste(args$output, "_counts_all.gct", sep="")
+)
+
+# get size of matrix before filtering
+read_count_matrix_all_size <- dim(normCounts)
+
 print(
   paste(
     "Filtering normalized read counts matrix to include",
@@ -1049,7 +1060,7 @@ col_metadata <- column_data %>%
   mutate_at(colnames(.), as.vector) # need to convert to vector, because in our metadata everything was a factor
 
 print("Size of the normalized read counts matrix before filtering")
-print(dim(normCounts))
+print(read_count_matrix_all_size)
 normCounts <- normCounts[as.vector(rownames(row_metadata)), ]
 print("Size of the normalized read counts matrix after filtering")
 print(dim(normCounts))
@@ -1093,8 +1104,17 @@ export_gct(
   # includes features as row names
   col_metadata = col_metadata,
   # includes samples as row names
-  location = paste(args$output, "_counts.gct", sep = "")
+  location = paste(args$output, "_counts_all.gct", sep = "")
 )
+
+print("Exporting filtered normalized read counts to GCT format")
+export_gct(
+    counts_mat=normCounts,
+    row_metadata=row_metadata,                                        # includes features as row names
+    col_metadata=col_metadata,                                        # includes samples as row names
+    location=paste(args$output, "_counts_filtered.gct", sep="")
+)
+
 
 print("Exporting CLS phenotype data")
 export_cls(categories = col_metadata[, "conditions"], paste(args$output, "_phenotypes.cls",

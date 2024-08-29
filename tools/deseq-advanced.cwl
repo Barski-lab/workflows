@@ -203,10 +203,15 @@ outputs:
     outputBinding:
       glob: "*summary.md"
 
-  read_counts_file:
+  read_counts_file_all:
     type: File
     outputBinding:
-      glob: "*counts.gct"
+      glob: "*counts_all.gct"
+
+  read_counts_file_filtered:
+    type: File
+    outputBinding:
+      glob: "*counts_filtered.gct"
 
   phenotypes_file:
     type: File
