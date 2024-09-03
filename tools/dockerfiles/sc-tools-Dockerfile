@@ -2,15 +2,15 @@
 # Dockerfile
 #
 # Software:         set of R scripts for single-cell data analysis
-# Software Version: v0.0.40
+# Software Version: v0.0.41
 # Description:      Dockerized version of the set of R scripts for
 #                   single-cell data analysis
 # Website:          https://github.com/Barski-lab/workflows
 # Provides:         set of R scripts for single-cell data analysis
 # Base Image:       satijalab/seurat:latest
-# Build Cmd:        docker build --platform linux/amd64 --no-cache --rm -t biowardrobe2/sc-tools:v0.0.40 -f sc-tools-Dockerfile .
-# Pull Cmd:         docker pull --platform linux/amd64 biowardrobe2/sc-tools:v0.0.40
-# Run Cmd:          docker run --platform linux/amd64 --rm -ti biowardrobe2/sc-tools:v0.0.40 /bin/bash
+# Build Cmd:        docker build --platform linux/amd64 --no-cache --rm -t biowardrobe2/sc-tools:v0.0.41 -f sc-tools-Dockerfile .
+# Pull Cmd:         docker pull --platform linux/amd64 biowardrobe2/sc-tools:v0.0.41
+# Run Cmd:          docker run --platform linux/amd64 --rm -ti biowardrobe2/sc-tools:v0.0.41 /bin/bash
 ##########################################################################################################
 #
 # Notes:
@@ -36,6 +36,17 @@
 #     sc_vdj_profile.R --help && \
 #     sc_cb_utils_atac_search.R --help && \
 #     sc_cb_utils_split_mex.R --help
+#
+# v0.0.41 -- based on biowardrobe2/sc-tools:v0.0.40
+# - Updated UCSC Cellbrowser to 1.2.8.
+# - Save gene and peak markers in the same rds file
+#   as the main Seurat object.
+# - Export multiple resolutions with the correspondent
+#   gene and peaks markers into the UCSC Cellbrowser.
+# - Fixed a bug in the heatmaps when exporting gene
+#   markers from the multiple resolutions.
+# - Added NA color for not assigned cell cycle phase,
+#   otherwise fails to output some of the plots.
 #
 # v0.0.40 -- based on biowardrobe2/sc-tools:v0.0.39
 # - Added sc_report_wrapper.R script to export HTML report
@@ -332,7 +343,7 @@ ENV DEBIAN_FRONTEND noninteractive
 WORKDIR /tmp
 
 ENV R_MAX_VSIZE=200000000000 \
-    CB_VERSION=1.2.5 \
+    CB_VERSION=1.2.8 \
     MACS2_VERSION=2.2.8 \
     SCTRIANGULATE_VERSION=0.12.0 \
     SCIPY_VERSION=1.7.3 \

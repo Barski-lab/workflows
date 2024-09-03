@@ -789,7 +789,6 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
-        palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep=""),
     )
 }
