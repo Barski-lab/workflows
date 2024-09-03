@@ -6,6 +6,7 @@ suppressMessages(library(argparse))
 suppressMessages(library(BiocParallel))
 suppressMessages(library(pheatmap))
 suppressMessages(library(DESeq2))
+suppressMessages(library(tidyverse))
 
 ################################################################################################
 # v0.0.1
@@ -79,6 +80,13 @@ load_expression_data <- function(filenames,
       header = TRUE,
       stringsAsFactors = FALSE
     )
+    # FOR TEST ONLY TO REDUCE NUMBER OF ROWS AND SPEED UP TESTING
+    if (args$test_mode) {
+      print("Test mode is ON, each sample will be limited to 100 rows")
+      isoforms <- isoforms %>%
+      dplyr::slice_head(n = 100)
+    }
+
     print(paste("Load ", nrow(isoforms), " rows from ", filenames[i], sep = ""))
     colnames(isoforms)[colnames(isoforms) == read_colname] <- paste(prefixes[i], read_colname, sep = " ")
     colnames(isoforms)[colnames(isoforms) == rpkm_colname] <- paste(prefixes[i], rpkm_colname, sep = " ")
@@ -96,6 +104,7 @@ load_expression_data <- function(filenames,
     nrow(collected_isoforms),
     sep = ""
   ))
+
   return(collected_isoforms)
 }
 
@@ -106,17 +115,6 @@ assert_args <- function(args) {
     quit(save = "no",
          status = 1,
          runLast = FALSE)
-  }
-  if (length(args$contrast) != 3) {
-    args$contrast <- unlist(strsplit(args$contrast, "\\s+", fixed = FALSE)) # split by any number of spaces
-    print("Split --contrast by spaces")
-    print(args$contrast)
-    if (length(args$contrast) != 3) {
-      print("Exiting: --contrast should have exaclty three values")
-      quit(save = "no",
-           status = 1,
-           runLast = FALSE)
-    }
   }
   tryCatch(
     expr = {
@@ -235,6 +233,10 @@ get_args <- function() {
     type = "integer",
     default = 1
   )
+  parser$add_argument("--test_mode",
+                      help = "Run for test, only first 100 rows",
+                      action = "store_true",
+                      default = FALSE)
   args <- assert_args(parser$parse_args(commandArgs(trailingOnly = TRUE)))
   return(args)
 }
@@ -469,6 +471,24 @@ colnames(read_counts_data_df) <- lapply(colnames(read_counts_data_df), function(
 })
 print("Read counts data")
 print(head(read_counts_data_df))
+
+# Convert both rownames of metadata_df and colnames of read_counts_data_df to lowercase
+print("Check if metadata file rows are present in read counts data columns")
+print(setdiff(rownames(metadata_df), colnames(read_counts_data_df)))
+rownames(metadata_df) <- tolower(rownames(metadata_df))
+colnames(read_counts_data_df) <- tolower(colnames(read_counts_data_df))
+print("Read counts data columns")
+print(colnames(read_counts_data_df))
+print("Metadata file rows")
+print(rownames(metadata_df))
+# Trim whitespace from column names and row names
+colnames(read_counts_data_df) <- trimws(colnames(read_counts_data_df))
+rownames(metadata_df) <- trimws(rownames(metadata_df))
+
+# Remove any non-visible characters
+colnames(read_counts_data_df) <- gsub("[^[:alnum:]_]", "", colnames(read_counts_data_df))
+rownames(metadata_df) <- gsub("[^[:alnum:]_]", "", rownames(metadata_df))
+
 tryCatch(
   expr = {
     # Try reorder columns in read_counts_data_df based on metadata_df rownames
@@ -490,28 +510,29 @@ tryCatch(
   }
 )
 
-print("Run DESeq2 using LRT")
 dse <- DESeqDataSetFromMatrix(countData = read_counts_data_df,
                               colData = metadata_df,
                               design = design_formula)
 
+print("Run DESeq2 using Wald")
 dsq_wald <- DESeq(
   dse,
   test = "Wald",
-  quiet = TRUE,
+  quiet = FALSE,
   parallel = TRUE
 )
 
-
+print("Run DESeq2 using LRT")
 dsq_lrt <- DESeq(
   dse,
   test = "LRT",
   reduced = reduced_formula,
-  quiet = TRUE,
+  quiet = FALSE,
   parallel = TRUE
 )
 
-all_contrasts <- generate_contrasts(dsq)
+print("Generate contrasts")
+all_contrasts <- generate_contrasts(dsq_wald)
 
 res <- results(dsq_lrt, 
                alpha = args$fdr,
@@ -534,9 +555,11 @@ expression_data_df[, "-LOG10(pval)"] <- -log(as.numeric(expression_data_df$pval)
 expression_data_df[, "-LOG10(padj)"] <- -log(as.numeric(expression_data_df$padj), 10)
 
 contrasts_filename <- paste(args$output, "_contrasts_table.tsv", sep = "")
+print(all_contrasts)
+print(contrasts_filename)
 write.table(
   all_contrasts,
-  file = filename,
+  file = contrasts_filename,
   sep = "\t",
   row.names = FALSE,
   col.names = TRUE,
@@ -545,10 +568,10 @@ write.table(
 
 print(paste("Export contrasts to", contrasts_filename, sep = " "))
 
-results_filename <- paste(args$output, "_table.tsv", sep = "")
+results_filename <- paste(args$output, "_gene_exp_table.tsv", sep = "")
 write.table(
   expression_data_df,
-  file = filename,
+  file = results_filename,
   sep = "\t",
   row.names = FALSE,
   col.names = TRUE,
