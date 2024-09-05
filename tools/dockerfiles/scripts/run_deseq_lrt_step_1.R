@@ -241,6 +241,65 @@ get_args <- function() {
   return(args)
 }
 
+generate_lrt_md <- function(deseq_results, full_formula, reduced_formula, output_file, alpha = 0.1) {
+  # Initialize the markdown content
+  md_content <- ""
+
+  # Add DESeq LRT results summary based on padj value only
+  if (!is.null(deseq_results)) {
+    # Start summarizing the LRT results
+    md_content <- paste0(md_content, "# Likelihood Ratio Test (LRT) Results\n\n---\n\n")
+
+    # Describe the full and reduced formulas
+    md_content <- paste0(
+      md_content,
+      "Based on your **full formula**: `", full_formula, "` and **reduced formula**: `", reduced_formula, "`, ",
+      "this LRT analysis tests whether removing the interaction term (or terms) significantly affects gene expression. ",
+      "The test uses only the **FDR adjusted p-value** (padj) to determine significance, as Log Fold Change (LFC) is irrelevant in the context of LRT.\n\n"
+    )
+
+    # Calculate the number of significant genes based on padj value
+    significant_genes <- sum(deseq_results$padj < alpha, na.rm = TRUE)
+    total_genes <- sum(!is.na(deseq_results$padj))
+
+    # Extract the outliers and low counts from the DESeq results summary
+    summary_output <- capture.output(summary(deseq_results))
+
+    outliers <- as.numeric(gsub(".*: ", "", summary_output[6]))  # Outliers
+    low_counts <- as.numeric(gsub(".*: ", "", summary_output[7]))  # Low counts (independent filtering)
+
+    # Add a summary of significant genes
+    lrt_summary <- paste0(
+      "### Results Summary\n\n",
+      "From this LRT analysis, **", significant_genes, " genes** (out of ", total_genes, " tested) are identified as significant with a padj value < ", alpha, ".\n\n",
+    )
+
+    # Add the information about outliers and low counts
+    lrt_summary <- paste0(lrt_summary,
+      "**Outliers**: ", outliers, " genes were detected as outliers and excluded from analysis.\n\n",
+      "**Low counts**: ", low_counts, " genes were removed due to low counts and independent filtering.\n\n"
+    )
+
+    # Add this summary to the markdown content
+    md_content <- paste0(md_content, lrt_summary)
+
+    # Add explanation for the next steps
+    next_steps <- paste0(
+      "---\n\n",
+      "### Next Steps\n\n",
+      "If the number of significant genes is substantial, consider including the interaction term in your design formula ",
+      "for a more detailed analysis of differential gene expression.\n\n",
+      "For further insights and to explore detailed contrasts using the Wald test for the complex design formula, ",
+      "please visit the **Complex Interaction Analysis** tab for more information.\n\n"
+    )
+
+    md_content <- paste0(md_content, next_steps)
+  }
+
+  # Write the content to the output file
+  writeLines(md_content, con = output_file)
+}
+
 # Function to generate main effect contrasts with different reference levels
 generate_main_effect_contrasts <- function(dds, factors, factor_levels) {
   contrasts <- list()
@@ -567,6 +626,10 @@ write.table(
 )
 
 print(paste("Export contrasts to", contrasts_filename, sep = " "))
+
+lrt_report_filename <- paste(args$output, "_lrt_results.md", sep = "")
+generate_lrt_md(dsq_lrt, args$design, args$reduced, lrt_report_filename)
+print(paste("Export LRT markdown report to", lrt_report_filename, sep = " "))
 
 results_filename <- paste(args$output, "_gene_exp_table.tsv", sep = "")
 write.table(
