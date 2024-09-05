@@ -629,7 +629,7 @@ write.table(
 
 print(paste("Export contrasts to", contrasts_filename, sep = " "))
 
-lrt_report_filename <- paste(args$output, "_lrt_results.md", sep = "")
+lrt_report_filename <- paste(args$output, "_lrt_result.md", sep = "")
 summary(dsq_lrt_res)
 generate_lrt_md(dsq_lrt_res, args$design, args$reduced, lrt_report_filename)
 print(paste("Export LRT markdown report to", lrt_report_filename, sep = " "))
