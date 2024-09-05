@@ -265,19 +265,21 @@ generate_lrt_md <- function(deseq_results, full_formula, reduced_formula, output
     # Extract the outliers and low counts from the DESeq results summary
     summary_output <- capture.output(summary(deseq_results))
 
-    outliers <- as.numeric(gsub(".*: ", "", summary_output[6]))  # Outliers
-    low_counts <- as.numeric(gsub(".*: ", "", summary_output[7]))  # Low counts (independent filtering)
+    outliers <- gsub(".*: ", "", summary_output[6])  # Outliers
+    low_counts <- gsub(".*: ", "", summary_output[7])  # Low counts (independent filtering)
+    mean_count <- gsub("[^0-9]", "", summary_output[8])
 
     # Add a summary of significant genes
     lrt_summary <- paste0(
       "### Results Summary\n\n",
-      "From this LRT analysis, **", significant_genes, " genes** (out of ", total_genes, " tested) are identified as significant with a padj value < ", alpha, ".\n\n",
+      "From this LRT analysis, **", significant_genes, " genes** (out of ", total_genes, " tested) are identified as significant with a padj value < ", alpha, ".\n\n"
     )
 
     # Add the information about outliers and low counts
     lrt_summary <- paste0(lrt_summary,
-      "**Outliers**: ", outliers, " genes were detected as outliers and excluded from analysis.\n\n",
-      "**Low counts**: ", low_counts, " genes were removed due to low counts and independent filtering.\n\n"
+      "**Outliers**<sup>1</sup>: ", outliers, " of genes were detected as outliers and excluded from analysis.\n\n",
+      "**Low counts**<sup>2</sup>: ", low_counts, " of genes were removed due to low counts (mean <", mean_count,  ") and independent filtering.\n\n",
+      "Arguments of ?DESeq2::results():   \n<sup>1</sup> - see 'cooksCutoff',\n<sup>2</sup> - see 'independentFiltering'\n\n"
     )
 
     # Add this summary to the markdown content
@@ -593,15 +595,15 @@ dsq_lrt <- DESeq(
 print("Generate contrasts")
 all_contrasts <- generate_contrasts(dsq_wald)
 
-res <- results(dsq_lrt, 
+dsq_lrt_res <- results(dsq_lrt,
                alpha = args$fdr,
                independentFiltering = TRUE)
 
-print("Results description")
-print(mcols(res))
+print("LRT Results description")
+print(mcols(dsq_lrt_res))
 
 # Filter DESeq2 output
-res_filtered <- as.data.frame(res[, c(2, 5, 6)])
+res_filtered <- as.data.frame(dsq_lrt_res[, c(2, 5, 6)])
 res_filtered$log2FoldChange[is.na(res_filtered$log2FoldChange)] <- 0
 res_filtered[is.na(res_filtered)] <- 1
 # Export results to TSV file
@@ -628,7 +630,8 @@ write.table(
 print(paste("Export contrasts to", contrasts_filename, sep = " "))
 
 lrt_report_filename <- paste(args$output, "_lrt_results.md", sep = "")
-generate_lrt_md(dsq_lrt, args$design, args$reduced, lrt_report_filename)
+summary(dsq_lrt_res)
+generate_lrt_md(dsq_lrt_res, args$design, args$reduced, lrt_report_filename)
 print(paste("Export LRT markdown report to", lrt_report_filename, sep = " "))
 
 results_filename <- paste(args$output, "_gene_exp_table.tsv", sep = "")
