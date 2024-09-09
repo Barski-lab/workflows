@@ -644,28 +644,24 @@ all_markers <- NULL
 if (args$diffpeaks){
     print("Identifying differentially accessible peaks between each pair of clusters for all resolutions")
     DefaultAssay(seurat_data) <- "ATAC"                              # safety measure
-    all_markers <- analyses$get_markers_by_res(
+    seurat_data <- analyses$get_markers_by_res(
         seurat_data=seurat_data,
         assay="ATAC",
         resolution_prefix="atac_res",
         latent_vars="nCount_ATAC",                                  # to remove the influence of sequencing depth
         args=args
     )
-    if (!is.null(all_markers)){
-        io$export_data(
-            all_markers,
-            paste(args$output, "_peak_markers.tsv", sep="")
-        )
-    }
+    debug$print_info(seurat_data, args)
+    io$export_markers(
+        data=seurat_data,
+        assay="ATAC",
+        markers_regex="^atac_res",
+        location=paste0(args$output, "_peak_markers.tsv")
+    )
 }
 
 ## ----
 if(args$cbbuild){
-    if(!is.null(all_markers)){
-        all_markers <- all_markers %>%
-                       dplyr::filter(.$resolution==args$resolution[1]) %>%          # won't fail even if resolution is not present
-                       dplyr::select(-c("resolution"))
-    }
     print("Reordering reductions to have atacumap on the first place")              # will be shown first in UCSC Cellbrowser
     reduc_names <- names(seurat_data@reductions)
     ordered_reduc_names <- c("atacumap", reduc_names[reduc_names!="atacumap"])      # we checked before that atacumap is present
@@ -675,9 +671,7 @@ if(args$cbbuild){
         assay="ATAC",
         slot="counts",
         short_label="ATAC",
-        markers=all_markers,                                                        # can be NULL
         label_field=paste0("Clustering (atac ", args$resolution[1], ")"),           # always use only the first resolution
-        palette_colors=graphics$D40_COLORS,                                         # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep="")
     )
 }

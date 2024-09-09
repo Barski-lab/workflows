@@ -73,7 +73,8 @@ export(
     "expand_qc_suffix",
     "D40_COLORS",
     "D24_COLORS",
-    "CC_COLORS"
+    "CC_COLORS",
+    "NA_COLOR"
 )
 
 # https://sashamaps.net/docs/resources/20-colors/
@@ -97,7 +98,8 @@ D24_COLORS <- c(
   "#A6761D", "#1B9E77", "#D95F02", "#7570B3", "#E7298A",
   "#66A61E", "#E6AB02", "#A6761D", "#1B9E77"
 )
-CC_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF")
+NA_COLOR <- "#E1F6FF"
+CC_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", NA_COLOR)        # we added NA color, because sometimes the cell cycle phase is not being assigned
 
 get_theme <- function(theme){
     return (

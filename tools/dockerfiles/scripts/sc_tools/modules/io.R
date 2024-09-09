@@ -17,6 +17,7 @@ import("magrittr", `%>%`, attach=TRUE)
 export(
     "get_file_type",
     "export_data",
+    "export_markers",
     "export_clonotypes",
     "export_rds",
     "export_gct",
@@ -157,10 +158,42 @@ export_data <- function(data, location, row_names=FALSE, col_names=TRUE, quote=F
                 col.names=col_names,
                 quote=quote
             )
-            base::print(base::paste("Exporting data to", location, sep=" "))
+            base::print(base::paste("Exporting data to", location))
         },
         error = function(e){
             base::print(base::paste("Failed to export data to", location, "due to", e))
+        }
+    )
+}
+
+export_markers <- function(data, assay, markers_regex, location){
+    base::tryCatch(
+        expr = {
+            markers_fields <- base::grep(
+                markers_regex,
+                names(data@misc$markers[[assay]]),
+                value=TRUE, ignore.case=TRUE
+            )
+            all_markers <- NULL
+            for (i in 1:length(markers_fields)){
+                current_markers <- data@misc$markers[[assay]][[markers_fields[i]]] %>%
+                                   base::cbind(group=markers_fields[i], .)
+                if (is.null(all_markers)) {
+                    all_markers <- current_markers
+                } else {
+                    all_markers <- base::rbind(all_markers, current_markers)
+                }
+            }
+            base::print(
+                base::paste(
+                    "Collecting", assay, "markers calculated for",
+                    paste(markers_fields, collapse=", "), "metadata columns"
+                )
+            )
+            export_data(all_markers, location)
+        },
+        error = function(e){
+            base::print(base::paste("Failed to collect markers due to", e))
         }
     )
 }

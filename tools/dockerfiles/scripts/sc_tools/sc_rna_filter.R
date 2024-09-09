@@ -722,7 +722,6 @@ if(args$cbbuild){
         assay="RNA",
         slot="counts",
         short_label="RNA",
-        palette_colors=graphics$D40_COLORS,                                                # to have colors correspond to the plots
         rootname=paste(args$output, "_cellbrowser", sep=""),
     )
 }

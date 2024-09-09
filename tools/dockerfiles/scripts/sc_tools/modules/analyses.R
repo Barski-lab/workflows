@@ -540,7 +540,7 @@ get_dimensionality <- function(seurat_data, reduction, k=20){                   
 rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
-    backup_reductions <- c()                                                    # RNA integration main remove atac related reductions so we need to back them up
+    backup_reductions <- c()                                                    # RNA integration may remove atac related reductions so we need to back them up
     reduction_names <- c(
         "atac_lsi",
         "atacumap",
@@ -558,11 +558,30 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
             backup_reductions[[reduction_name]] <- seurat_data[[reduction_name]]
         }
     }
+    backup_misc <- c()                                                           # RNA integration may remove miscellaneous (@misc)
+    misc_names <- c(
+        "markers",
+        "trajectories",
+        "vdj",
+        "atac_reduce"
+    )
+    for (misc_name in misc_names){
+        if (misc_name %in% names(seurat_data@misc)){
+            base::print(base::paste("Backing up miscellaneous", misc_name))
+            backup_misc[[misc_name]] <- seurat_data@misc[[misc_name]]
+        }
+    }
     seurat_data <- rna_preprocess(seurat_data, args, cell_cycle_data)           # sets "rna_integrated" as a default assay for integrated data, and either "RNA" or "SCT" for not integrated data
     if (length(backup_reductions) > 0){                                         # restoring backed up reductions
         for (reduction_name in names(backup_reductions)){
             base::print(base::paste("Restoring reduction", reduction_name, "from backup"))
             seurat_data[[reduction_name]] <- backup_reductions[[reduction_name]]
+        }
+    }
+    if (length(backup_misc) > 0){                                                # restoring backed up miscellaneous (@misc)
+        for (misc_name in names(backup_misc)){
+            base::print(base::paste("Restoring miscellaneous", misc_name, "from backup"))
+            seurat_data@misc[[misc_name]] <- backup_misc[[misc_name]]
         }
     }
     if (!is.null(cell_cycle_data) && all(c("S.Score", "G2M.Score", "CC.Difference", "Phase") %in% base::colnames(seurat_data@meta.data))){
@@ -952,12 +971,12 @@ add_wnn_clusters <- function(seurat_data, graph_name, reductions, dimensions, ar
 }
 
 get_markers <- function(seurat_data, assay, group_by, args, latent_vars=NULL, min_diff_pct=-Inf){
-    SeuratObject::DefaultAssay(seurat_data) <- assay                            # safety measure
+    backup_assay <- SeuratObject::DefaultAssay(seurat_data)
+    SeuratObject::DefaultAssay(seurat_data) <- assay
     SeuratObject::Idents(seurat_data) <- group_by
-    markers <- NULL
     base::tryCatch(
         expr = {
-            markers <- Seurat::FindAllMarkers(
+            seurat_data@misc$markers[[assay]][[group_by]] <- Seurat::FindAllMarkers(        # might be empty dataframe if no markers found
                 seurat_data,
                 logfc.threshold=base::ifelse(is.null(args$logfc), 0.25, args$logfc),
                 min.pct=base::ifelse(is.null(args$minpct), 0.1, args$minpct),
@@ -966,47 +985,37 @@ get_markers <- function(seurat_data, assay, group_by, args, latent_vars=NULL, mi
                 min.diff.pct=min_diff_pct,
                 latent.vars=latent_vars,
                 verbose=FALSE
-            ) %>% dplyr::relocate(cluster, gene, .before=1) %>% dplyr::rename("feature"="gene")
-            if (base::nrow(markers) == 0){
-                return (NULL)                                                   # to be able to check later just with is.null
-            }
+            ) %>%
+            dplyr::relocate(cluster, gene, .before=1) %>%
+            dplyr::rename("feature"="gene")
         },
         error = function(e){
-            base::print(base::paste("Failed to identify markers for cells grouped by", group_by, "with error -", e))
-        },
-        finally = {
-            SeuratObject::Idents(seurat_data) <- "new.ident"                    # safety measure
+            base::print(
+                base::paste(
+                    "Failed to identify markers for",
+                    group_by, "with error -", e
+                )
+            )
         }
     )
-    return (markers)
+    SeuratObject::DefaultAssay(seurat_data) <- backup_assay
+    SeuratObject::Idents(seurat_data) <- "new.ident"                    # safety measure
+    return (seurat_data)
 }
 
 get_markers_by_res <- function(seurat_data, assay, resolution_prefix, args, latent_vars=NULL, min_diff_pct=-Inf){
-    SeuratObject::DefaultAssay(seurat_data) <- assay                # safety measure
-    SeuratObject::Idents(seurat_data) <- "new.ident"                # safety measure
-    all_putative_markers <- NULL
     for (i in 1:length(args$resolution)) {
-        resolution <- args$resolution[i]
-        markers <- get_markers(
+        seurat_data <- get_markers(                                 # doesn't change assay, sets new.ident as default
             seurat_data=seurat_data,
             assay=assay,
-            group_by=base::paste(resolution_prefix, resolution, sep="."),
+            group_by=base::paste(resolution_prefix, args$resolution[i], sep="."),
             args=args,
             latent_vars=latent_vars,
             min_diff_pct=min_diff_pct
         )
-        if (!is.null(markers)){
-            markers <- markers %>% base::cbind(resolution=resolution, .)
-            if (!is.null(all_putative_markers)) {
-                all_putative_markers <- base::rbind(all_putative_markers, markers)
-            } else {
-                all_putative_markers <- markers
-            }
-            base::rm(markers)                                       # remove unused data
-        }
     }
     base::gc(verbose=FALSE)
-    return (all_putative_markers)
+    return (seurat_data)
 }
 
 atac_preprocess <- function(seurat_data, args) {
@@ -1192,7 +1201,7 @@ atac_preprocess <- function(seurat_data, args) {
 atac_analyze <- function(seurat_data, args){
     SeuratObject::DefaultAssay(seurat_data) <- "ATAC"                           # safety measure
     SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
-    backup_reductions <- c()                                                    # ATAC integration main remove RNA related reductions so we need to back them up
+    backup_reductions <- c()                                                    # ATAC integration may remove RNA related reductions so we need to back them up
     reduction_names <- c(
         "ccpca",
         "pca",
@@ -1208,11 +1217,30 @@ atac_analyze <- function(seurat_data, args){
             backup_reductions[[reduction_name]] <- seurat_data[[reduction_name]]
         }
     }
+    backup_misc <- c()                                                           # ATAC integration may remove miscellaneous (@misc)
+    misc_names <- c(
+        "markers",
+        "trajectories",
+        "vdj",
+        "atac_reduce"                                                            # even if it was present it will be overwritten
+    )
+    for (misc_name in misc_names){
+        if (misc_name %in% names(seurat_data@misc)){
+            base::print(base::paste("Backing up miscellaneous", misc_name))
+            backup_misc[[misc_name]] <- seurat_data@misc[[misc_name]]
+        }
+    }
     seurat_data <- atac_preprocess(seurat_data, args)                            # adds "atac_lsi" reduction
     if (length(backup_reductions) > 0){                                          # restoring backed up reductions
         for (reduction_name in names(backup_reductions)){
             base::print(base::paste("Restoring reduction", reduction_name, "from backup"))
             seurat_data[[reduction_name]] <- backup_reductions[[reduction_name]]
+        }
+    }
+    if (length(backup_misc) > 0){                                                # restoring backed up miscellaneous (@misc)
+        for (misc_name in names(backup_misc)){
+            base::print(base::paste("Restoring miscellaneous", misc_name, "from backup"))
+            seurat_data@misc[[misc_name]] <- backup_misc[[misc_name]]
         }
     }
     datasets_count <- length(base::unique(base::as.vector(as.character(seurat_data@meta.data$new.ident))))

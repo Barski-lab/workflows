@@ -7,6 +7,10 @@ import("reticulate", attach=FALSE)
 import("tidyselect", attach=FALSE)
 import("magrittr", `%>%`, attach=TRUE)
 
+HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly=FALSE)[grep("--file=", commandArgs(trailingOnly=FALSE))])))})()
+suppressMessages(graphics <- modules::use(file.path(HERE, "modules/graphics.R")))
+suppressMessages(analyses <- modules::use(file.path(HERE, "modules/analyses.R")))
+
 export(
     "export_cellbrowser",
     "export_loupe"
@@ -204,6 +208,8 @@ shortLabel="%s"
 geneLabel="Feature"
 exprMatrix="exprMatrix.tsv.gz"
 meta="meta.tsv"
+defQuantPal="tol-sq-blue"
+defCatPal="rainbow"
 radius=%i
 alpha=%f
 geneIdType="auto"
@@ -360,33 +366,61 @@ coords=%s'
     cb$cellbrowser$build(rootname, html_data_dir)
 }
 
-get_color_data <- function(seurat_data, metadata_column, palette_colors){
-    categories <- base::levels(seurat_data@meta.data[[metadata_column]])       # will depend on the order of levels
-    if (is.null(categories)) {                                                 # not a factor
-        categories <- base::sort(                                              # alphabetically sorted
-            base::unique(
-                base::as.vector(
-                    as.character(seurat_data@meta.data[[metadata_column]])
+get_color_data <- function(
+    seurat_data,
+    metadata_column,
+    collected_color_data=NULL,
+    palette_colors=graphics$D40_COLORS
+){
+    if (length(metadata_column) > 0){
+        for (i in 1:length(metadata_column)){
+            current_column <- metadata_column[i]
+            categories <- base::levels(seurat_data@meta.data[[current_column]])       # will depend on the order of levels
+            if (is.null(categories)) {                                                 # not a factor
+                categories <- base::sort(                                              # alphabetically sorted
+                    base::unique(
+                        base::as.vector(
+                            as.character(seurat_data@meta.data[[current_column]])
+                        )
+                    )
                 )
+            }
+            current_color_data <- base::data.frame(
+                category=categories,
+                color=palette_colors[1:length(categories)],
+                check.names=FALSE,
+                stringsAsFactors=FALSE
             )
-        )
+            if (!is.null(collected_color_data)){
+                collected_color_data <- base::rbind(collected_color_data, current_color_data)
+            } else {
+                collected_color_data <- current_color_data
+            }
+        }
+        collected_color_data <- collected_color_data %>%
+                                dplyr::distinct(category, .keep_all=TRUE)
     }
-    color_data <- base::data.frame(
-        category=categories,
-        color=palette_colors[1:length(categories)],
-        check.names=FALSE,
-        stringsAsFactors=FALSE
-    )
-    return (color_data)
+    return (collected_color_data)
 }
 
 
-export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=NULL, features=NULL, markers=NULL, dot_radius=3, dot_alpha=0.5, palette_colors=NULL, short_label="cellbrowser", is_nested=FALSE, meta_fields=NULL, meta_fields_names=NULL){
+export_cellbrowser <- function(
+    seurat_data, assay, slot,
+    rootname,
+    label_field=NULL,                        # the default label field (should be one of the metadata columns)
+    features=NULL,
+    dot_radius=3, dot_alpha=0.5,
+    palette_colors=graphics$D40_COLORS,
+    short_label="cellbrowser",
+    is_nested=FALSE,
+    meta_fields=NULL,
+    meta_fields_names=NULL
+){
     base::tryCatch(
         expr = {
             backup_assay <- SeuratObject::DefaultAssay(seurat_data)
-            SeuratObject::DefaultAssay(seurat_data) <- assay                 # safety measure
-            SeuratObject::Idents(seurat_data) <- "new.ident"                 # safety measure
+            SeuratObject::DefaultAssay(seurat_data) <- assay                       # safety measure
+            SeuratObject::Idents(seurat_data) <- "new.ident"                       # safety measure
 
             datasets_count <- length(base::unique(base::as.vector(as.character(seurat_data@meta.data$new.ident))))
             conditions_count <- length(base::unique(base::as.vector(as.character(seurat_data@meta.data$condition))))
@@ -394,123 +428,170 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                 base::as.vector(as.character(seurat_data@meta.data$new.ident)) != base::as.vector(as.character(seurat_data@meta.data$condition))
             )
 
-            color_data <- base::data.frame(                                  # here we will collect all colors
+            color_data <- base::data.frame(                                        # here we will collect all colors
                 category=character(),
                 color=character(),
                 check.names=FALSE,
                 stringsAsFactors=FALSE
             ) %>%
-            tibble::add_row(category="NA", color="#E1F6FF") %>%              # color for NA
-            tibble::add_row(category="G1", color="#80FFB5") %>%              # color for G1 cell cycle phase
-            tibble::add_row(category="S", color="#FFB580") %>%               # color for S cell cycle phase
-            tibble::add_row(category="G2M", color="#8093FF")                 # color for G2M cell cycle phase
+            tibble::add_row(category="NA", color=graphics$NA_COLOR) %>%            # color for NA
+            tibble::add_row(category="G1", color=graphics$CC_COLORS[1]) %>%        # color for G1 cell cycle phase
+            tibble::add_row(category="S", color=graphics$CC_COLORS[2]) %>%         # color for S cell cycle phase
+            tibble::add_row(category="G2M", color=graphics$CC_COLORS[3])           # color for G2M cell cycle phase
 
             if (is.null(meta_fields) || is.null(meta_fields_names)){
                 meta_fields <- DEFAULT_META_FIELDS
                 meta_fields_names <- DEFAULT_META_FIELDS_NAMES
             }
 
-            # clonotype_fileds <- c("CTgene", "CTnt", "CTaa", "CTstrict", "Frequency", "cloneType")
-            # if (all(clonotype_fileds %in% base::colnames(seurat_data@meta.data))){
-            #     seurat_data@meta.data <- seurat_data@meta.data %>%
-            #                              dplyr::mutate_at(
-            #                                  clonotype_fileds, ~tidyr::replace_na(., "")
-            #                              )
-            # }
-
             if (datasets_count > 1){
                 meta_fields <- base::append(meta_fields, "new.ident", 0)
                 meta_fields_names <- base::append(meta_fields_names, "Dataset", 0)
-                if (!is.null(palette_colors)){
-                    color_data <- base::rbind(
-                        color_data,
-                        get_color_data(seurat_data, "new.ident", palette_colors)
-                    )
-                }
+                color_data <- get_color_data(seurat_data, "new.ident", color_data, palette_colors)
             }
 
             if (conditions_count > 1 && not_default_conditions){
                 meta_fields <- base::append(meta_fields, "condition", 1)
                 meta_fields_names <- base::append(meta_fields_names, "Condition", 1)
-                if (!is.null(palette_colors)){
-                    color_data <- base::rbind(
-                        color_data,
-                        get_color_data(seurat_data, "condition", palette_colors)
-                    )
-                }
+                color_data <- get_color_data(seurat_data, "condition", color_data, palette_colors)
             }
 
-            clustering_fields <- base::grep("_res\\.", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
+            clustering_fields <- base::grep(
+                "^(?!custom_).*_res\\.", base::colnames(seurat_data@meta.data),    # we exclude columns with "^custom" because the cell types may be stored in "custom_res."
+                value=TRUE, ignore.case=TRUE, perl=TRUE                            # perl is true to have (?!) feature available
+            )
             clustering_fields_names <- base::as.vector(
-                base::unlist(                                                                              # when nothing found it returns named list that should be unlisted
+                base::unlist(                                                      # when nothing found it returns named list that should be unlisted
                     base::sapply(
                         clustering_fields,
                         function(line) {
-                            split_line <- base::unlist(base::strsplit(line, split="_res\\."))
-                            base::paste("Clustering (", split_line[1], " ", split_line[2], ")", sep="")
+                            base::paste(
+                                "Clustering", base::paste0("(", base::gsub("_res.", " ", line), ")")
+                            )
                         }
                     )
                 )
             )
             meta_fields <- base::append(meta_fields, clustering_fields)
             meta_fields_names <- base::append(meta_fields_names, clustering_fields_names)
-            if (!is.null(palette_colors) && length(clustering_fields) > 0){                                # need to check if clustering_fields is not empty
-                for (i in 1:length(clustering_fields)){
-                    color_data <- base::rbind(
-                        color_data,
-                        get_color_data(seurat_data, clustering_fields[i], palette_colors)
-                    )
-                }
-            }
+            color_data <- get_color_data(seurat_data, clustering_fields, color_data, palette_colors)
 
             custom_fields <- base::grep("^custom_", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
             custom_fields_names <- base::gsub("custom_", "Custom ", custom_fields)
             meta_fields <- base::append(meta_fields, custom_fields)
             meta_fields_names <- base::append(meta_fields_names, custom_fields_names)
-            if (!is.null(palette_colors) && length(custom_fields) > 0){                                    # need to check if custom_fields is not empty
-                for (i in 1:length(custom_fields)){
-                    color_data <- base::rbind(
-                        color_data,
-                        get_color_data(seurat_data, custom_fields[i], palette_colors)
-                    )
-                }
-            }
+            color_data <- get_color_data(seurat_data, custom_fields, color_data, palette_colors)
 
             pseudotime_fields <- base::grep("^ptime_", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
             pseudotime_fields_names <- base::gsub("ptime_", "Pseudotime from ", pseudotime_fields)
             meta_fields <- base::append(meta_fields, pseudotime_fields)
             meta_fields_names <- base::append(meta_fields_names, pseudotime_fields_names)
 
-            show_labels <- TRUE                                                      # by default we try to show labels, but we hide them if cluster_field wasn't provided
-            if (is.null(label_field) || !(label_field %in% (meta_fields_names))){    # either not provided or not correct label_field
+            collected_markers <- NULL                                                                     # we collect markers only for clustering and custom fields
+            collected_top_features <- c()                                                                 # of the current assay
+            updated_metadata_fields <- c()                                                                # to keep track of what metadata fields have been already updated
+            if (("markers" %in% names(seurat_data@misc)) && (length(seurat_data@misc$markers) > 0)){
+                for (i in 1:length(seurat_data@misc$markers)){                                            # iterating over assays
+                    current_assay <- names(seurat_data@misc$markers)[i]
+                    if (length(seurat_data@misc$markers[[current_assay]]) > 0){
+                        for (j in 1:length(seurat_data@misc$markers[[current_assay]])){                   # iterating over markers sets within the current assay
+                            current_field <- names(seurat_data@misc$markers[[current_assay]])[j]
+                            current_markers <- NULL                                                       # to collect markers only from the current assay
+                            if (current_field %in% clustering_fields){                                    # found markers for the clustering field
+                                current_suffix <- base::paste0(                                           # to have "(rna 0.1)" in the cluster name
+                                    "(", base::gsub("_res.", " ", current_field), ")"
+                                )
+                                if (!(current_field %in% updated_metadata_fields)){
+                                    seurat_data@meta.data <- seurat_data@meta.data %>%                    # we want to rename labels even if it's not a current assay
+                                                             dplyr::mutate(                               # so we can see, for example, RNA clusters labels when exporting
+                                                                 !!current_field:=base::paste(            # ATAC. We keep track of which metadata column have been already
+                                                                     .[[current_field]],                  # updated, because for some of them, such as wnn_res.0.1, we
+                                                                     current_suffix                       # can have both RNA and ATAC markers, where each of them will
+                                                                 )                                        # be shown in the correspondent tab of the UCSC Cellbrowser,
+                                                             )                                            # however we don't want to rename them twice when iterating over
+                                    updated_metadata_fields <- base::append(                              # RNA and ATAC assays.
+                                        updated_metadata_fields,
+                                        current_field
+                                    )
+                                }
+                                if (current_assay == assay){                                              # we want to collect markers only from the current assay
+                                    current_markers <- seurat_data@misc$markers[[current_assay]][[current_field]] %>%
+                                                       dplyr::mutate(
+                                                           "cluster"=base::paste(                         # changing them the same was as in the Seurat object
+                                                                         .$cluster,
+                                                                         current_suffix
+                                                                     )
+                                                       ) %>%
+                                                       base::cbind(tmp_group=current_field, .)            # we need it to search for top features within each markers set
+                                }
+                            } else if (current_field %in% custom_fields){
+                                if (current_assay == assay){                                              # we want to collect markers only from the current assay
+                                    current_markers <- seurat_data@misc$markers[[current_assay]][[current_field]] %>%
+                                                       base::cbind(tmp_group=current_field, .)            # we need it to search top features within each markers set
+                                }
+                            } else {
+                                next                                                                      # to skip all unrecognized markers sets
+                            }
+                            if (!is.null(current_markers)){                                               # can be NULL because, for example, when exporting ATAC assay
+                                if (is.null(collected_markers)) {                                         # we still want to update the RNA labels, but we don't need to
+                                    collected_markers <- current_markers                                  # collect the markers from the RNA assay
+                                } else {
+                                    collected_markers <- base::rbind(collected_markers, current_markers)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!is.null(features)){
+                collected_top_features <- base::unique(features)                                                    # safety measure
+            } else if (!is.null(collected_markers)){                                                                # will include markers only from the current assay
+                collected_top_features <- collected_markers %>%
+                                          dplyr::group_by(tmp_group) %>%                                            # to find top features within each markers set separately
+                                          dplyr::filter(p_val_adj <= 0.05) %>%                                      # to have only significant gene markers
+                                          dplyr::filter(pct.1 >= 0.1) %>%                                           # to have at least 10% of cells expressing this gene
+                                          dplyr::group_by(feature) %>%                                              # groups by feature
+                                          dplyr::arrange(desc(pct.1), .by_group=TRUE) %>%                           # sort all duplicated features by desc(pct.1)
+                                          dplyr::slice_head(n=1) %>%                                                # choose the feature with the highest pct.1
+                                          dplyr::ungroup(feature) %>%                                               # removes only the feature group
+                                          dplyr::group_by(cluster) %>%
+                                          dplyr::arrange(p_val_adj, desc(avg_log2FC), .by_group=TRUE) %>%
+                                          dplyr::group_modify(~ .x %>%
+                                              dplyr::slice_head(n=analyses$get_fraction(.x, 0.0001, min_size=10))   # fraction is very small to have exactly 10 features per cluster
+                                          ) %>%
+                                          dplyr::ungroup() %>%                                                      # removes all groups
+                                          dplyr::distinct(feature) %>%
+                                          dplyr::pull(feature)                                                      # to have it as a vector
+                if (assay == "ATAC"){                                                                               # when exporting ATAC assay quick genes file
+                    collected_top_features <- stringr::str_replace(collected_top_features, "(chr\\w+)-", "\\1:")    # should include the ranges formatted as chr1:start-end
+                }
+            } else {
+                collected_top_features <- NULL
+            }
+
+            if (!is.null(collected_markers)){
+                collected_markers$tmp_group <- NULL                                  # after we found top features we don't need the tmp_group column anymore
+            }
+
+            show_labels <- TRUE                                                      # by default we try to show labels, but we hide them if
+            if (is.null(label_field) || !(label_field %in% (meta_fields_names))){    # label_field was either not provided or not present in the metadata
                 show_labels <- FALSE                                                 # hide labels
-                markers <- NULL                                                      # we can't use markers if label_field wasn't provided
                 for (i in 1:length(meta_fields)){                                    # searching the first field from the meta.data that is not unique for all cells
                     current_field <- meta_fields[i]
-                    if (current_field %in% base::colnames(seurat_data@meta.data) && length(base::unique(base::as.vector(as.character(seurat_data@meta.data[, current_field])))) > 1){
+                    if (
+                        (current_field %in% base::colnames(seurat_data@meta.data)) &&
+                        (
+                            length(
+                                base::unique(base::as.vector(as.character(seurat_data@meta.data[, current_field])))
+                            ) > 1
+                        )
+                    ){
                         label_field <- meta_fields_names[i]
                         break
                     }
                 }
             }
-
-            if (!is.null(markers) && base::nrow(markers) == 0){                      # in case markers somehow was an empty dataframe
-                markers <- NULL
-            }
-
-            if (is.null(features) && !is.null(markers)){                             # setting default features from markers only if they are provided with correct label_field
-                features <- markers %>%
-                            dplyr::group_by(cluster) %>%
-                            dplyr::top_n(                                            # can't use dplyr::distinct for grouped data
-                                n=tidyselect::all_of(floor(60/length(base::unique(markers$cluster)))),
-                                wt=avg_log2FC
-                            ) %>%
-                            dplyr::pull(feature)                                     # can't use dplyr::distinct for vector
-                features <- base::unique(features)                                   # some of the genes may be identical for several clusters so we want to remove them
-            }
-
-            color_data <- color_data %>%                                             # to make sure we don't have duplicates
-                          dplyr::distinct(category, .keep_all=TRUE)
 
             cb_build(
                 seurat_data,
@@ -519,8 +600,8 @@ export_cellbrowser <- function(seurat_data, assay, slot, rootname, label_field=N
                 rootname=rootname,
                 label_field=label_field,
                 show_labels=show_labels,
-                features=features,
-                markers=markers,
+                features=collected_top_features,
+                markers=collected_markers,
                 meta_fields=meta_fields,
                 meta_fields_names=meta_fields_names,
                 is_nested=is_nested,
@@ -564,7 +645,10 @@ export_loupe <- function(seurat_data, assay, rootname, active_cluster=NULL, meta
                 meta_fields_names <- base::append(meta_fields_names, "Condition", 1)
             }
 
-            clustering_fields <- base::grep("_res\\.", base::colnames(seurat_data@meta.data), value=TRUE, ignore.case=TRUE)
+            clustering_fields <- base::grep(
+                "^(?!custom_).*_res\\.", base::colnames(seurat_data@meta.data),    # we exclude columns with "^custom" because the cell types may be stored in "custom_res."
+                value=TRUE, ignore.case=TRUE, perl=TRUE                            # perl is true to have (?!) feature available
+            )
             clustering_fields_names <- base::as.vector(
                 base::unlist(                                                                              # when nothing found it returns named list that should be unlisted
                     base::sapply(

@@ -725,7 +725,7 @@ export_all_expression_plots <- function(seurat_data, args) {
 }
 
 ## ----
-export_heatmaps <- function(seurat_data, markers, args){
+export_heatmaps <- function(seurat_data, args){
     DefaultAssay(seurat_data) <- "RNA"                            # safety measure
     Idents(seurat_data) <- "new.ident"                            # safety measure
     datasets_count <- length(unique(as.vector(as.character(seurat_data@meta.data$new.ident))))
@@ -739,29 +739,48 @@ export_heatmaps <- function(seurat_data, markers, args){
         clusters_order <- unique(seurat_data@meta.data[[args$target]])
     }
 
-    filtered_markers <- markers %>%
-                        dplyr::mutate(
-                            cluster=base::factor(
-                                cluster,
-                                levels=clusters_order
-                            )
-                        ) %>%
-                        dplyr::arrange(cluster) %>%                                         # to have upregulated genes on the diagonal
-                        dplyr::filter(.$p_val_adj <= 0.05) %>%                              # to have only significant gene markers
-                        dplyr::filter(.$pct.1 >= 0.1) %>%                                   # to have at least 10% of cells expressing this gene
-                        dplyr::group_by(feature) %>%
-                        dplyr::arrange(desc(pct.1), .by_group=TRUE) %>%                     # sort all duplicated features by desc(pct.1)
-                        dplyr::slice_head(n=1) %>%                                          # choose the feature with the highest pct.1
-                        dplyr::ungroup() %>%
-                        dplyr::group_by(cluster) %>%
-                        dplyr::arrange(p_val_adj, desc(avg_log2FC), .by_group=TRUE) %>%
-                        dplyr::group_modify(~ .x %>%
-                            slice_head(n=analyses$get_fraction(.x, 0.25))                   # take 25% of the features
-                        ) %>%
-                        dplyr::arrange(desc(avg_log2FC), .by_group=TRUE) %>%
-                        dplyr::ungroup()
+    base::print(
+        base::paste(
+            "Checking if RNA markers for", args$target,
+            "metadata column have been calculated"
+        )
+    )
+    filtered_markers <- NULL
+    base::tryCatch(
+        expr = {
+            filtered_markers <- seurat_data@misc$markers$RNA[[args$target]] %>%
+                                dplyr::mutate(
+                                    cluster=base::factor(
+                                        cluster,
+                                        levels=clusters_order
+                                    )
+                                ) %>%
+                                dplyr::arrange(cluster) %>%                                         # to have upregulated genes on the diagonal
+                                dplyr::filter(.$p_val_adj <= 0.05) %>%                              # to have only significant gene markers
+                                dplyr::filter(.$pct.1 >= 0.1) %>%                                   # to have at least 10% of cells expressing this gene
+                                dplyr::group_by(feature) %>%
+                                dplyr::arrange(desc(pct.1), .by_group=TRUE) %>%                     # sort all duplicated features by desc(pct.1)
+                                dplyr::slice_head(n=1) %>%                                          # choose the feature with the highest pct.1
+                                dplyr::ungroup() %>%
+                                dplyr::group_by(cluster) %>%
+                                dplyr::arrange(p_val_adj, desc(avg_log2FC), .by_group=TRUE) %>%
+                                dplyr::group_modify(~ .x %>%
+                                    dplyr::slice_head(n=analyses$get_fraction(.x, 0.25))            # take 25% of the features
+                                ) %>%
+                                dplyr::arrange(desc(avg_log2FC), .by_group=TRUE) %>%
+                                dplyr::ungroup()
+        },
+        error = function(e){
+            base::print(
+                base::paste(
+                    "Failed to find RNA markers for", args$target,
+                    "metadata column due to", e
+                )
+            )
+        }
+    )
 
-    if (nrow(filtered_markers) > 0){
+    if (!is.null(filtered_markers) && (nrow(filtered_markers) > 0)){
         column_annotations <- c("Cell type")
         colnames(seurat_data@meta.data)[colnames(seurat_data@meta.data) == args$target] <- "Cell type"
         if (conditions_count > 1 && not_default_conditions){
@@ -1187,7 +1206,6 @@ if (!is.null(args$genes)){
 }
 
 ## ----
-all_rna_markers <- NULL
 if ( ("RNA" %in% names(seurat_data@assays)) && (!is.null(args$genes) || args$diffgenes) ){                       # we check genes or diffgenes so we don't normalize it without reason
     print("Normalizing counts in RNA assay before evaluating genes expression or identifying putative gene markers")
     DefaultAssay(seurat_data) <- "RNA"
@@ -1202,29 +1220,28 @@ if ( ("RNA" %in% names(seurat_data@assays)) && (!is.null(args$genes) || args$dif
         args$minpct <- args$rnaminpct
         args$onlypos <- args$rnaonlypos
         args$testuse <- args$rnatestuse
-        all_rna_markers <- analyses$get_markers(                                                                 # will change default assay to RNA
+        seurat_data <- analyses$get_markers(
             seurat_data=seurat_data,
             assay="RNA",
             group_by=args$target,
             args=args
         )
+        debug$print_info(seurat_data, args)
         args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]                       # to remove temporary added items
-        if (!is.null(all_rna_markers)){
-            io$export_data(
-                all_rna_markers,
-                paste(args$output, "_gene_markers.tsv", sep="")
-            )
-            export_heatmaps(                                                                                     # will change default assay to RNA
-                seurat_data=seurat_data,
-                markers=all_rna_markers,
-                args=args
-            )
-        }
+        io$export_markers(
+            data=seurat_data,
+            assay="RNA",
+            markers_regex=args$target,
+            location=paste0(args$output, "_gene_markers.tsv")
+        )
+        export_heatmaps(                                                                                         # will change default assay to RNA
+            seurat_data=seurat_data,
+            args=args
+        )
     }
 }
 
 ## ----
-all_atac_markers <- NULL
 if ("ATAC" %in% names(seurat_data@assays)){                                                                      # no reason to check for genes and fragments or diffpeaks, because we only change the assay
     DefaultAssay(seurat_data) <- "ATAC"                                                                          # safety measure
     if(!is.null(args$genes) && !is.null(args$fragments)){
@@ -1237,20 +1254,21 @@ if ("ATAC" %in% names(seurat_data@assays)){                                     
         args$minpct <- args$atacminpct
         args$onlypos <- FALSE                                                                                    # need to overwrite what was set for RNA
         args$testuse <- args$atactestuse
-        all_atac_markers <- analyses$get_markers(                                                                # will change default assay to ATAC
+        seurat_data <- analyses$get_markers(                                                                # will change default assay to ATAC
             seurat_data=seurat_data,
             assay="ATAC",
             group_by=args$target,
             latent_vars="nCount_ATAC",                                                                           # to remove the influence of sequencing depth
             args=args
         )
+        debug$print_info(seurat_data, args)
         args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]                       # to remove temporary added items
-        if (!is.null(all_atac_markers)){
-            io$export_data(
-                all_atac_markers,
-                paste(args$output, "_peak_markers.tsv", sep="")
-            )
-        }
+        io$export_markers(
+            data=seurat_data,
+            assay="ATAC",
+            markers_regex=args$target,
+            location=paste0(args$output, "_peak_markers.tsv")
+        )
     }
 }
 
@@ -1272,10 +1290,8 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/rna", sep="")
         )
         ucsc$export_cellbrowser(
@@ -1283,10 +1299,8 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
             is_nested=TRUE,
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser/atac", sep="")
         )
     } else if ("RNA" %in% names(seurat_data@assays)){
@@ -1295,9 +1309,7 @@ if(args$cbbuild){
             assay="RNA",
             slot="counts",
             short_label="RNA",
-            markers=all_rna_markers,                                         # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep="")
         )
     } else {
@@ -1306,9 +1318,7 @@ if(args$cbbuild){
             assay="ATAC",
             slot="counts",
             short_label="ATAC",
-            markers=all_atac_markers,                                        # can be NULL
             label_field <- base::gsub("custom_", "Custom ", args$target),
-            palette_colors=graphics$D40_COLORS,                              # to have colors correspond to the plots
             rootname=paste(args$output, "_cellbrowser", sep="")
         )
     }

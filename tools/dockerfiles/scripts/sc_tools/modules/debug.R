@@ -43,9 +43,56 @@ print_info <- function(seurat_data, args) {
             )
         )
         base::cat("\n\nMiscellaneous:\n")
-        base::print(SeuratObject::Misc(seurat_data))
+        if (("markers" %in% names(seurat_data@misc)) && (length(seurat_data@misc$markers) > 0)){
+            for (i in 1:length(seurat_data@misc$markers)){
+                current_assay <- names(seurat_data@misc$markers)[i]
+                if (length(seurat_data@misc$markers[[current_assay]]) > 0){
+                    for (j in 1:length(seurat_data@misc$markers[[current_assay]])){
+                        current_field <- names(seurat_data@misc$markers[[current_assay]])[j]
+                        base::print(
+                            base::paste(
+                                current_assay, "markers for",
+                                current_field, "metadata column"
+                            )
+                        )
+                        base::print(
+                            utils::head(
+                                seurat_data@misc$markers[[current_assay]][[current_field]]
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        if (("trajectories" %in% names(seurat_data@misc)) && (length(seurat_data@misc$trajectories) > 0)){
+            base::print(
+                base::paste(
+                    "Trajectories for the following reductions:",
+                    base::paste(names(seurat_data@misc$trajectories), collapse=", ")
+                )
+            )
+        }
+        if (("vdj" %in% names(seurat_data@misc)) && ("chains" %in% names(seurat_data@misc$vdj))){
+            base::print(
+                base::paste(
+                    "VDJ chains:",
+                    base::paste(seurat_data@misc$vdj$chains, collapse=", ")
+                )
+            )
+        }
+        if (
+                ("atac_reduce" %in% names(seurat_data@misc)) &&
+                ("first_lsi_removed" %in% names(seurat_data@misc$atac_reduce))
+        ){
+                base::print(
+                    base::paste(
+                        "The first LSI component of the ATAC dim. reduction removed:",
+                        seurat_data@misc$atac_reduce$first_lsi_removed
+                    )
+                )
+        }
         if ("ATAC" %in% names(seurat_data@assays)) {
-            base::cat("Fragments from ATAC assay:\n")
+            base::cat("\n\nFragments from ATAC assay:\n")
             fragments <- Signac::Fragments(seurat_data[["ATAC"]])
             if (length(fragments) > 0){
                 for (i in 1:length(fragments)){
