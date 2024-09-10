@@ -35,7 +35,8 @@
 #     sc_triangulate.R --help && \
 #     sc_vdj_profile.R --help && \
 #     sc_cb_utils_atac_search.R --help && \
-#     sc_cb_utils_split_mex.R --help
+#     sc_cb_utils_split_mex.R --help && \
+#     sc_rna_azimuth.R --help
 #
 # v0.0.41 -- based on biowardrobe2/sc-tools:v0.0.40
 # - Updated UCSC Cellbrowser to 1.2.8.
@@ -47,6 +48,15 @@
 #   markers from the multiple resolutions.
 # - Added NA color for not assigned cell cycle phase,
 #   otherwise fails to output some of the plots.
+# - Added sc_rna_azimuth.R to run reference mapping.
+#   We had to install seurat-data from the commit
+#   b198ed523b1fd773c09356d30d9dfcebd62f22cf because we
+#   didn't want to update the version of SeuratObject.
+#   We installed Azimuth from the custom repo made of the
+#   v0.4.6 version to prevent if from downloading
+#   the homologs.rds file on every execution. We can
+#   install Azimuth from the main repo after we switch
+#   to Seurat 5 base image.
 #
 # v0.0.40 -- based on biowardrobe2/sc-tools:v0.0.39
 # - Added sc_report_wrapper.R script to export HTML report
@@ -425,6 +435,8 @@ RUN apt-get update && \
     R -e 'install.packages("intrinsicDimension")' && \
     R -e 'install.packages("ggnewscale")' && \
     R -e 'install.packages("patchwork")' && \
+    R -e 'devtools::install_github("satijalab/seurat-data", upgrade = "never", ref = "b198ed523b1fd773c09356d30d9dfcebd62f22cf")' && \
+    R -e 'devtools::install_github("michael-kotliar/azimuth", upgrade = "never", ref = "v0.4.6mod")' && \
     wget ${LOUPER_URL} && \
     tar xzf loupeR_Linux.tar.gz && \
     sed -i 's/file\.exists(eula_lock_file())/TRUE/g' /tmp/loupeR/R/eula.R && \
@@ -451,6 +463,7 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_cb_utils_atac_search.R && \
     chmod +x /usr/local/bin/sc_cb_utils_split_mex.R && \
     chmod +x /usr/local/bin/sc_report_wrapper.R && \
+    chmod +x /usr/local/bin/sc_rna_azimuth.R && \
 ### Downloading blacklist regions files
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg38-blacklist.v2.bed.gz && \
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg19-blacklist.v2.bed.gz && \

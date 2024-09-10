@@ -55,7 +55,11 @@ DEFAULT_META_FIELDS <- c(
     "quartile_TSS.enrichment",
     "quartile_nucleosome_signal",
     "quartile_frip",
-    "quartile_blacklist_fraction"
+    "quartile_blacklist_fraction",
+
+    "prediction_cell_type",
+    "prediction_mapping_score",
+    "prediction_confidence_score"
 )
 
 DEFAULT_META_FIELDS_NAMES <- c(
@@ -97,7 +101,11 @@ DEFAULT_META_FIELDS_NAMES <- c(
     "Quartiles of TSS enrichment score",
     "Quartiles of Nucleosome signal",
     "Quartiles of FRiP",
-    "Quartiles of Bl. regions"
+    "Quartiles of Bl. regions",
+
+    "Prediction cell type",
+    "Prediction mapping score",
+    "Prediction confidence score"
 )
 
 get_matrix <- function(object, slot){
@@ -487,7 +495,7 @@ export_cellbrowser <- function(
             meta_fields <- base::append(meta_fields, pseudotime_fields)
             meta_fields_names <- base::append(meta_fields_names, pseudotime_fields_names)
 
-            collected_markers <- NULL                                                                     # we collect markers only for clustering and custom fields
+            collected_markers <- NULL                                                                     # we collect markers only for clustering, custom, and "prediction_cell_type" fields
             collected_top_features <- c()                                                                 # of the current assay
             updated_metadata_fields <- c()                                                                # to keep track of what metadata fields have been already updated
             if (("markers" %in% names(seurat_data@misc)) && (length(seurat_data@misc$markers) > 0)){
@@ -524,7 +532,10 @@ export_cellbrowser <- function(
                                                        ) %>%
                                                        base::cbind(tmp_group=current_field, .)            # we need it to search for top features within each markers set
                                 }
-                            } else if (current_field %in% custom_fields){
+                            } else if (
+                                (current_field %in% custom_fields) ||
+                                (current_field=="prediction_cell_type")                                   # this is where we save Azimuth's predicted cell types
+                            ){
                                 if (current_assay == assay){                                              # we want to collect markers only from the current assay
                                     current_markers <- seurat_data@misc$markers[[current_assay]][[current_field]] %>%
                                                        base::cbind(tmp_group=current_field, .)            # we need it to search top features within each markers set
@@ -650,7 +661,7 @@ export_loupe <- function(seurat_data, assay, rootname, active_cluster=NULL, meta
                 value=TRUE, ignore.case=TRUE, perl=TRUE                            # perl is true to have (?!) feature available
             )
             clustering_fields_names <- base::as.vector(
-                base::unlist(                                                                              # when nothing found it returns named list that should be unlisted
+                base::unlist(                                                      # when nothing found it returns named list that should be unlisted
                     base::sapply(
                         clustering_fields,
                         function(line) {

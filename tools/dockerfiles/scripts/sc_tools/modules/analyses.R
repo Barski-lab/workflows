@@ -7,6 +7,7 @@ import("sceasy", attach=FALSE)
 import("hopach", attach=FALSE)
 import("DESeq2", attach=FALSE)
 import("MAnorm2", attach=FALSE)
+import("Azimuth", attach=FALSE)
 import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
@@ -33,6 +34,7 @@ export(
     "rna_sct_single",
     "rna_log_integrated",
     "rna_sct_integrated",
+    "rna_reference_map",
     "add_trajectory",
     "get_vars_to_regress",
     "get_cell_cycle_scores",
@@ -547,7 +549,8 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
         "wnnumap",
         "gene_rnaumi",
         "rnaumi_atacfrgm",
-        "tss_atacfrgm"
+        "tss_atacfrgm",
+        "refumap"
     )
     if (is.null(cell_cycle_data)){                                              # we are not planning to run cell cycle score assignment, so we want to keep "ccpca"
         reduction_names <- append(reduction_names, "ccpca")
@@ -700,6 +703,24 @@ rna_analyze <- function(seurat_data, args, cell_cycle_data=NULL){
         )
     )
     return (seurat_data)
+}
+
+rna_reference_map <- function(seurat_data, reference_dir, args){
+    SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
+    SeuratObject::Idents(seurat_data) <- "new.ident"                            # safety measure
+    annotated_data <- Azimuth::RunAzimuth(
+        query=seurat_data,
+        reference=reference_dir,
+        annotation.levels=args$source,
+        verbose=FALSE
+    )
+    seurat_data@meta.data$prediction_confidence_score <- annotated_data@meta.data[[base::paste0("predicted.", args$source, ".score")]]
+    seurat_data@meta.data$prediction_mapping_score <- annotated_data@meta.data$mapping.score
+    seurat_data@meta.data$prediction_cell_type <- annotated_data@meta.data[[base::paste0("predicted.", args$source)]]
+    seurat_data@reductions$refumap <- annotated_data@reductions$ref.umap
+    base::rm(annotated_data)
+    base::gc(verbose=FALSE)
+    return(seurat_data)
 }
 
 add_clusters <- function(seurat_data, assay, graph_name, reduction, args){
@@ -1209,7 +1230,8 @@ atac_analyze <- function(seurat_data, args){
         "wnnumap",
         "gene_rnaumi",
         "rnaumi_atacfrgm",
-        "tss_atacfrgm"
+        "tss_atacfrgm",
+        "refumap"
     )
     for (reduction_name in reduction_names){
         if (reduction_name %in% names(seurat_data@reductions)){
