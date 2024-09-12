@@ -1,0 +1,148 @@
+{
+  "expression_files": [
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_TCM5HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2N_5H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TEM_5H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TCM_5H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/S1m2_TCM5HAFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_TEM0HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TCM_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4N_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TEM_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_N0HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_N5HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_TEM5HAFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TCM_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TCM_5H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4N_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TEM_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_N5HAFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_TEM5HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2N_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TEM_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TCM_0H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_TCM0HGFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2N_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d2TEM_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TCM_5H_AFOS.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4N_5H_GFP.isoforms.csv"
+    },
+    {
+      "class": "File",
+      "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/s1m2_d4TEM_5H_GFP.isoforms.csv"
+    }
+  ],
+  "expression_file_names": [
+    "s1m2_TCM5HGFP",
+    "s1m2_d2N_5H_GFP",
+    "s1m2_d2TEM_5H_GFP",
+    "s1m2_d4TCM_5H_GFP",
+    "S1m2_TCM5HAFOS",
+    "s1m2_TEM0HGFP",
+    "s1m2_d2TCM_0H_GFP",
+    "s1m2_d4N_0H_GFP",
+    "s1m2_d4TEM_0H_GFP",
+    "s1m2_N0HGFP",
+    "s1m2_N5HGFP",
+    "s1m2_TEM5HAFOS",
+    "s1m2_d2TCM_5H_AFOS",
+    "s1m2_d2TCM_5H_GFP",
+    "s1m2_d4N_5H_AFOS",
+    "s1m2_d4TEM_5H_AFOS",
+    "s1m2_N5HAFOS",
+    "s1m2_TEM5HGFP",
+    "s1m2_d2N_0H_GFP",
+    "s1m2_d2TEM_0H_GFP",
+    "s1m2_d4TCM_0H_GFP",
+    "s1m2_TCM0HGFP",
+    "s1m2_d2N_5H_AFOS",
+    "s1m2_d2TEM_5H_AFOS",
+    "s1m2_d4TCM_5H_AFOS",
+    "s1m2_d4N_5H_GFP",
+    "s1m2_d4TEM_5H_GFP"
+  ],
+  "metadata_file": {
+    "class": "File",
+    "location": "./data/dm3_chr4/main_inputs/geep/AFOS_LRT_step_1_test/AFOS_colData.csv"
+  },
+  "design_formula": "~condition*celltype",
+  "contrast_indices": "3,7,10",
+  "test_mode": true
+}
