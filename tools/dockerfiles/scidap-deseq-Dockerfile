@@ -173,7 +173,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 COPY ./scripts/install_from_source.R /tmp/install_from_source.R
 COPY ./scripts/run_deseq.R /usr/local/bin/run_deseq.R
 COPY scripts/run_deseq_lrt_step_1.R /usr/local/bin/run_deseq_lrt_step_1.R
-#COPY scripts/run_deseq_lrt_step_2.R /usr/local/bin/run_deseq_lrt_step_2.R
+COPY scripts/run_deseq_lrt_step_2.R /usr/local/bin/run_deseq_lrt_step_2.R
 COPY ./scripts/get_gene_n_tss.R /usr/local/bin/get_gene_n_tss.R
 # Copy the install_packages.R script into the Docker image
 COPY ./scripts/docker_R_packages_installation/scidap-deseq-R-packages.R /tmp/scidap-deseq-R-packages.R
@@ -186,6 +186,7 @@ RUN apt-get update --fix-missing && apt-get install -f -y
 
 RUN apt-get install -y -f python3 python3-pip \
                           build-essential \
+                          pandoc && \
                           libcurl4-openssl-dev \
                           libssl-dev \
                           libxml2-dev \
@@ -205,7 +206,7 @@ RUN apt-get install -y -f python3 python3-pip \
 # and setting permissions to make them executable
 RUN  chmod +x /usr/local/bin/run_deseq.R && \
      chmod +x /usr/local/bin/run_deseq_lrt_step_1.R && \
-#     chmod +x /usr/local/bin/run_deseq_lrt_step_2.R && \
+     chmod +x /usr/local/bin/run_deseq_lrt_step_2.R && \
      chmod +x /usr/local/bin/get_gene_n_tss.R && \
 # Cleaning
     apt-get clean && \

@@ -1060,7 +1060,7 @@ print(
 )
 
 row_metadata <- row_metadata %>%
-  dplyr::filter(.$padj <= args$fdr) # need to convert to vector, because in our metadata everything was a factor
+  dplyr::filter(.$padj <= args$fdr) # Filtering out non-significant features
 
 print("Size of the normalized read counts matrix before filtering")
 print(read_count_matrix_all_size)

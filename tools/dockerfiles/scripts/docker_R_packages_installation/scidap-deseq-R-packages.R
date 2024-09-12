@@ -49,7 +49,12 @@ install.packages("devtools", repos = "https://cloud.r-project.org")
 if (!require("devtools", character.only = TRUE)) {
   stop("Package devtools failed to install.")
 }
-devtools::install_github("hasaru-k/GlimmaV2")
+# This package is required for the GlimmaV2 package to horizontal placement of the drop-down menu
+install.packages(
+  "https://bioconductor.org/packages/3.17/bioc/src/contrib/Glimma_2.10.0.tar.gz",
+  repos = NULL,
+  type = "source"
+)
 if (!require("Glimma", character.only = TRUE)) {
   stop("Package GlimmaV2 failed to install from GitHub.")
 }

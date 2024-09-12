@@ -81,10 +81,12 @@ load_expression_data <- function(filenames,
       stringsAsFactors = FALSE
     )
     # FOR TEST ONLY TO REDUCE NUMBER OF ROWS AND SPEED UP TESTING
-    if (args$test_mode) {
-      print("Test mode is ON, each sample will be limited to 100 rows")
-      isoforms <- isoforms %>%
+    if (!is.null(args$test_mode) && args$test_mode) {
+    print("Test mode is ON, each sample will be limited to 100 rows")
+    isoforms <- isoforms %>%
       dplyr::slice_head(n = 100)
+    } else {
+      print("Test mode is OFF, processing all rows")
     }
 
     print(paste("Load ", nrow(isoforms), " rows from ", filenames[i], sep = ""))
@@ -313,7 +315,8 @@ generate_main_effect_contrasts <- function(dds, factors, factor_levels) {
       other_levels <- factor_levels[[other_factor]]
       
       for (other_level in other_levels) {
-        dds_subset <- dds[colData(dds)[[other_factor]] == other_level, ]
+        # dds_subset <- dds[colData(dds)[[other_factor]] == other_level, ]
+        dds_subset <- dds
         
         for (ref_level in factor_levels[[factor]]) {
           colData(dds_subset)[[factor]] <- relevel(colData(dds_subset)[[factor]], ref = ref_level)
@@ -377,7 +380,8 @@ generate_interaction_effect_contrasts <- function(dds) {
           denominator <- paste0(factor1, ref_level1)
           
           if (numerator != denominator && specificity_group != paste(factor2, ref_level2, "vs", ref_level2, sep = "_")) {
-            dds_subset <- dds[colData(dds)[[factor2]] == ref_level2, ]
+            # dds_subset <- dds[colData(dds)[[factor2]] == ref_level2, ]
+            dds_subset <- dds
             colData(dds_subset)[[factor1]] <- relevel(colData(dds_subset)[[factor1]], ref = ref_level1)
             
             contrasts <- append(contrasts, list(list(effect_type = "interaction",
@@ -419,7 +423,7 @@ generate_interaction_effect_contrasts <- function(dds) {
 }
 
 # Function to get number of significant genes
-get_num_significant_genes <- function(dds, contrast) {
+get_num_significant_genes <- function(contrast) {
   dds_subset <- contrast$subset
   dds_subset <- DESeq(dds_subset, test = "Wald")
   res <- results(dds_subset, 
@@ -434,7 +438,6 @@ get_num_significant_genes <- function(dds, contrast) {
 generate_contrasts <- function(dds) {
   # Extract the design formula and model matrix
   design_formula <- design(dds)
-  model_matrix <- model.matrix(design_formula, colData(dds))
   
   # Get the levels of each factor in the design
   factors <- all.vars(design_formula)
@@ -464,11 +467,11 @@ generate_contrasts <- function(dds) {
   count = 1
   for (contrast in all_contrasts) {
     print(count)
-    num_significant_genes <- get_num_significant_genes(dds, contrast)
+    num_significant_genes <- get_num_significant_genes(contrast)
     contrast_df <- rbind(contrast_df, data.frame(
       effect = contrast$effect_type,
-      specificity_group = contrast$specificity_group,
       contrast = contrast$contrast,
+      specificity_group = contrast$specificity_group,
       numerator = contrast$numerator,
       denominator = contrast$denominator,
       num_significant_genes = num_significant_genes,
@@ -481,7 +484,9 @@ generate_contrasts <- function(dds) {
   contrast_df <- contrast_df %>% 
     group_by(specificity_group) %>% 
     distinct(contrast, .keep_all = TRUE) %>% 
-    arrange(specificity_group)
+    arrange(specificity_group) %>%
+    mutate(contrast_number = row_number()) %>%
+    select(contrast_number, everything())
   
   # Sort the dataframe by the number of significant genes
   return(contrast_df)
