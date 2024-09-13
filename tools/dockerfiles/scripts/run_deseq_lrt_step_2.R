@@ -188,71 +188,7 @@ export_cls <- function(categories, location) {
   )
 }
 
-# Define the function to generate the markdown file
-generate_md <- function(batchcorrection, batchfile, deseq_results, output_file) {
-  # Initialize the markdown content
-  md_content <- ""
-
-  # Add warning message if applicable
-  if (!is.null(batchcorrection) &&
-    (batchcorrection == "combatseq" || batchcorrection == "limmaremovebatcheffect") &&
-    is.null(batchfile)) {
-    warning_message <- "# Warning!\n\n---\n\n**You provided a batch-correction method, but not a batch-file.**\n\nThe chosen parameter was ignored.\n\nPlease ensure that you provide a batch file when using the following batch correction methods:\n\n- **combatseq**\n- **limmaremovebatcheffect**\n\nIf you do not need batch correction, set the method to 'none'.\n\n---\n\n"
-    md_content <- paste0(md_content, warning_message)
-  }
-
-  # Add DESeq results summary if provided
-  if (!is.null(deseq_results)) {
-    # Capture the summary output
-    summary_output <- capture.output({
-      summary(deseq_results)
-    })
-
-    # Parse the relevant information
-    total_genes <- gsub(" with nonzero total read count", "", summary_output[2])
-    total_genes <- gsub("out of ", "", total_genes)
-    fdr_pvalue <- gsub("adjusted p-value < ", "", summary_output[3])
-    lfc_up <- gsub(".*: ", "", summary_output[4])
-    lfc_down <- gsub(".*: ", "", summary_output[5])
-    outliers <- gsub(".*: ", "", summary_output[6])
-    low_counts <- gsub(".*: ", "", summary_output[7])
-    mean_count <- gsub("[^0-9]", "", summary_output[8])
-
-    # Extract the LFC threshold from the summary output
-    lfc_threshold <- gsub(".*LFC > ", "", summary_output[4])
-    lfc_threshold <- gsub(" \\(up\\).*", "", lfc_threshold)
-
-    # Create a data frame
-    summary_df <- data.frame(
-      Metric = c(
-        "Total genes with non-zero read count",
-        paste("LFC >", lfc_threshold, "(up)"),
-        paste("LFC &lt;", lfc_threshold, "(down)"),
-        "Outliers<sup>1</sup>",
-        paste0("Low counts<sup>2</sup> (mean count &lt; ", mean_count, ")", collapse = "")
-      ),
-      Value = c(total_genes, lfc_up, lfc_down, outliers, low_counts),
-      stringsAsFactors = FALSE
-    )
-
-    # Convert the data frame to markdown format using kable
-    summary_output_md <- paste0(
-      "# DESeq2 Results Summary\n\n---\n\n",
-      "## Summary of DESeq2 Results\n\n",
-      kableExtra::kable(summary_df, format = "html", escape = FALSE) %>%
-        kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F),
-      "\n\narguments of ?DESeq2::results():   \n<sup>1</sup> - see 'cooksCutoff',\n<sup>2</sup> - see 'independentFiltering'\n\n---\n\n"
-    )
-
-    md_content <- paste0(md_content, summary_output_md)
-  }
-
-  # Write the content to the output file
-  writeLines(md_content, con = output_file)
-}
-
-
-get_clustered_data <- function(expression_data, dist, transpose) {
+get_clustered_data <- function(expression_data, transpose) {
   if (transpose) {
     print("Transposing expression data")
     expression_data <- t(expression_data)
