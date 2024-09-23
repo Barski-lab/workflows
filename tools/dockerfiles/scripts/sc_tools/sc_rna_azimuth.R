@@ -25,43 +25,98 @@ suppressMessages(ucsc <- modules::use(file.path(HERE, "modules/ucsc.R")))
 
 ## ----
 export_all_qc_plots <- function(seurat_data, args){
-    Idents(seurat_data) <- args$target                                # othervise it will be split by dataset in vln_plot
+    Idents(seurat_data) <- "prediction_cell_type"                             # othervise it will be split by dataset in feature_plot and vln_plot
 
-    graphics$geom_bar_plot(
-        data=seurat_data@meta.data,
-        x_axis=args$target,
-        color_by=args$target,
+    celltypes_count <- length(
+        unique(
+            as.vector(
+                as.character(seurat_data@meta.data$prediction_cell_type)
+            )
+        )
+    )
+
+    graphics$composition_plot(
+        data=seurat_data,
+        plot_title="Number of cells per cell type",
+        plot_subtitle=paste(
+            "All query cells;",
+            "minimum", args$minmapscore, "prediction mapping score and",
+            "minimum", args$minconfscore, "prediction confidence score"
+        ),
+        legend_title="Passed\nprediction QC",
+        group_by="prediction_passed_qc",
+        split_by="prediction_cell_type",
         x_label="Cell type",
         y_label="Cells",
-        legend_title="Cell type",
-        plot_title="Number of cells per cell type",
-        plot_subtitle="All cells",
-        palette_colors=graphics$D40_COLORS,
+        bar_position="stack",
+        palette_colors=c(graphics$FALSE_COLOR, graphics$TRUE_COLOR),
         theme=args$theme,
+        width=52*celltypes_count+160,                                            # need to add 150px for a legend
         rootname=paste(args$output, "cell_cnts_gr_ctyp", sep="_"),
         pdf=args$pdf
     )
 
     graphics$feature_plot(
         data=seurat_data,
-        features=c("prediction_mapping_score", "prediction_confidence_score"),
-        labels=c("Prediction mapping score", "Prediction confidence score"),
+        features="prediction_confidence_score",
+        labels="",                                                               # don't want to show the same text twice
         from_meta=TRUE,
         reduction="refumap",
-        plot_title="UMAP, QC metrics",
-        plot_subtitle="All cells",
-        legend_title="Score",
-        label=FALSE,
+        plot_title="Projected UMAP colored by prediction confidence score",
+        plot_subtitle="All query cells",
+        legend_title="Prediction\nconfidence score",
+        label=TRUE,
+        label_repel=TRUE,
         alpha=0.5,
-        pt_size=1,
-        max_cutoff="q99",                                                                   # to prevent outlier cells to distort coloring
-        combine_guides="collect",
+        max_cutoff="q99",                                                        # to prevent outlier cells to distort coloring
         order=TRUE,
-        gradient_colors=c("black", "blue", "lightblue"),
-        color_scales=c(0, 1),
         color_limits=c(0, 1),
+        gradient_colors = if (args$minconfscore > 0)
+                              c(graphics$NA_COLOR, graphics$NA_COLOR, "darkred", "darkorange")
+                          else
+                              c("darkred", "darkorange"),
+        color_scales = if (args$minconfscore > 0)
+                           c(0, args$minconfscore-0.001*args$minconfscore, args$minconfscore, 1)
+                       else
+                           c(0, 1),
+        color_breaks = if (args$minconfscore > 0)
+                           c(0, args$minconfscore, 1)
+                       else
+                           c(0, 1),
         theme=args$theme,
-        rootname=paste(args$output, "umap_qc_mtrcs", sep="_"),
+        rootname=paste(args$output, "umap_cnf", sep="_"),
+        pdf=args$pdf
+    )
+
+    graphics$feature_plot(
+        data=seurat_data,
+        features="prediction_mapping_score",
+        labels="",                                                               # don't want to show the same text twice
+        from_meta=TRUE,
+        reduction="refumap",
+        plot_title="Projected UMAP colored by prediction mapping score",
+        plot_subtitle="All query cells",
+        legend_title="Prediction\nmapping score",
+        label=TRUE,
+        label_repel=TRUE,
+        alpha=0.5,
+        max_cutoff="q99",                                                                   # to prevent outlier cells to distort coloring
+        order=TRUE,
+        color_limits=c(0, 1),
+        gradient_colors = if (args$minmapscore > 0)
+                              c(graphics$NA_COLOR, graphics$NA_COLOR, "midnightblue", "lightslateblue")
+                          else
+                              c("midnightblue", "lightslateblue"),
+        color_scales = if (args$minmapscore > 0)
+                           c(0, args$minmapscore-0.001*args$minmapscore, args$minmapscore, 1)
+                       else
+                           c(0, 1),
+        color_breaks = if (args$minmapscore > 0)
+                           c(0, args$minmapscore, 1)
+                       else
+                           c(0, 1),
+        theme=args$theme,
+        rootname=paste(args$output, "umap_map", sep="_"),
         pdf=args$pdf
     )
 
@@ -85,9 +140,10 @@ export_all_qc_plots <- function(seurat_data, args){
         from_meta=TRUE,
         show_box_plots=TRUE,
         plot_title="Distribution of QC metrics per cell colored by cell type",
-        plot_subtitle="All cells",
+        plot_subtitle="All query cells",
         legend_title="Cell type",
         pt_size=0,
+        ncol=1,
         combine_guides="collect",
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
@@ -104,19 +160,20 @@ export_all_qc_plots <- function(seurat_data, args){
         data=seurat_data@meta.data,
         x_axis="nCount_RNA",
         y_axis="nFeature_RNA",
-        split_by=args$target,
-        color_by="mito_percentage",
+        split_by="prediction_cell_type",
+        color_by="prediction_confidence_score",
         highlight_rows=highlight_rows,
-        gradient_colors=c("lightslateblue", "orange", "red"),
-        color_limits=c(0, 100),
-        color_break=ceiling(max(seurat_data@meta.data$mito_percentage)),
-        legend_title="Mitochondrial %",
+        gradient_colors = c(graphics$NA_COLOR, "darkred", "darkorange"),
+        color_limits=c(0, 1),
+        color_break = args$minconfscore,
+        legend_title="Prediction\nconfidence score",
         x_label="RNA reads per cell",
         y_label="Genes per cell",
         plot_title="Genes vs RNA reads per cell",
         plot_subtitle=paste(
-            "Split by cell type;",
-            "all cells"
+            "All query cells;",
+            "split by cell type;",
+            "colored by prediction confidence score"
         ),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
@@ -125,7 +182,37 @@ export_all_qc_plots <- function(seurat_data, args){
         density_bins=4,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, "gene_umi_spl_ctyp", sep="_"),
+        rootname=paste(args$output, "gene_umi_gr_cnf_spl_ctyp", sep="_"),
+        pdf=args$pdf
+    )
+
+    graphics$geom_point_plot(
+        data=seurat_data@meta.data,
+        x_axis="nCount_RNA",
+        y_axis="nFeature_RNA",
+        split_by="prediction_cell_type",
+        color_by="prediction_mapping_score",
+        highlight_rows=highlight_rows,
+        gradient_colors = c(graphics$NA_COLOR, "midnightblue", "lightslateblue"),
+        color_limits=c(0, 1),
+        color_break = args$minmapscore,
+        legend_title="Prediction\nmapping score",
+        x_label="RNA reads per cell",
+        y_label="Genes per cell",
+        plot_title="Genes vs RNA reads per cell",
+        plot_subtitle=paste(
+            "All query cells;",
+            "split by cell type;",
+            "colored by prediction mapping score"
+        ),
+        scale_x_log10=TRUE,
+        scale_y_log10=TRUE,
+        show_lm=TRUE,
+        show_density=TRUE,
+        density_bins=4,
+        palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
+        rootname=paste(args$output, "gene_umi_gr_map_spl_ctyp", sep="_"),
         pdf=args$pdf
     )
 
@@ -133,19 +220,20 @@ export_all_qc_plots <- function(seurat_data, args){
         data=seurat_data@meta.data,
         x_axis="mito_percentage",
         y_axis="nCount_RNA",
-        split_by=args$target,
-        color_by="mito_percentage",
+        split_by="prediction_cell_type",
+        color_by="prediction_confidence_score",
         highlight_rows=highlight_rows,
-        gradient_colors=c("lightslateblue", "orange", "red"),
-        color_limits=c(0, 100),
-        color_break=ceiling(max(seurat_data@meta.data$mito_percentage)),
-        legend_title="Mitochondrial %",
+        gradient_colors = c(graphics$NA_COLOR, "darkred", "darkorange"),
+        color_limits=c(0, 1),
+        color_break = args$minconfscore,
+        legend_title="Prediction\nconfidence score",
         x_label="Mitochondrial %",
         y_label="RNA reads per cell",
         plot_title="RNA reads vs mitochondrial % per cell",
         plot_subtitle=paste(
-            "Split by cell type;",
-            "all cells"
+            "All query cells;",
+            "split by cell type;",
+            "colored by prediction confidence score"
         ),
         scale_x_log10=TRUE,
         scale_y_log10=TRUE,
@@ -153,7 +241,36 @@ export_all_qc_plots <- function(seurat_data, args){
         show_density=TRUE,
         palette_colors=graphics$D40_COLORS,
         theme=args$theme,
-        rootname=paste(args$output, "umi_mito_spl_ctyp", sep="_"),
+        rootname=paste(args$output, "umi_mito_gr_cnf_spl_ctyp", sep="_"),
+        pdf=args$pdf
+    )
+
+    graphics$geom_point_plot(
+        data=seurat_data@meta.data,
+        x_axis="mito_percentage",
+        y_axis="nCount_RNA",
+        split_by="prediction_cell_type",
+        color_by="prediction_mapping_score",
+        highlight_rows=highlight_rows,
+        gradient_colors = c(graphics$NA_COLOR, "midnightblue", "lightslateblue"),
+        color_limits=c(0, 1),
+        color_break = args$minmapscore,
+        legend_title="Prediction\nmapping score",
+        x_label="Mitochondrial %",
+        y_label="RNA reads per cell",
+        plot_title="RNA reads vs mitochondrial % per cell",
+        plot_subtitle=paste(
+            "All query cells;",
+            "split by cell type;",
+            "colored by prediction mapping score"
+        ),
+        scale_x_log10=TRUE,
+        scale_y_log10=TRUE,
+        show_lm=FALSE,
+        show_density=TRUE,
+        palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
+        rootname=paste(args$output, "umi_mito_gr_map_spl_ctyp", sep="_"),
         pdf=args$pdf
     )
 
@@ -161,10 +278,10 @@ export_all_qc_plots <- function(seurat_data, args){
         graphics$composition_plot(
             data=seurat_data,
             plot_title="Percentage of RNA doublets per cell type",
-            plot_subtitle="All cells",
+            plot_subtitle="All query cells",
             legend_title="Cell type",
             group_by="rna_doublets",
-            split_by=args$target,
+            split_by="prediction_cell_type",
             x_label="Cell type",
             y_label="Cell percentage",
             palette_colors=c("#00AEAE", "#0BFFFF"),
@@ -179,26 +296,55 @@ export_all_qc_plots <- function(seurat_data, args){
             data=seurat_data@meta.data,
             x_axis="nCount_ATAC",
             y_axis="TSS.enrichment",
-            split_by=args$target,
-            color_by="mito_percentage",
+            split_by="prediction_cell_type",
+            color_by="prediction_confidence_score",
             highlight_rows=highlight_rows,
-            gradient_colors=c("lightslateblue", "orange", "red"),
-            color_limits=c(0, 100),
-            color_break=ceiling(max(seurat_data@meta.data$mito_percentage)),
-            legend_title="Mitochondrial %",
+            gradient_colors = c(graphics$NA_COLOR, "darkred", "darkorange"),
+            color_limits=c(0, 1),
+            color_break = args$minconfscore,
+            legend_title="Prediction\nconfidence score",
             x_label="ATAC fragments in peaks per cell",
             y_label="TSS enrichment score",
             plot_title="TSS enrichment score vs ATAC fragments in peaks per cell",
             plot_subtitle=paste(
-                "Split by cell type;",
-                "all cells"
+                "All query cells;",
+                "split by cell type;",
+                "colored by prediction confidence score"
             ),
             scale_x_log10=TRUE,
             scale_y_log10=FALSE,
             show_density=TRUE,
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
-            rootname=paste(args$output, "tss_frgm_spl_ctyp", sep="_"),
+            rootname=paste(args$output, "tss_frgm_gr_cnf_spl_ctyp", sep="_"),
+            pdf=args$pdf
+        )
+
+        graphics$geom_point_plot(
+            data=seurat_data@meta.data,
+            x_axis="nCount_ATAC",
+            y_axis="TSS.enrichment",
+            split_by="prediction_cell_type",
+            color_by="prediction_mapping_score",
+            highlight_rows=highlight_rows,
+            gradient_colors = c(graphics$NA_COLOR, "midnightblue", "lightslateblue"),
+            color_limits=c(0, 1),
+            color_break = args$minmapscore,
+            legend_title="Prediction\nmapping score",
+            x_label="ATAC fragments in peaks per cell",
+            y_label="TSS enrichment score",
+            plot_title="TSS enrichment score vs ATAC fragments in peaks per cell",
+            plot_subtitle=paste(
+                "All query cells;",
+                "split by cell type;",
+                "colored by prediction mapping score"
+            ),
+            scale_x_log10=TRUE,
+            scale_y_log10=FALSE,
+            show_density=TRUE,
+            palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
+            rootname=paste(args$output, "tss_frgm_gr_map_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
 
@@ -206,26 +352,55 @@ export_all_qc_plots <- function(seurat_data, args){
             data=seurat_data@meta.data,
             x_axis="nCount_ATAC",
             y_axis="nCount_RNA",
-            split_by=args$target,
-            color_by="mito_percentage",
+            split_by="prediction_cell_type",
+            color_by="prediction_confidence_score",
             highlight_rows=highlight_rows,
-            gradient_colors=c("lightslateblue", "orange", "red"),
-            color_limits=c(0, 100),
-            color_break=ceiling(max(seurat_data@meta.data$mito_percentage)),
-            legend_title="Mitochondrial %",
+            gradient_colors = c(graphics$NA_COLOR, "darkred", "darkorange"),
+            color_limits=c(0, 1),
+            color_break = args$minconfscore,
+            legend_title="Prediction\nconfidence score",
             x_label="ATAC fragments in peaks per cell",
             y_label="RNA reads per cell",
             plot_title="RNA reads vs ATAC fragments in peaks per cell",
             plot_subtitle=paste(
-                "Split by cell type;",
-                "all cells"
+                "All query cells;",
+                "split by cell type;",
+                "colored by prediction confidence score"
             ),
             scale_x_log10=TRUE,
             scale_y_log10=TRUE,
             show_density=TRUE,
             palette_colors=graphics$D40_COLORS,
             theme=args$theme,
-            rootname=paste(args$output, "rna_atac_cnts_spl_ctyp", sep="_"),
+            rootname=paste(args$output, "rna_atac_cnts_gr_cnf_spl_ctyp", sep="_"),
+            pdf=args$pdf
+        )
+
+        graphics$geom_point_plot(
+            data=seurat_data@meta.data,
+            x_axis="nCount_ATAC",
+            y_axis="nCount_RNA",
+            split_by="prediction_cell_type",
+            color_by="prediction_mapping_score",
+            highlight_rows=highlight_rows,
+            gradient_colors = c(graphics$NA_COLOR, "midnightblue", "lightslateblue"),
+            color_limits=c(0, 1),
+            color_break = args$minmapscore,
+            legend_title="Prediction\nmapping score",
+            x_label="ATAC fragments in peaks per cell",
+            y_label="RNA reads per cell",
+            plot_title="RNA reads vs ATAC fragments in peaks per cell",
+            plot_subtitle=paste(
+                "All query cells;",
+                "split by cell type;",
+                "colored by prediction mapping score"
+            ),
+            scale_x_log10=TRUE,
+            scale_y_log10=TRUE,
+            show_density=TRUE,
+            palette_colors=graphics$D40_COLORS,
+            theme=args$theme,
+            rootname=paste(args$output, "rna_atac_cnts_gr_map_spl_ctyp", sep="_"),
             pdf=args$pdf
         )
 
@@ -233,10 +408,10 @@ export_all_qc_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=seurat_data,
                 plot_title="Percentage of ATAC doublets per cell type",
-                plot_subtitle="All cells",
+                plot_subtitle="All query cells",
                 legend_title="Cell type",
                 group_by="atac_doublets",
-                split_by=args$target,
+                split_by="prediction_cell_type",
                 x_label="Cell type",
                 y_label="Cell percentage",
                 palette_colors=c("#00DCDC", "#0BFFFF"),
@@ -264,10 +439,10 @@ export_all_qc_plots <- function(seurat_data, args){
                 graphics$composition_plot(
                     data=seurat_data,
                     plot_title="Percentage of RNA and ATAC doublets per cell type",
-                    plot_subtitle="All cells",
+                    plot_subtitle="All query cells",
                     legend_title="Cell type",
                     group_by="doublets_overlap",
-                    split_by=args$target,
+                    split_by="prediction_cell_type",
                     x_label="Cell type",
                     y_label="Cell percentage",
                     palette_colors=c("#00AEAE", "#008080", "#00DCDC", "#0BFFFF"),
@@ -306,10 +481,14 @@ export_all_clustering_plots <- function(seurat_data, args){
     graphics$dim_plot(
         data=seurat_data,
         reduction="refumap",
-        plot_title="UMAP colored by cell type",
-        plot_subtitle="All cells",
+        plot_title="Projected UMAP colored by cell type",
+        plot_subtitle=paste(
+            "Filtered query cells;",
+            "minimum", args$minmapscore, "prediction mapping score and",
+            "minimum", args$minconfscore, "prediction confidence score"
+        ),
         legend_title="Cell type",
-        group_by=args$target,
+        group_by="prediction_cell_type",
         label=FALSE,
         label_color="black",
         palette_colors=graphics$D40_COLORS,
@@ -321,14 +500,17 @@ export_all_clustering_plots <- function(seurat_data, args){
         graphics$dim_plot(
             data=downsampled_per_dataset,
             reduction="refumap",
-            plot_title="UMAP colored by cell type",
-            plot_subtitle=paste(
-                "Split by dataset;",
-                "downsampled to", min_dataset_size,
-                "cells per dataset"
+            plot_title="Projected UMAP colored by cell type",
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score;\n",
+                "split by dataset; ",
+                "downsampled to ", min_dataset_size,
+                " cells per dataset"
             ),
             legend_title="Cell type",
-            group_by=args$target,
+            group_by="prediction_cell_type",
             split_by="new.ident",
             show_density=TRUE,
             label=FALSE,
@@ -341,13 +523,16 @@ export_all_clustering_plots <- function(seurat_data, args){
         graphics$composition_plot(
             data=downsampled_per_dataset,
             plot_title="Composition plot colored by cell type",
-            plot_subtitle=paste(
-                "Split by dataset;",
-                "downsampled to", min_dataset_size,
-                "cells per dataset"
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score;\n",
+                "split by dataset; ",
+                "downsampled to ", min_dataset_size,
+                " cells per dataset"
             ),
             legend_title="Cell type",
-            group_by=args$target,
+            group_by="prediction_cell_type",
             split_by="new.ident",
             x_label="Dataset",
             y_label="Cell percentage",
@@ -359,14 +544,17 @@ export_all_clustering_plots <- function(seurat_data, args){
         graphics$composition_plot(
             data=downsampled_per_dataset,
             plot_title="Composition plot colored by dataset",
-            plot_subtitle=paste(
-                "Split by cell type;",
-                "downsampled to", min_dataset_size,
-                "cells per dataset"
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score;\n",
+                "split by cell type; ",
+                "downsampled to ", min_dataset_size,
+                " cells per dataset"
             ),
             legend_title="Dataset",
             group_by="new.ident",
-            split_by=args$target,
+            split_by="prediction_cell_type",
             bar_position="dodge",
             x_label="Cell type",
             y_label="Cell counts",
@@ -379,11 +567,14 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$dim_plot(
                 data=downsampled_per_dataset,
                 reduction="refumap",
-                plot_title="UMAP colored by cell cycle phase",
-                plot_subtitle=paste(
-                    "Split by dataset;",
-                    "downsampled to", min_dataset_size,
-                    "cells per dataset"
+                plot_title="Projected UMAP colored by cell cycle phase",
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by dataset; ",
+                    "downsampled to ", min_dataset_size,
+                    " cells per dataset"
                 ),
                 legend_title="Phase",
                 group_by="Phase",
@@ -398,10 +589,13 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=downsampled_per_dataset,
                 plot_title="Composition plot colored by cell cycle phase",
-                plot_subtitle=paste(
-                    "Split by dataset;",
-                    "downsampled to", min_dataset_size,
-                    "cells per dataset"
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by dataset; ",
+                    "downsampled to ", min_dataset_size,
+                    " cells per dataset"
                 ),
                 legend_title="Phase",
                 group_by="Phase",
@@ -416,14 +610,17 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$dim_plot(
                 data=downsampled_per_dataset,
                 reduction="refumap",
-                plot_title="UMAP colored by cell type",
-                plot_subtitle=paste(
-                    "Split by cell cycle phase;",
-                    "downsampled to", min_dataset_size,
-                    "cells per dataset"
+                plot_title="Projected UMAP colored by cell type",
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by cell cycle phase; ",
+                    "downsampled to ", min_dataset_size,
+                    " cells per dataset"
                 ),
                 legend_title="Cell type",
-                group_by=args$target,
+                group_by="prediction_cell_type",
                 split_by="Phase",
                 label=FALSE,
                 label_color="black",
@@ -435,14 +632,17 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=downsampled_per_dataset,
                 plot_title="Composition plot colored by cell cycle phase",
-                plot_subtitle=paste(
-                    "Split by cell type;",
-                    "downsampled to", min_dataset_size,
-                    "cells per dataset"
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by cell type; ",
+                    "downsampled to ", min_dataset_size,
+                    " cells per dataset"
                 ),
                 legend_title="Phase",
                 group_by="Phase",
-                split_by=args$target,
+                split_by="prediction_cell_type",
                 bar_position="dodge",
                 x_label="Cell type",
                 y_label="Cell counts",
@@ -456,16 +656,18 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$dim_plot(
                 data=downsampled_per_condition,
                 reduction="refumap",
-                plot_title="UMAP colored by cell type",
-                plot_subtitle=paste(
-                    "Split by grouping condition;",
-                    "first downsampled to", min_dataset_size,
-                    "cells per dataset,",
-                    "then downsampled to", min_condition_size,
-                    "cells per grouping condition"
+                plot_title="Projected UMAP colored by cell type",
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by grouping condition; ",
+                    "first downsampled to ", min_dataset_size, " cells per dataset, ",
+                    "then downsampled to ", min_condition_size,
+                    " cells per grouping condition"
                 ),
                 legend_title="Cell type",
-                group_by=args$target,
+                group_by="prediction_cell_type",
                 split_by="condition",
                 show_density=TRUE,
                 label=FALSE,
@@ -478,15 +680,17 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=downsampled_per_condition,
                 plot_title="Composition plot colored by cell type",
-                plot_subtitle=paste(
-                    "Split by grouping condition;",
-                    "first downsampled to", min_dataset_size,
-                    "cells per dataset,",
-                    "then downsampled to", min_condition_size,
-                    "cells per grouping condition"
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by grouping condition; ",
+                    "first downsampled to ", min_dataset_size, " cells per dataset, ",
+                    "then downsampled to ", min_condition_size,
+                    " cells per grouping condition"
                 ),
                 legend_title="Cell type",
-                group_by=args$target,
+                group_by="prediction_cell_type",
                 split_by="condition",
                 x_label="Condition",
                 y_label="Cell percentage",
@@ -498,16 +702,18 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=downsampled_per_condition,
                 plot_title="Composition plot colored by grouping condition",
-                plot_subtitle=paste(
-                    "Split by cell type;",
-                    "first downsampled to", min_dataset_size,
-                    "cells per dataset,",
-                    "then downsampled to", min_condition_size,
-                    "cells per grouping condition"
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by cell type; ",
+                    "first downsampled to ", min_dataset_size, " cells per dataset, ",
+                    "then downsampled to ", min_condition_size,
+                    " cells per grouping condition"
                 ),
                 legend_title="Condition",
                 group_by="condition",
-                split_by=args$target,
+                split_by="prediction_cell_type",
                 bar_position="dodge",
                 x_label="Cell type",
                 y_label="Cell counts",
@@ -520,13 +726,15 @@ export_all_clustering_plots <- function(seurat_data, args){
                 graphics$dim_plot(
                     data=downsampled_per_condition,
                     reduction="refumap",
-                    plot_title="UMAP colored by cell cycle phase",
-                    plot_subtitle=paste(
-                        "Split by grouping condition;",
-                        "first downsampled to", min_dataset_size,
-                        "cells per dataset,",
-                        "then downsampled to", min_condition_size,
-                        "cells per grouping condition"
+                    plot_title="Projected UMAP colored by cell cycle phase",
+                    plot_subtitle=paste0(
+                        "Filtered query cells; ",
+                        "minimum ", args$minmapscore, " prediction mapping score and ",
+                        "minimum ", args$minconfscore, " prediction confidence score;\n",
+                        "split by grouping condition; ",
+                        "first downsampled to ", min_dataset_size, " cells per dataset, ",
+                        "then downsampled to ", min_condition_size,
+                        " cells per grouping condition"
                     ),
                     legend_title="Phase",
                     group_by="Phase",
@@ -541,12 +749,14 @@ export_all_clustering_plots <- function(seurat_data, args){
                 graphics$composition_plot(
                     data=downsampled_per_condition,
                     plot_title="Composition plot colored by cell cycle phase",
-                    plot_subtitle=paste(
-                        "Split by grouping condition;",
-                        "first downsampled to", min_dataset_size,
-                        "cells per dataset,",
-                        "then downsampled to", min_condition_size,
-                        "cells per grouping condition"
+                    plot_subtitle=paste0(
+                        "Filtered query cells; ",
+                        "minimum ", args$minmapscore, " prediction mapping score and ",
+                        "minimum ", args$minconfscore, " prediction confidence score;\n",
+                        "split by grouping condition; ",
+                        "first downsampled to ", min_dataset_size, " cells per dataset, ",
+                        "then downsampled to ", min_condition_size,
+                        " cells per grouping condition"
                     ),
                     legend_title="Phase",
                     group_by="Phase",
@@ -565,10 +775,15 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$dim_plot(
                 data=seurat_data,
                 reduction="refumap",
-                plot_title="UMAP colored by cell type",
-                plot_subtitle="Split by cell cycle phase",
+                plot_title="Projected UMAP colored by cell type",
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by cell cycle phase"
+                ),
                 legend_title="Cell type",
-                group_by=args$target,
+                group_by="prediction_cell_type",
                 split_by="Phase",
                 label=FALSE,
                 label_color="black",
@@ -580,10 +795,15 @@ export_all_clustering_plots <- function(seurat_data, args){
             graphics$composition_plot(
                 data=seurat_data,
                 plot_title="Composition plot colored by cell cycle phase",
-                plot_subtitle="Split by cell type",
+                plot_subtitle=paste0(
+                    "Filtered query cells; ",
+                    "minimum ", args$minmapscore, " prediction mapping score and ",
+                    "minimum ", args$minconfscore, " prediction confidence score;\n",
+                    "split by cell type"
+                ),
                 legend_title="Phase",
                 group_by="Phase",
-                split_by=args$target,
+                split_by="prediction_cell_type",
                 bar_position="dodge",
                 x_label="Cell type",
                 y_label="Cell counts",
@@ -596,6 +816,45 @@ export_all_clustering_plots <- function(seurat_data, args){
     }
     rm(downsampled_per_dataset, downsampled_per_condition)
     gc(verbose=FALSE)
+}
+
+## ----
+export_all_reference_plots <- function(seurat_data, args){
+    graphics$dim_plot(
+        data=seurat_data,
+        reduction="refUMAP",                                                                   # should always be present
+        plot_title="Reference UMAP colored by cell type",
+        plot_subtitle=paste(
+            "All reference cells;",
+            "show cell types from the", args$source, "metadata column"
+        ),
+        legend_title="Cell type",
+        group_by=args$source,
+        label=TRUE,
+        label_repel=TRUE,
+        label_color="black",
+        palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
+        rootname=paste(args$output, "ref_umap_gr_ctyp", sep="_"),
+        pdf=args$pdf
+    )
+    graphics$geom_bar_plot(
+        data=seurat_data@meta.data,
+        x_axis=args$source,
+        color_by=args$source,
+        x_label="Cell type",
+        y_label="Cells",
+        legend_title="Cell type",
+        plot_title="Number of cells per cell type",
+        plot_subtitle=paste(
+            "All reference cells;",
+            "show cell types from the", args$source, "metadata column"
+        ),
+        palette_colors=graphics$D40_COLORS,
+        theme=args$theme,
+        rootname=paste(args$output, "ref_cell_cnts_gr_ctyp", sep="_"),
+        pdf=args$pdf
+    )
 }
 
 ## ----
@@ -620,9 +879,14 @@ export_all_coverage_plots <- function(seurat_data, args) {
             data=seurat_data,
             assay="ATAC",
             region=current_gene,
-            group_by=args$target,
+            group_by="prediction_cell_type",
             plot_title="ATAC fragment coverage",
-            plot_subtitle=current_gene,
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score;\n",
+                current_gene
+            ),
             idents=NULL,                                                               # to include all values from the default "new.ident" column
             cells=colnames(seurat_data),                                               # limit to only those cells that are in out seurat_data
             features=current_gene,
@@ -644,12 +908,17 @@ export_all_coverage_plots <- function(seurat_data, args) {
 ## ----
 export_all_expression_plots <- function(seurat_data, args) {
     SeuratObject::DefaultAssay(seurat_data) <- "RNA"                            # safety measure
-    SeuratObject::Idents(seurat_data) <- args$target
+    SeuratObject::Idents(seurat_data) <- "prediction_cell_type"
 
     graphics$dot_plot(
         data=seurat_data,
         features=args$genes,
         plot_title="Average gene expression",
+        plot_subtitle=paste0(
+            "Filtered query cells; ",
+            "minimum ", args$minmapscore, " prediction mapping score and ",
+            "minimum ", args$minconfscore, " prediction confidence score"
+        ),
         x_label="Genes",
         y_label="Cell type",
         cluster_idents=FALSE,
@@ -663,6 +932,11 @@ export_all_expression_plots <- function(seurat_data, args) {
         features=args$genes,
         labels=args$genes,
         plot_title="Gene expression density",
+        plot_subtitle=paste0(
+            "Filtered query cells; ",
+            "minimum ", args$minmapscore, " prediction mapping score and ",
+            "minimum ", args$minconfscore, " prediction confidence score"
+        ),
         legend_title="Cell type",
         rotate_labels=TRUE,
         pt_size=0,
@@ -680,7 +954,12 @@ export_all_expression_plots <- function(seurat_data, args) {
             features=current_gene,
             labels=current_gene,
             reduction="refumap",
-            plot_title="UMAP colored by gene expression",
+            plot_title="Projected UMAP colored by gene expression",
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score"
+            ),
             legend_title="Expression",
             label=FALSE,
             order=TRUE,
@@ -697,7 +976,12 @@ export_all_expression_plots <- function(seurat_data, args) {
             data=seurat_data,
             features=current_gene,
             reduction="refumap",
-            plot_title="UMAP colored by gene expression density",
+            plot_title="Projected UMAP colored by gene expression density",
+            plot_subtitle=paste0(
+                "Filtered query cells; ",
+                "minimum ", args$minmapscore, " prediction mapping score and ",
+                "minimum ", args$minconfscore, " prediction confidence score"
+            ),
             joint=FALSE,
             width=800,
             height=800,
@@ -719,21 +1003,21 @@ export_heatmaps <- function(seurat_data, args){
         as.vector(as.character(seurat_data@meta.data$new.ident)) != as.vector(as.character(seurat_data@meta.data$condition))
     )
 
-    clusters_order <- levels(seurat_data@meta.data[[args$target]])
+    clusters_order <- levels(seurat_data@meta.data$prediction_cell_type)
     if (is.null(clusters_order)){
-        clusters_order <- unique(seurat_data@meta.data[[args$target]])
+        clusters_order <- unique(seurat_data@meta.data$prediction_cell_type)
     }
 
     base::print(
         base::paste(
-            "Checking if RNA markers for", args$target,
-            "metadata column have been calculated"
+            "Checking if RNA markers for the predicted",
+            "cell types have been calculated"
         )
     )
     filtered_markers <- NULL
     base::tryCatch(
         expr = {
-            filtered_markers <- seurat_data@misc$markers$RNA[[args$target]] %>%
+            filtered_markers <- seurat_data@misc$markers$RNA$prediction_cell_type %>%
                                 dplyr::mutate(
                                     cluster=base::factor(
                                         cluster,
@@ -758,8 +1042,8 @@ export_heatmaps <- function(seurat_data, args){
         error = function(e){
             base::print(
                 base::paste(
-                    "Failed to find RNA markers for", args$target,
-                    "metadata column due to", e
+                    "Failed to find RNA markers for the",
+                    "predicted cell types due to", e
                 )
             )
         }
@@ -767,7 +1051,7 @@ export_heatmaps <- function(seurat_data, args){
 
     if (!is.null(filtered_markers) && (nrow(filtered_markers) > 0)){
         column_annotations <- c("Cell type")
-        colnames(seurat_data@meta.data)[colnames(seurat_data@meta.data) == args$target] <- "Cell type"
+        colnames(seurat_data@meta.data)[colnames(seurat_data@meta.data) == "prediction_cell_type"] <- "Cell type"
         if (conditions_count > 1 && not_default_conditions){
             column_annotations <- c(column_annotations, "Condition")                           # several conditions found
             colnames(seurat_data@meta.data)[colnames(seurat_data@meta.data) == "condition"] <- "Condition"
@@ -788,7 +1072,7 @@ export_heatmaps <- function(seurat_data, args){
             heatmap_colors=c("darkblue", "black", "yellow"),
             group_by=column_annotations,
             palette_colors=graphics$D40_COLORS,
-            plot_title="Gene expression heatmap",
+            plot_title="Gene expression heatmap from the filtered query cells",
             rootname=paste(args$output, "xpr_htmp", sep="_"),
             pdf=args$pdf
         )
@@ -838,6 +1122,37 @@ get_args <- function(){
             "to select the reference annotations."
         ),
         type="character", required="True"
+    )
+    parser$add_argument(
+        "--minconfscore",
+        help=paste(
+            "The minimum threshold for a prediction",
+            "confidence score is calculated at the cell",
+            "level. This metric ranges from 0 to 1 and",
+            "reflects the confidence associated with each",
+            "annotation. Only cells that meet both the",
+            "minimum prediction confidence score and the",
+            "minimum prediction mapping score thresholds",
+            "will be included in the analysis.",
+            "Default: 0.75"
+        ),
+        type="double", default=0.75
+    )
+    parser$add_argument(
+        "--minmapscore",
+        help=paste(
+            "The minimum threshold for a prediction",
+            "mapping score is calculated at the cell.",
+            "This metric ranges from 0 to 1 and reflects",
+            "how well the unique structure of a cell's",
+            "local neighborhood is preserved during",
+            "reference mapping. Only cells that meet both",
+            "the minimum prediction mapping score and the",
+            "minimum prediction confidence score thresholds",
+            "will be included in the analysis.",
+            "Default: 0.75"
+        ),
+        type="double", default=0.75
     )
     parser$add_argument(
         "--diffgenes",
@@ -1100,6 +1415,29 @@ if ("Phase" %in% colnames(seurat_data@meta.data)){                              
     )
 }
 
+print(paste("Loading reference Seurat data from", args$reference))
+reference_seurat_data <- readRDS(args$reference)
+debug$print_info(reference_seurat_data, args)
+
+if (!(args$source %in% colnames(reference_seurat_data@meta.data))){
+    print(
+        paste(
+            "Loaded reference Seurat object doesn't",
+            "include", args$source, "annotation column.",
+            "Exiting."
+        )
+    )
+    quit(save="no", status=1, runLast=FALSE)
+}
+
+## ----
+export_all_reference_plots(
+    seurat_data=reference_seurat_data,
+    args=args
+)
+rm(reference_seurat_data)
+gc(verbose=FALSE)
+
 ## ----
 ref_dir <- base::file.path(args$tmpdir, "reference")
 if (!base::dir.exists(ref_dir)) {
@@ -1115,7 +1453,6 @@ seurat_data <- analyses$rna_reference_map(                                      
     reference_dir=ref_dir,                                                         # metadata column, as well as the refumap reduction
     args=args
 )
-args$target <- "prediction_cell_type"                                               # for easy access and consistency in code between the scripts
 debug$print_info(seurat_data, args)
 
 ## ----
@@ -1130,6 +1467,18 @@ export_all_qc_plots(
     seurat_data=seurat_data,
     args=args
 )
+
+## ----
+print("Removing all cells that didn't pass the prediction QC filter")
+seurat_data_backup <- seurat_data                                                  # we wil use it as the main output of the workflow
+seurat_data <- base::subset(seurat_data, subset=prediction_passed_qc)              # removing all cells that didn't pass prediction QC filter
+print(base::paste(
+    "Cells before filtering", length(SeuratObject::Cells(seurat_data_backup))
+))
+print(base::paste(
+    "Cells after filtering ", length(SeuratObject::Cells(seurat_data))
+))
+seurat_data <- io$refine_metadata_levels(seurat_data)                              # to drop possible empty levels
 
 ## ----
 export_all_clustering_plots(
@@ -1159,7 +1508,7 @@ if (!is.null(args$genes)){
 if (!is.null(args$genes) || args$diffgenes){                                                                     # we check genes or diffgenes so we don't normalize it without reason
     print("Normalizing counts in RNA assay before evaluating genes expression or identifying putative gene markers")
     DefaultAssay(seurat_data) <- "RNA"
-    seurat_data <- NormalizeData(seurat_data, verbose=FALSE)
+    seurat_data <- NormalizeData(seurat_data, verbose=FALSE)                                                     # we normalize filtered data
     if (!is.null(args$genes)) {
         print("Generating genes expression plots")
         export_all_expression_plots(seurat_data=seurat_data, args=args)                                          # changes default assay to RNA
@@ -1173,15 +1522,22 @@ if (!is.null(args$genes) || args$diffgenes){                                    
         seurat_data <- analyses$get_markers(
             seurat_data=seurat_data,
             assay="RNA",
-            group_by=args$target,
+            group_by="prediction_cell_type",
             args=args
         )
         debug$print_info(seurat_data, args)
+        if (                                                                                                     # need to copy gene markers if they were calculated
+            ("markers" %in% names(seurat_data@misc)) &&
+            ("RNA" %in% names(seurat_data@misc$markers)) &&
+            ("prediction_cell_type" %in% names(seurat_data@misc$markers$RNA))
+        ){
+            seurat_data_backup@misc$markers$RNA$prediction_cell_type <- seurat_data@misc$markers$RNA$prediction_cell_type
+        }
         args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]                       # to remove temporary added items
         io$export_markers(
             data=seurat_data,
             assay="RNA",
-            markers_regex=args$target,
+            markers_regex="prediction_cell_type",
             location=paste0(args$output, "_gene_markers.tsv")
         )
         export_heatmaps(                                                                                         # will change default assay to RNA
@@ -1204,23 +1560,33 @@ if ("ATAC" %in% names(seurat_data@assays)){                                     
         args$minpct <- args$atacminpct
         args$onlypos <- FALSE                                                                                    # need to overwrite what was set for RNA
         args$testuse <- args$atactestuse
-        seurat_data <- analyses$get_markers(                                                                # will change default assay to ATAC
+        seurat_data <- analyses$get_markers(                                                                     # will change default assay to ATAC
             seurat_data=seurat_data,
             assay="ATAC",
-            group_by=args$target,
+            group_by="prediction_cell_type",
             latent_vars="nCount_ATAC",                                                                           # to remove the influence of sequencing depth
             args=args
         )
         debug$print_info(seurat_data, args)
+        if (                                                                                                     # need to copy peak markers if they were calculated
+            ("markers" %in% names(seurat_data@misc)) &&
+            ("ATAC" %in% names(seurat_data@misc$markers)) &&
+            ("prediction_cell_type" %in% names(seurat_data@misc$markers$ATAC))
+        ){
+            seurat_data_backup@misc$markers$ATAC$prediction_cell_type <- seurat_data@misc$markers$ATAC$prediction_cell_type
+        }
         args <- args[names(args) %in% c("logfc", "minpct", "onlypos", "testuse") == FALSE]                       # to remove temporary added items
         io$export_markers(
             data=seurat_data,
             assay="ATAC",
-            markers_regex=args$target,
+            markers_regex="prediction_cell_type",
             location=paste0(args$output, "_peak_markers.tsv")
         )
     }
 }
+
+## ----
+seurat_data <- seurat_data_backup                                               # to export not filtered results
 
 ## ----
 if(args$cbbuild){
@@ -1298,7 +1664,7 @@ if(args$loupe){
     ucsc$export_loupe(
         seurat_data=seurat_data,
         assay="RNA",
-        active_cluster=args$target,
+        active_cluster="prediction_cell_type",
         rootname=paste0(args$output, "_rna_counts")
     )
 }

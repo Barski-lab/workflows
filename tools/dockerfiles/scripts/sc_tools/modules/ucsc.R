@@ -59,7 +59,8 @@ DEFAULT_META_FIELDS <- c(
 
     "prediction_cell_type",
     "prediction_mapping_score",
-    "prediction_confidence_score"
+    "prediction_confidence_score",
+    "prediction_passed_qc"
 )
 
 DEFAULT_META_FIELDS_NAMES <- c(
@@ -105,7 +106,8 @@ DEFAULT_META_FIELDS_NAMES <- c(
 
     "Prediction cell type",
     "Prediction mapping score",
-    "Prediction confidence score"
+    "Prediction confidence score",
+    "Prediction passed QC"
 )
 
 get_matrix <- function(object, slot){
@@ -442,6 +444,8 @@ export_cellbrowser <- function(
                 check.names=FALSE,
                 stringsAsFactors=FALSE
             ) %>%
+            tibble::add_row(category="TRUE", color=graphics$TRUE_COLOR) %>%        # color for TRUE
+            tibble::add_row(category="FALSE", color=graphics$FALSE_COLOR) %>%      # color for FALSE
             tibble::add_row(category="NA", color=graphics$NA_COLOR) %>%            # color for NA
             tibble::add_row(category="G1", color=graphics$CC_COLORS[1]) %>%        # color for G1 cell cycle phase
             tibble::add_row(category="S", color=graphics$CC_COLORS[2]) %>%         # color for S cell cycle phase

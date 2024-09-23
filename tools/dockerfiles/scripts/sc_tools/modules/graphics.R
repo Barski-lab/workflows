@@ -74,7 +74,9 @@ export(
     "D40_COLORS",
     "D24_COLORS",
     "CC_COLORS",
-    "NA_COLOR"
+    "NA_COLOR",
+    "TRUE_COLOR",
+    "FALSE_COLOR"
 )
 
 # https://sashamaps.net/docs/resources/20-colors/
@@ -99,6 +101,8 @@ D24_COLORS <- c(
   "#66A61E", "#E6AB02", "#A6761D", "#1B9E77"
 )
 NA_COLOR <- "#E1F6FF"
+TRUE_COLOR <- "#00916A"
+FALSE_COLOR <- "#EB6331"
 CC_COLORS <- c("#FB1C0D", "#0DE400", "#0D00FF", NA_COLOR)        # we added NA color, because sometimes the cell cycle phase is not being assigned
 
 get_theme <- function(theme){
@@ -1005,9 +1009,20 @@ geom_point_plot <- function(
             plot <- ggplot2::ggplot(data, ggplot2::aes_string(x=x_axis, y=y_axis, color=color_by)) +
                     ggplot2::geom_point(alpha=alpha) +
                     ggplot2::scale_colour_gradientn(
-                        colours=c(gradient_colors[1], gradient_colors),
-                        values=scales::rescale(c(color_limits[1], color_break-0.01*color_break, color_break, color_limits[2])),
-                        breaks=c(color_break),
+                        colours = if (color_break > color_limits[1])
+                                      c(gradient_colors[1], gradient_colors)
+                                  else
+                                      gradient_colors[-1],
+                        values = scales::rescale(
+                            if (color_break > color_limits[1])
+                                c(color_limits[1], color_break-0.001*color_break, color_break, color_limits[2])
+                            else
+                                color_limits
+                        ),
+                        breaks = if (color_break > color_limits[1])
+                                     c(color_limits[1], color_break, color_limits[2])
+                                 else
+                                     color_limits,
                         limits=color_limits
                     ) +
                     ggplot2::xlab(x_label) +
@@ -2020,6 +2035,7 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
     # bar_position can be one of the following
     #   fill  - stacked, percents are diplayed (default)
     #   dodge - grouped, values are displayed
+    #   stack - the same as filled, but without percents
     base::tryCatch(
         expr = {
             counts_data <- data@meta.data %>%
@@ -2081,7 +2097,7 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
                                 fontface="bold",
                                 size=3
                             )
-                } else {
+                } else if (bar_position == "dodge") {
                     plot <- plot +
                             ggplot2::geom_text(
                                 position=ggplot2::position_dodge(width=0.9),
@@ -2089,6 +2105,15 @@ composition_plot <- function(data, rootname, plot_title, legend_title, x_label, 
                                 hjust=-0.2,
                                 color="gray45",
                                 fontface="bold",
+                                size=3
+                            )
+                } else {                                                            # the only option left is stack
+                    plot <- plot +
+                            ggplot2::geom_text(
+                                position=ggplot2::position_stack(vjust = 0.5),
+                                angle=90,
+                                hjust=0.5,
+                                color="gray20",
                                 size=3
                             )
                 }
@@ -2432,7 +2457,7 @@ dot_plot <- function(data, features, rootname, plot_title, x_label, y_label, clu
 }
 
 
-expression_density_plot <- function(data, features, rootname, reduction, plot_title, joint=FALSE, alpha=NULL, fixed=TRUE, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+expression_density_plot <- function(data, features, rootname, reduction, plot_title, plot_subtitle=NULL, joint=FALSE, alpha=NULL, fixed=TRUE, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -2464,7 +2489,11 @@ expression_density_plot <- function(data, features, rootname, reduction, plot_ti
                 return (plots[[i]])
             })
 
-            combined_plots <- patchwork::wrap_plots(plots, guides="keep") + patchwork::plot_annotation(title=plot_title)
+            combined_plots <- patchwork::wrap_plots(plots, guides="keep") +
+                              patchwork::plot_annotation(
+                                  title=plot_title,
+                                  subtitle=plot_subtitle
+                              )
 
             grDevices::png(filename=base::paste(rootname, ".png", sep=""), width=width, height=height, res=resolution)
             base::suppressMessages(base::print(combined_plots))
@@ -2495,7 +2524,7 @@ expression_density_plot <- function(data, features, rootname, reduction, plot_ti
 }
 
 
-feature_plot <- function(data, features, labels, rootname, reduction, plot_title, plot_subtitle=NULL, legend_title=NULL, from_meta=FALSE, split_by=NULL, label=FALSE, label_color="black", label_size=4, order=FALSE, color_limits=NULL, color_breaks=NULL, color_scales=NULL, gradient_colors=c("lightgrey", "blue"), min_cutoff=NA, max_cutoff=NA, pt_size=NULL, ncol=NULL, combine_guides=NULL, fixed=TRUE, alpha=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
+feature_plot <- function(data, features, labels, rootname, reduction, plot_title, plot_subtitle=NULL, legend_title=NULL, from_meta=FALSE, split_by=NULL, label=FALSE, label_repel=FALSE, label_color="black", label_size=4, order=FALSE, color_limits=NULL, color_breaks=NULL, color_scales=NULL, gradient_colors=c("lightgrey", "blue"), min_cutoff=NA, max_cutoff=NA, pt_size=NULL, ncol=NULL, combine_guides=NULL, fixed=TRUE, alpha=NULL, theme="classic", pdf=FALSE, width=1200, height=800, resolution=100){
     base::tryCatch(
         expr = {
 
@@ -2556,6 +2585,7 @@ feature_plot <- function(data, features, labels, rootname, reduction, plot_title
                         label=label,
                         label.color=label_color,
                         label.size=label_size,
+                        repel=label_repel,
                         combine=FALSE       # to return a list of gglots
                     )
             plots <- base::lapply(seq_along(plots), function(i){

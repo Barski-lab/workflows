@@ -36,7 +36,8 @@
 #     sc_vdj_profile.R --help && \
 #     sc_cb_utils_atac_search.R --help && \
 #     sc_cb_utils_split_mex.R --help && \
-#     sc_rna_azimuth.R --help
+#     sc_rna_azimuth.R --help && \
+#     sc_rna_load_rhapsody.R --help
 #
 # v0.0.41 -- based on biowardrobe2/sc-tools:v0.0.40
 # - Updated UCSC Cellbrowser to 1.2.8.
@@ -57,6 +58,8 @@
 #   the homologs.rds file on every execution. We can
 #   install Azimuth from the main repo after we switch
 #   to Seurat 5 base image.
+# - Added sc_rna_load_rhapsody.R to load RDS files
+#   produced by the BD Rhapsody Sequence Analysis Pipeline
 #
 # v0.0.40 -- based on biowardrobe2/sc-tools:v0.0.39
 # - Added sc_report_wrapper.R script to export HTML report
@@ -464,6 +467,7 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_cb_utils_split_mex.R && \
     chmod +x /usr/local/bin/sc_report_wrapper.R && \
     chmod +x /usr/local/bin/sc_rna_azimuth.R && \
+    chmod +x /usr/local/bin/sc_rna_load_rhapsody.R && \
 ### Downloading blacklist regions files
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg38-blacklist.v2.bed.gz && \
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg19-blacklist.v2.bed.gz && \

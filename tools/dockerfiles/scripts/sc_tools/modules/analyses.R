@@ -717,6 +717,10 @@ rna_reference_map <- function(seurat_data, reference_dir, args){
     seurat_data@meta.data$prediction_confidence_score <- annotated_data@meta.data[[base::paste0("predicted.", args$source, ".score")]]
     seurat_data@meta.data$prediction_mapping_score <- annotated_data@meta.data$mapping.score
     seurat_data@meta.data$prediction_cell_type <- annotated_data@meta.data[[base::paste0("predicted.", args$source)]]
+    seurat_data@meta.data$prediction_passed_qc <- base::with(                   # temporary column to mark cells with the low QC scores
+        seurat_data@meta.data,
+        prediction_confidence_score >= args$minconfscore & prediction_mapping_score >= args$minmapscore
+    )
     seurat_data@reductions$refumap <- annotated_data@reductions$ref.umap
     base::rm(annotated_data)
     base::gc(verbose=FALSE)
