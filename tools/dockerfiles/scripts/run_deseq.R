@@ -24,6 +24,7 @@ suppressMessages(library(hopach))
 suppressMessages(library(cmapR))
 suppressMessages(library(ggplot2))
 suppressMessages(library(ggrepel))
+suppressMessages(library(sva))
 
 
 ##########################################################################################
@@ -238,45 +239,104 @@ generate_md <- function(batchcorrection, batchfile, deseq_results, output_file) 
 
   # Add DESeq results summary if provided
   if (!is.null(deseq_results)) {
-    # Capture the summary output
-    summary_output <- capture.output({
-      summary(deseq_results)
-    })
+    # Extract total genes with non-zero read count
+    total_genes <- sum(!is.na(deseq_results$baseMean) & deseq_results$baseMean > 0)
 
-    # Parse the relevant information
-    total_genes <- gsub(" with nonzero total read count", "", summary_output[2])
-    total_genes <- gsub("out of ", "", total_genes)
-    fdr_pvalue <- gsub("adjusted p-value < ", "", summary_output[3])
-    lfc_up <- gsub(".*: ", "", summary_output[4])
-    lfc_down <- gsub(".*: ", "", summary_output[5])
-    outliers <- gsub(".*: ", "", summary_output[6])
-    low_counts <- gsub(".*: ", "", summary_output[7])
-    mean_count <- gsub("[^0-9]", "", summary_output[8])
+    # Get thresholds from deseq_results metadata
+    metadata_res <- metadata(deseq_results)
+    lfc_threshold <- ifelse(!is.null(metadata_res$lfcThreshold), metadata_res$lfcThreshold, 0)
+    p_adj_threshold <- ifelse(!is.null(metadata_res$alpha), metadata_res$alpha, 0.1)
 
-    # Extract the LFC threshold from the summary output
-    lfc_threshold <- gsub(".*LFC > ", "", summary_output[4])
-    lfc_threshold <- gsub(" \\(up\\).*", "", lfc_threshold)
+    # Extract counts
+    res_nonzero <- deseq_results[!is.na(deseq_results$baseMean) & deseq_results$baseMean > 0,]
 
-    # Create a data frame
+    # Upregulated genes
+    lfc_up <- sum(
+      res_nonzero$log2FoldChange > lfc_threshold &
+        res_nonzero$padj < p_adj_threshold,
+      na.rm = TRUE
+    )
+
+    # Downregulated genes
+    lfc_down <- sum(
+      res_nonzero$log2FoldChange < -lfc_threshold &
+        res_nonzero$padj < p_adj_threshold,
+      na.rm = TRUE
+    )
+
+    # Outliers
+    outliers <- sum(
+      is.na(res_nonzero$pvalue) & !is.na(res_nonzero$baseMean),
+      na.rm = TRUE
+    )
+
+    # Low counts (independent filtering)
+    low_counts <- sum(
+      is.na(res_nonzero$padj) & is.na(res_nonzero$pvalue),
+      na.rm = TRUE
+    )
+
+    # Mean count threshold (from independent filtering)
+    mean_count <- if (!is.null(metadata_res$filterThreshold)) {
+      round(metadata_res$filterThreshold, 2)
+    } else {
+      "-"
+    }
+
+    # Calculate percentages
+    percent_total <- 100
+    percent_up <- if (total_genes > 0) round((lfc_up / total_genes) * 100, 2) else NA
+    percent_down <- if (total_genes > 0) round((lfc_down / total_genes) * 100, 2) else NA
+    percent_outliers <- if (total_genes > 0) round((outliers / total_genes) * 100, 2) else NA
+    percent_low_counts <- if (total_genes > 0) round((low_counts / total_genes) * 100, 2) else NA
+
+    # Create data frame
     summary_df <- data.frame(
       Metric = c(
-        "Total genes with non-zero read count",
-        paste("LFC >", lfc_threshold, "(up)"),
-        paste("LFC &lt;", lfc_threshold, "(down)"),
+        "Total Expressed (Non-Zero Read Count)",
+        paste0("Upregulated ", "\u2191", " (LFC > ", lfc_threshold, ")"),
+        paste0("Downregulated ", "\u2193", " (LFC < ", -lfc_threshold, ")"),
         "Outliers<sup>1</sup>",
-        paste0("Low counts<sup>2</sup> (mean count &lt; ", mean_count, ")", collapse = "")
+        if (mean_count != "-") {
+          paste0("Low Counts<sup>2</sup> (Mean Count < ", mean_count, ")")
+        } else {
+          "Low Counts<sup>2</sup>"
+        }
       ),
-      Value = c(total_genes, lfc_up, lfc_down, outliers, low_counts),
-      stringsAsFactors = FALSE
+      `Gene Count` = c(
+        total_genes,
+        lfc_up,
+        lfc_down,
+        outliers,
+        low_counts
+      ),
+      `% of Total` = c(
+        percent_total,
+        percent_up,
+        percent_down,
+        percent_outliers,
+        percent_low_counts
+      ),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
     )
 
     # Convert the data frame to markdown format using kable
     summary_output_md <- paste0(
-      "# DESeq2 Results Summary\n\n---\n\n",
-      "## Summary of DESeq2 Results\n\n",
-      kableExtra::kable(summary_df, format = "html", escape = FALSE) %>%
-        kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F),
-      "\n\narguments of ?DESeq2::results():   \n<sup>1</sup> - see 'cooksCutoff',\n<sup>2</sup> - see 'independentFiltering'\n\n---\n\n"
+      "# DESeq2 Summary\n\n",
+      kableExtra::kable(
+        summary_df,
+        format = "html",
+        escape = FALSE,
+        align = c("l", "c", "c")  # Center the Gene Count and % of Total columns
+      ) %>%
+        kableExtra::kable_styling(
+          bootstrap_options = c("striped", "hover", "condensed"),
+          full_width = FALSE
+        ),
+      "\n\nArguments of ?DESeq2::results():\n\n",
+      "<sup>1</sup> Outliers are genes with high Cook's distance (see [cooksCutoff](https://www.bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#outlier)).\n\n",
+      "<sup>2</sup> Low counts are genes filtered out due to low mean counts (see [independentFiltering](https://www.bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#independent-filtering-of-results)).\n\n---\n\n"
     )
 
     md_content <- paste0(md_content, summary_output_md)
@@ -885,7 +945,7 @@ if (length(args$treated) > 1 && length(args$untreated) > 1) {
         args$batchfile,
         "using ComBat-Seq"
       ))
-      counts_data <- ComBat_seq(
+      counts_data <- sva::ComBat_seq(
         as.matrix(counts_data),
         covar_mod = model.matrix(design, data = colData),
         batch = metadata[[args$batchfile]],
