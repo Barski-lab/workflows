@@ -1,0 +1,176 @@
+body {
+    font-family: 'Noto Sans', sans-serif;
+}
+
+/* make active tab distinguishable */
+.tablinks-active{
+    color: #1f1;
+}
+.tablinks-active:hover{
+    background-color: black;
+}
+#sidebar {
+    min-width: 355px;
+    max-width: 30%;
+}
+#sidebar.active {
+    margin-left: -25%;
+}
+
+.content{
+    flex: 1;
+}
+.thresholdLines {
+    clip-path: url(#clip);
+}
+
+
+/*
+.wrapper {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+@media (max-width: 768px) {
+    #sidebar {
+        margin-left: -25%;
+    }
+    #sidebar.active {
+        margin-left: 0;
+    }
+}*/
+
+/*.tab-header{
+    padding-left: 10px;
+    padding-right: 10px;
+}*/
+
+
+
+/* css for tabs 
+.tab {
+overflow: hidden;
+border: 1px solid #ccc;
+background-color: #f1f1f1;
+}
+
+.tab button {
+background-color: inherit;
+float: left;
+border: none;
+outline: none;
+cursor: pointer;
+padding: 14px 16px;
+transition: 0.3s;
+}
+
+.tab button:hover {
+background-color: #ddd;
+}
+
+  
+.tabcontent {
+display: none;
+padding: 6px 12px;
+border: 1px solid #ccc;
+border-top: none;
+} 
+
+/* 
+.axis path,
+.tick line,
+.tick text {
+    stroke: #666;
+    stroke-width: 0.5px;
+    stroke-opacity: 0.5;
+}
+
+.tick text {
+    fill: #666;
+}
+
+.label {
+    fill: #666;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+//Significance threshold line 
+.threshold {
+    stroke: #333;
+    stroke-dasharray: 5px 10px;
+    stroke-opacity: 0.25;
+}
+
+.dot {
+    //pointer-events: all;
+    fill: #666;
+    stroke: none;
+    opacity: 0.4;
+}
+
+.dot.sig {
+    fill: red;
+}
+
+.dot.fold {
+    fill: blue;
+}
+
+.dot.sigfold {
+    fill: green;
+
+}
+
+.zoom {
+    cursor: move;
+    fill: none;
+    pointer-events: all;
+}
+
+//Add clip path for dots and threshold lines to ensure they arent drawn if outside the clip box
+.circlesContainer {
+    clip-path: url(#clip);
+}
+
+
+
+.tooltip {
+    position: absolute;
+    z-index: 10;
+    background-color: #000;
+    color: #fff;
+    padding: 2px 7px;
+    visibility: hidden;
+    opacity: 0.75;
+    border-radius: 3px;
+}
+
+.tooltip::after {
+    content: " ";
+    position: absolute;
+    top: 14%;
+    right: 100%; //To the left of the tooltip 
+    margin-top: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent #000 transparent transparent;
+}
+
+
+#resetBtn {
+    position: absolute;
+    font-size: .5em;
+    font-weight: bold;
+    color: #4c4c4c;
+    background-color: #e5e5e5;
+    box-shadow: 1px 1px 0.5px rgba(51,51,51, 0.1);
+    border: 1px solid rgba(76, 76, 76, 0.5);
+    border-radius: 3px;
+    outline: none;
+}
+
+#resetBtn:hover {
+    color: #000;
+    cursor: pointer;
+} */

@@ -347,42 +347,99 @@ generate_md <- function(batchcorrection, batchfile, deseq_results, output_file) 
 }
 
 
-get_clustered_data <- function(expression_data, dist, transpose) {
-  if (transpose) {
-    print("Transposing expression data")
+get_clustered_data <- function(expression_data, by = "row", k = 3, kmax = 5, dist = "cosangle", scaling_type = "zscore") {
+
+  start_time <- proc.time()
+
+  if (!(by %in% c("row", "col"))) {
+    stop("Invalid value for 'by'. Choose either 'row' or 'col'.")
+  }
+
+  # If clustering by columns, transpose so that columns become rows for scaling.
+  if (by == "col") {
+    print("Transposing expression data to scale columns")
     expression_data <- t(expression_data)
   }
 
-  expression_data <- apply(
-    expression_data,
-    1,
-    FUN = function(x) {
-      scale_min_max(x)
-    }
+  # Apply scaling per row (which is the desired unit, either original rows or columns)
+  expression_data <- switch(scaling_type,
+    "minmax" = t(apply(expression_data, 1, scale_min_max)),
+    "zscore" = {
+      scaled_data <- t(scale(t(expression_data), center = TRUE, scale = TRUE))
+      scaled_data[is.na(scaled_data)] <- 0  # Handle zero-variance rows
+      scaled_data
+    },
+    stop("Invalid scaling type. Choose 'minmax' or 'zscore'.")
   )
 
-  print("Running HOPACH")
-  hopach_results <- hopach(expression_data)
-
-  if (transpose) {
-    print("Transposing expression data")
+  # If data was transposed for column scaling, transpose back to original orientation.
+  if (by == "col") {
+    print("Transposing expression data back to original orientation")
     expression_data <- t(expression_data)
   }
 
+  print(paste0("Running HOPACH for ", nrow(expression_data), "  features"))
+  hopach_results <- hopach::hopach(expression_data,
+                                   verbose = TRUE,
+                                   K       = k,
+                                   kmax    = kmax,
+                                   khigh   = kmax,
+                                   d = dist
+  )
+
   print("Parsing cluster labels")
-  clusters <- as.data.frame(hopach_results$clustering$labels)
-  colnames(clusters) <- "label"
-  clusters <- cbind(clusters, "HCL" = outer(clusters$label, 10^c((nchar(
-    trunc(clusters$label)
-  )[1] - 1):0), function(a, b) {
-    paste0("c", a %/% b %% 10)
+  # hopach_results$clustering$labels gives final cluster labels as integers
+  # hopach returns them as numeric without the "c" prefix, so we add "c" ourselves or just rely on numeric.
+  # Actually hopach by default returns numeric labels (1,11,12...). We'll add "c" prefix ourselves for consistency.
+
+  # Final labels (no prefix 'c' in hopach by default)
+  final_labels      <- hopach_results$clustering$labels[hopach_results$clustering$order]
+  # Convert to character
+  final_labels_char <- as.character(final_labels)
+
+  # Add "c" prefix if desired (optional)
+  # final_labels_char <- paste0("c", final_labels_char)
+
+  # Each digit in the label corresponds to a level.
+  # Determine max number of levels
+  max_levels <- max(nchar(final_labels_char))
+
+  # Create a data frame for clusters
+  clusters           <- data.frame(Label = final_labels_char, stringsAsFactors = FALSE)
+  rownames(clusters) <- rownames(expression_data)[hopach_results$clustering$order]
+
+  # Split labels into levels
+  # For each label, we split into characters and assign to new columns
+  level_data <- do.call(rbind, lapply(clusters$Label, function(lbl) {
+    # Split into individual characters
+    chars <- unlist(strsplit(lbl, split = ""))
+    # If shorter than max_levels, pad with NA
+    if (length(chars) < max_levels) {
+      chars <- c(chars, rep(NA, max_levels - length(chars)))
+    }
+    return(chars)
   }))
-  clusters <- clusters[, c(-1), drop = FALSE]
+
+  # Name the columns
+  colnames(level_data) <- paste0("Cluster_Level_", seq_len(max_levels))
+
+  # Combine into clusters
+  clusters <- cbind(clusters, level_data)
+
+  # Optionally remove the original 'Label' column if not needed
+  # Or rename it to something else
+  clusters$HCL   <- paste0("c", clusters$Label)
+  clusters$Label <- NULL
+
+  end_time <- proc.time() - start_time
+
+  print("Total time of get_clustered_data function execution: ")
+  print(end_time)
 
   return(list(
-    order = as.vector(hopach_results$clustering$order),
+    order      = hopach_results$clustering$order,
     expression = expression_data,
-    clusters = clusters
+    clusters   = clusters
   ))
 }
 
@@ -662,6 +719,10 @@ export_heatmap <- function(mat_data,
   )
 }
 
+filter_rpkm <- function(expression_df, n) {
+  expression_df %>%
+    filter(if_any(contains("Rpkm"), ~. > n))
+}
 
 assert_args <- function(args) {
   print("Check input parameters")
@@ -783,6 +844,27 @@ get_args <- function() {
     default = 0.1
   )
   parser$add_argument(
+    "--scaling_type",
+    help = paste(
+      "Specifies the type of scaling to be applied to the expression data.",
+      "- 'minmax' applies Min-Max scaling, normalizing values to a range of [-2, 2].",
+      "- 'zscore' applies Z-score standardization, centering data to mean = 0 and standard deviation = 1.",
+      "- Default: none (no scaling applied)."
+    ),
+    type = "character",
+    choices = c("minmax", "zscore"),
+    default = "zscore"
+  )
+  parser$add_argument(
+    "--rpkm_cutoff",
+    help = paste(
+      "RPKM cutoff for filtering genes. Genes with RPKM values below this threshold will be excluded from the analysis.",
+      "Default: NULL (no filtering)"
+    ),
+    type    = "integer",
+    default = NULL
+  )
+  parser$add_argument(
     "--cluster",
     help = paste(
       "Hopach clustering method to be run on normalized read counts for the",
@@ -871,6 +953,18 @@ get_args <- function() {
       "abscor"
     )
   )
+  parser$add_argument(
+    "--k",
+    help    = "Number of levels (depth) for Hopach clustering: min - 1, max - 15. Default: 3.",
+    type    = "integer",
+    default = 3
+  )
+  parser$add_argument(
+    "--kmax",
+    help    = "Maximum number of clusters at each level for Hopach clustering: min - 2, max - 9. Default: 5.",
+    type    = "integer",
+    default = 5
+  )
   parser$add_argument("-o",
     "--output",
     help = "Output prefix. Default: deseq",
@@ -936,6 +1030,16 @@ print(paste(
   sep = ""
 ))
 print(head(collected_isoforms))
+
+if (!is.null(args$rpkm_cutoff)) {
+  print("Using RPKM cutoff for additional filtering of expression data:")
+  print(args$rpkm_cutoff)
+  collected_isoforms <- filter_rpkm(collected_isoforms, args$rpkm_cutoff)
+  print("Expression data after RPKM filtering: ")
+  print(head(collected_isoforms))
+  print(dim(collected_isoforms))
+}
+
 print("DESeq categories")
 print(column_data)
 print("DESeq count data")
@@ -1128,7 +1232,7 @@ print(
 )
 
 row_metadata <- row_metadata %>%
-  dplyr::filter(.$padj <= args$fdr) # Filtering out non-significant features
+  dplyr::filter(.$padj <= args$fdr, abs(.$log2FoldChange <= args$lfcthreshold)) # Filtering out non-significant features
 
 print("Size of the normalized read counts matrix before filtering")
 print(read_count_matrix_all_size)
@@ -1136,32 +1240,30 @@ normCounts <- normCounts[as.vector(rownames(row_metadata)), ]
 print("Size of the normalized read counts matrix after filtering")
 print(dim(normCounts))
 
-if (!is.null(args$cluster)) {
-  if (args$cluster == "column" || args$cluster == "both") {
-    print("Clustering filtered read counts by columns")
-    clustered_data <- get_clustered_data(
-      expression_data = normCounts,
-      dist = args$columndist,
-      transpose = TRUE
-    )
-    col_metadata <- cbind(col_metadata, clustered_data$clusters) # adding cluster labels
-    col_metadata <- col_metadata[clustered_data$order, ] # reordering samples order based on the HOPACH clustering resutls
-    print("Reordered samples")
-    print(col_metadata)
-  }
-  if (args$cluster == "row" || args$cluster == "both") {
-    print("Clustering filtered normalized read counts by rows")
-    clustered_data <- get_clustered_data(
-      expression_data = normCounts,
-      dist = args$rowdist,
-      transpose = FALSE
-    )
-    normCounts <- clustered_data$expression # can be different because of centering by rows mean
-    row_metadata <- cbind(row_metadata, clustered_data$clusters) # adding cluster labels
-    row_metadata <- row_metadata[clustered_data$order, ] # reordering features order based on the HOPACH clustering results
-    print("Reordered features")
-    print(head(row_metadata))
-  }
+if (args$cluster != "none") {
+    if (args$test_mode) {
+        k    <- 2
+        kmax <- 2
+      } else {
+        k    <- args$k
+        kmax <- args$kmax
+      }
+    # Column clustering if requested
+    if (args$cluster == "column" || args$cluster == "both") {
+      clustered_data_cols <- get_clustered_data(normCounts, by = "col", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$columndist)
+      normCounts          <- normCounts[, clustered_data_cols$order, drop = FALSE]
+      col_metadata        <- col_metadata[clustered_data_cols$order, , drop = FALSE]
+      # After reordering, cbind cluster info
+      col_metadata        <- cbind(col_metadata, clustered_data_cols$clusters)
+    }
+    # Row clustering if requested
+    if (args$cluster == "row" || args$cluster == "both") {
+      clustered_data_rows <- get_clustered_data(normCounts, by = "row", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$rowdist)
+      normCounts          <- clustered_data_rows$expression[clustered_data_rows$order, , drop = FALSE]
+      row_metadata        <- row_metadata[clustered_data_rows$order, , drop = FALSE]
+      # After reordering rows, add cluster annotations
+      row_metadata        <- cbind(row_metadata, clustered_data_rows$clusters)
+    }
 }
 
 # we do not reorder normCounts based on the clustering order

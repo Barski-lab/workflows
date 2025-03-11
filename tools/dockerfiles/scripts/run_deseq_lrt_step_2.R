@@ -194,6 +194,63 @@ get_args <- function() {
     default = "both"
   )
   parser$add_argument(
+    "--rpkm_cutoff",
+    help = paste(
+      "RPKM cutoff for filtering genes. Genes with RPKM values below this threshold will be excluded from the analysis.",
+      "Default: NULL (no filtering)"
+    ),
+    type    = "integer",
+    default = NULL
+  )
+  parser$add_argument(
+    "--scaling_type",
+    help = paste(
+      "Specifies the type of scaling to be applied to the expression data.",
+      "- 'minmax' applies Min-Max scaling, normalizing values to a range of [-2, 2].",
+      "- 'zscore' applies Z-score standardization, centering data to mean = 0 and standard deviation = 1.",
+      "- Default: none (no scaling applied)."
+    ),
+    type = "character",
+    choices = c("minmax", "zscore"),
+    default = "zscore"
+  )
+  parser$add_argument(
+    "--regulation",
+    help = paste(
+      "Direction of differential expression comparison. β is the log2 fold change.",
+      "'both' for both up and downregulated genes (|β| > lfcThreshold); ",
+      "'up' for upregulated genes (β > lfcThreshold); ",
+      "'down' for downregulated genes (β < -lfcThreshold). ",
+      "Default: both"
+    ),
+    type = "character",
+    choices = c("both", "up", "down"),
+    default = "both"
+  )
+  parser$add_argument(
+    "--cluster",
+    help = paste(
+      "Hopach clustering method to be run on normalized read counts for the",
+      "exploratory visualization part of the analysis. Default: do not run",
+      "clustering"
+    ),
+    type = "character",
+    choices = c("row", "column", "both", "none"),
+    default = "none"
+  )
+  parser$add_argument(
+    "--k",
+    help    = "Number of levels (depth) for Hopach clustering: min - 1, max - 15. Default: 3.",
+    type    = "integer",
+    default = 3
+  )
+  parser$add_argument(
+    "--kmax",
+    help    = "Maximum number of clusters at each level for Hopach clustering: min - 2, max - 9. Default: 5.",
+    type    = "integer",
+    default = 5
+  )
+  parser$add_argument(
     "--cluster",
     help = paste(
       "Hopach clustering method to be run on normalized read counts for the",
@@ -251,6 +308,27 @@ log_message <- function(message) {
   cat(paste0("[", Sys.time(), "] ", message, "\n"))
 }
 
+rebuild_dds <- function(dds, factor_ref_list) {
+  # 1) Convert colData to a plain data.frame so we can manipulate it
+  colData_df <- as.data.frame(colData(dds))
+
+  # 2) Re-level factors as specified in factor_ref_list, e.g.
+  #    factor_ref_list might be list(grouped_ref = c("grouped" = "0H_GFP_N"))
+  for (f_name in names(factor_ref_list)) {
+    # factor_ref_list[[f_name]] is the new reference level for factor f_name
+    ref_level            <- factor_ref_list[[f_name]]
+    colData_df[[f_name]] <- relevel(as.factor(colData_df[[f_name]]), ref = ref_level)
+  }
+
+  # 3) Build a new DESeqDataSet
+  dds_new <- DESeqDataSetFromMatrix(
+    countData = counts(dds),
+    colData   = colData_df,
+    design    = design(dds)
+  )
+  return(dds_new)
+}
+
 
 # Load contrasts ta
 contrast_df <- data.table::fread(args$contrast_df)
@@ -276,7 +354,6 @@ print(spec_group_values)
 
 log_message(paste("Loading expression data from", args$dsq_obj_data))
 expression_data_df <- all_contrasts$expression_data_df
-
 all_contrasts <- purrr::list_modify(all_contrasts, expression_data_df = NULL)
 
 log_message("Expression Data Loaded:")
@@ -284,8 +361,19 @@ print(head(expression_data_df))
 log_message("Structure of Expression Data:")
 glimpse(expression_data_df)
 
+if (!is.null(args$rpkm_cutoff)) {
+  print("Using RPKM cutoff for additional filtering of expression data:")
+  print(args$rpkm_cutoff)
+  expression_data_df <- filter_rpkm(expression_data_df, args$rpkm_cutoff)
+  print("Expression data after RPKM filtering: ")
+  print(head(expression_data_df))
+  print(dim(expression_data_df))
+}
+
 log_message(paste("Loading DESeq2 object from Contrasts"))
-dds <- all_contrasts[[1]]$subset
+dds <- all_contrasts$deseq_obj
+all_contrasts <- purrr::list_modify(all_contrasts, deseq_obj = NULL)
+
 log_message("DESeq2 Object Loaded:")
 print(dds)
 log_message("Sample Names in DESeq2 Object:")
@@ -417,37 +505,137 @@ if (batch_correction_method == "limmaremovebatcheffect" && "batch" %in% colnames
   normCounts <- assay(rlog(dds, blind = FALSE))
 }
 
-# Function to get DESeq2 results for a specific contrast
-get_contrast_res <- function(contrast_row) {
-  dds_subset <- contrast_row$subset
+# Helper function to re-build a DESeqDataSet with new reference levels.
+rebuild_dds <- function(dds, factor_ref_list) {
+  # Convert colData to a plain data.frame for manipulation
+  colData_df <- as.data.frame(colData(dds))
 
-  # Print contrast details
-  print(paste("DESeq object Subset for Contrast:", contrast_row$contrast))
-  print(dds_subset)
-  print(resultsNames(dds_subset))
-
-  # Determine altHypothesis based on regulation
-  altHypothesis <- if (args$regulation == "up") {
-    "greater"
-  } else if (args$regulation == "down") {
-    "less"
-  } else {
-    "greaterAbs"
+  # Loop over each factor and re-level according to the provided reference level
+  for (f_name in names(factor_ref_list)) {
+    ref_level <- factor_ref_list[[f_name]]
+    colData_df[[f_name]] <- relevel(as.factor(colData_df[[f_name]]), ref = ref_level)
   }
+
+  # Build a new DESeqDataSet with the updated colData
+  dds_new <- DESeqDataSetFromMatrix(
+    countData = counts(dds),
+    colData   = colData_df,
+    design    = design(dds)
+  )
+  return(dds_new)
+}
+
+# Updated get_contrast_res function that handles main effects (single & multi)
+# as well as interaction contrasts.
+get_contrast_res <- function(dds_base, contrast_row) {
+  # Global args are assumed to be defined: args$fdr, args$use_lfc_thresh, args$lfcthreshold, args$regulation
+  altHypothesis <- switch(args$regulation,
+                          "up"   = "greater",
+                          "down" = "less",
+                          "both" = "greaterAbs",
+                          "greaterAbs")  # default
 
   lfcThreshold <- if (args$use_lfc_thresh) args$lfcthreshold else 0
 
-  # DESeq2 object is already computed; we can directly extract results
-  res <- results(dds_subset,
-                 name                 = contrast_row$contrast,
-                 alpha                = args$fdr,
-                 lfcThreshold         = lfcThreshold,
-                 independentFiltering = TRUE,
-                 altHypothesis        = altHypothesis
-  )
+  if (contrast_row$effect_type == "main") {
+    # --- MAIN EFFECT CONTRAST ---
+    # Check if this is a single-factor or multi-factor scenario.
+    col_names <- colnames(colData(dds_base))
+    if (contrast_row$specificity_group %in% col_names) {
+      # SINGLE-FACTOR: specificity_group is the factor to re-level.
+      factor_ref_list <- setNames(list(contrast_row$denominator), contrast_row$specificity_group)
+    } else {
+      # MULTI-FACTOR: specificity_group is composite, e.g. "otherFactor_otherLevel".
+      parts <- strsplit(contrast_row$specificity_group, "_")[[1]]
+      if (length(parts) < 2) {
+        stop("Unexpected format for specificity_group in multi-factor contrast")
+      }
+      # The first part is the name of the additional factor.
+      other_factor <- parts[1]
+      other_level  <- paste(parts[-1], collapse = "_")
 
-  print("DESeq2 subset results obtained.")
-  return(res)
+      # Extract main factor from the contrast name (assumed format: "mainFactor_lvl_vs_ref")
+      main_parts <- strsplit(contrast_row$contrast, "_")[[1]]
+      main_factor <- main_parts[1]
+
+      factor_ref_list <- c(
+        setNames(list(contrast_row$denominator), main_factor),
+        setNames(list(other_level), other_factor)
+      )
+    }
+
+    # Rebuild the DESeqDataSet with proper reference levels and run DESeq2.
+    dds_subset <- rebuild_dds(dds_base, factor_ref_list)
+    dds_subset <- DESeq(dds_subset, test = "Wald")
+
+    message("DESeq object subset for main effect contrast: ", contrast_row$contrast)
+    print(dds_subset)
+    print(resultsNames(dds_subset))
+
+    res <- results(dds_subset,
+                   name                 = contrast_row$contrast,
+                   alpha                = args$fdr,
+                   lfcThreshold         = lfcThreshold,
+                   independentFiltering = TRUE,
+                   altHypothesis        = altHypothesis)
+
+    message("DESeq2 subset results for main effect contrast obtained.")
+    return(res)
+
+  } else if (contrast_row$effect_type == "interaction") {
+    # --- INTERACTION CONTRAST ---
+    # Use the helper function to extract factor names and their levels.
+    factors_levels <- extract_factors_and_levels(contrast_row$contrast)
+    factor1 <- factors_levels$factor1
+    level1  <- factors_levels$level1
+    factor2 <- factors_levels$factor2
+    level2  <- factors_levels$level2
+
+    # Determine which factor was re-leveled during generation by examining specificity_group.
+    # In generate_interaction_effect_contrasts:
+    #   - In the first branch, specificity_group is built as: paste(factor2, level2, "vs", ref_level2)
+    #     and re-leveling is applied to factor1.
+    #   - In the second branch, specificity_group is: paste(factor1, level1, "vs", ref_level1)
+    #     and re-leveling is applied to factor2.
+    sg_parts <- strsplit(contrast_row$specificity_group, "_")[[1]]
+    if (sg_parts[1] == factor2) {
+      # Then the intended re-leveling is for factor1.
+      relevel_factor <- factor1
+      # The stored denominator is of the form paste0(factor1, ref_level1);
+      # remove the factor name prefix to get the actual ref level.
+      ref_level <- sub(paste0("^", factor1), "", contrast_row$denominator)
+    } else if (sg_parts[1] == factor1) {
+      # Then re-level factor2.
+      relevel_factor <- factor2
+      ref_level <- sub(paste0("^", factor2), "", contrast_row$denominator)
+    } else {
+      stop("Could not determine releveling factor for interaction contrast based on specificity_group")
+    }
+
+    factor_ref_list <- setNames(list(ref_level), relevel_factor)
+
+    # Optionally, you might consider subsetting the DESeqDataSet based on the other factor's level
+    # (as commented in your generation code). For now we simply rebuild the DESeqDataSet.
+    dds_subset <- rebuild_dds(dds_base, factor_ref_list)
+    dds_subset <- DESeq(dds_subset, test = "Wald")
+
+    message("DESeq object subset for interaction contrast: ", contrast_row$contrast)
+    print(dds_subset)
+    print(resultsNames(dds_subset))
+
+    res <- results(dds_subset,
+                   name                 = contrast_row$contrast,
+                   alpha                = args$fdr,
+                   lfcThreshold         = lfcThreshold,
+                   independentFiltering = TRUE,
+                   altHypothesis        = altHypothesis)
+
+    message("DESeq2 subset results for interaction contrast obtained.")
+    return(res)
+
+  } else {
+    stop("Unknown effect_type in contrast_row")
+  }
 }
 
 # Function to export MDS plot
@@ -504,20 +692,34 @@ export_cls <- function(categories, location) {
 }
 
 # Function to generate clusters
-get_clustered_data <- function(expression_data, transpose = FALSE, k = 3, kmax = 5) {
+get_clustered_data <- function(expression_data, by = "row", k = 3, kmax = 5, dist = "cosangle", scaling_type = "zscore") {
 
   start_time <- proc.time()
 
-  if (transpose) {
-    print("Transposing expression data")
+  if (!(by %in% c("row", "col"))) {
+    stop("Invalid value for 'by'. Choose either 'row' or 'col'.")
+  }
+
+  # If clustering by columns, transpose so that columns become rows for scaling.
+  if (by == "col") {
+    print("Transposing expression data to scale columns")
     expression_data <- t(expression_data)
   }
 
-  # Apply scaling per row
-  expression_data <- t(apply(expression_data, 1, scale_min_max))
+  # Apply scaling per row (which is the desired unit, either original rows or columns)
+  expression_data <- switch(scaling_type,
+    "minmax" = t(apply(expression_data, 1, scale_min_max)),
+    "zscore" = {
+      scaled_data <- t(scale(t(expression_data), center = TRUE, scale = TRUE))
+      scaled_data[is.na(scaled_data)] <- 0  # Handle zero-variance rows
+      scaled_data
+    },
+    stop("Invalid scaling type. Choose 'minmax' or 'zscore'.")
+  )
 
-  if (transpose) {
-    print("Transposing expression data back")
+  # If data was transposed for column scaling, transpose back to original orientation.
+  if (by == "col") {
+    print("Transposing expression data back to original orientation")
     expression_data <- t(expression_data)
   }
 
@@ -526,7 +728,8 @@ get_clustered_data <- function(expression_data, transpose = FALSE, k = 3, kmax =
                                    verbose = TRUE,
                                    K       = k,
                                    kmax    = kmax,
-                                   khigh   = kmax
+                                   khigh   = kmax,
+                                   d = dist
   )
 
   print("Parsing cluster labels")
@@ -596,15 +799,28 @@ scale_min_max <- function(x,
   return(scaled_x)
 }
 
+
+filter_rpkm <- function(expression_df, n) {
+  expression_df %>%
+    filter(if_any(contains("Rpkm"), ~. > n))
+}
+
 # Function to cluster data and re-order based on clustering results
 cluster_and_reorder <- function(normCounts, col_metadata, row_metadata, args) {
 
   start_time <- proc.time()
 
   if (args$cluster != "none") {
+    if (args$test_mode) {
+        k    <- 2
+        kmax <- 2
+      } else {
+        k    <- args$k
+        kmax <- args$kmax
+      }
     # Column clustering if requested
     if (args$cluster == "column" || args$cluster == "both") {
-      clustered_data_cols <- get_clustered_data(normCounts, transpose = TRUE)
+      clustered_data_cols <- get_clustered_data(normCounts, by = "col", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$columndist)
       normCounts          <- normCounts[, clustered_data_cols$order, drop = FALSE]
       col_metadata        <- col_metadata[clustered_data_cols$order, , drop = FALSE]
       # After reordering, cbind cluster info
@@ -612,14 +828,7 @@ cluster_and_reorder <- function(normCounts, col_metadata, row_metadata, args) {
     }
     # Row clustering if requested
     if (args$cluster == "row" || args$cluster == "both") {
-      if (args$test_mode) {
-        k    <- 2
-        kmax <- 2
-      } else {
-        k    <- args$k
-        kmax <- args$kmax
-      }
-      clustered_data_rows <- get_clustered_data(normCounts, transpose = FALSE, k = k, kmax = kmax)
+      clustered_data_rows <- get_clustered_data(normCounts, by = "row", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$rowdist)
       normCounts          <- clustered_data_rows$expression[clustered_data_rows$order, , drop = FALSE]
       row_metadata        <- row_metadata[clustered_data_rows$order, , drop = FALSE]
       # After reordering rows, add cluster annotations
@@ -691,22 +900,39 @@ export_deseq_report <- function(expression_data_df, output_prefix) {
 # Updated GCT export: filter if ANY FDR column meets the threshold
 export_gct_data <- function(normCounts, row_metadata, col_metadata) {
   tryCatch({
+    # Ensure col_metadata columns are vectors
     col_metadata <- col_metadata %>% mutate_all(as.vector)
+
+    # Initialize col_order_vector (will be non-NULL if user specifies a column order)
+    col_order_vector <- tolower(rownames(metadata_df))
+    print("Order of columns for heatmap without clustering, based on metadata input:")
+    print(col_order_vector)
+
+    normCounts   <- normCounts[, col_order_vector, drop = FALSE]
+    col_metadata <- col_metadata[col_order_vector, , drop = FALSE]
+
     gct_data     <- new("GCT", mat = normCounts, rdesc = row_metadata, cdesc = col_metadata)
     cmapR::write_gct(ds = gct_data, ofile = "counts_all.gct", appenddim = FALSE)
     print(paste("Exported GCT (all) to", "counts_all.gct"))
 
     # Filter rows by any FDR column
     fdr_cols <- grep("_FDR$", colnames(row_metadata), value = TRUE)
+    print("FDR columns for filtering:")
+    print(fdr_cols)
+    lfc_cols <- grep("_LFC$", colnames(row_metadata), value = TRUE)
+    print("LFC columns for filtering:")
+    print(lfc_cols)
     if (length(fdr_cols) == 0) {
       warning("No FDR columns found. No filtering performed for counts_filtered.gct.")
       row_metadata_filtered <- row_metadata
     } else {
-      row_metadata_filtered <- row_metadata %>% filter(if_any(all_of(fdr_cols), ~. <= args$fdr))
+      row_metadata_filtered <- row_metadata %>%
+        filter(if_any(all_of(fdr_cols), ~. <= args$fdr)) %>%
+        filter(if_any(all_of(abs(lfc_cols)), ~. >= args$lfcthreshold))
     }
 
     if (nrow(row_metadata_filtered) == 0) {
-      warning(paste("No genes passed the FDR threshold of", args$fdr))
+      warning(paste("No genes passed the FDR/LFC thresholds of", args$fdr, "/", args$lfcthreshold, "and will be exported as empty GCT."))
     }
 
     filtered_normCounts <- normCounts[rownames(row_metadata_filtered), , drop = FALSE]
@@ -748,7 +974,7 @@ for (contrast_index in contrast_vector) {
   print(paste("Processing contrast:", contrast_name))
 
   # Get DESeq2 results for the specific contrast
-  deseq_result <- get_contrast_res(contrast_selected)
+  deseq_result <- get_contrast_res(dds_base = dds, contrast_row = contrast_selected)
 
   print("DESeq2 results obtained.")
   print("Summary:")

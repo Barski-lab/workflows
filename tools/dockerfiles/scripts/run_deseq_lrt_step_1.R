@@ -139,11 +139,7 @@ load_expression_data <- function(filenames,
     if (is.null(collected_isoforms)) {
       collected_isoforms <- isoforms
     } else {
-      collected_isoforms <- merge(collected_isoforms,
-        isoforms,
-        by = intersect_by,
-        sort = FALSE
-      )
+      collected_isoforms <- dplyr::full_join(collected_isoforms, isoforms, by = intersect_by)
     }
   }
   print(paste0("Number of rows common for all loaded files ", nrow(collected_isoforms)))
@@ -163,10 +159,10 @@ assert_args <- function(args) {
   tryCatch(
     expr = {
       # Try to load design formula
-      design_formula <- as.formula(args$design)
+      design_formula <- as.formula(tolower(args$design))
     },
     error = function(e) {
-      print(paste0("Exiting: failed to load --design ", args$design, " as formula"))
+      print(paste0("Exiting: failed to load --design ", tolower(args$design), " as formula"))
       quit(
         save = "no",
         status = 1,
@@ -177,10 +173,10 @@ assert_args <- function(args) {
   tryCatch(
     expr = {
       # Try to load reduced formula
-      reduced_formula <- as.formula(args$reduced)
+      reduced_formula <- as.formula(tolower(args$reduced))
     },
     error = function(e) {
-      print(paste0("Exiting: failed to load --reduced ", args$reduced, " as formula"))
+      print(paste0("Exiting: failed to load --reduced ", tolower(args$reduced), " as formula"))
       quit(
         save = "no",
         status = 1,
@@ -292,6 +288,61 @@ get_args <- function() {
     ),
     action = "store_true",
     default = FALSE
+  )
+  parser$add_argument(
+    "--rpkm_cutoff",
+    help = paste(
+      "RPKM cutoff for filtering genes. Genes with RPKM values below this threshold will be excluded from the analysis.",
+      "Default: NULL (no filtering)"
+    ),
+    type    = "integer",
+    default = NULL
+  )
+  parser$add_argument(
+    "--scaling_type",
+    help = paste(
+      "Specifies the type of scaling to be applied to the expression data.",
+      "- 'minmax' applies Min-Max scaling, normalizing values to a range of [-2, 2].",
+      "- 'zscore' applies Z-score standardization, centering data to mean = 0 and standard deviation = 1.",
+      "- Default: none (no scaling applied)."
+    ),
+    type = "character",
+    choices = c("minmax", "zscore"),
+    default = "zscore"
+  )
+  parser$add_argument(
+    "--rowdist",
+    help = paste(
+      "Distance metric for HOPACH row clustering. Ignored if --cluster is not",
+      "provided. Default: cosangle"
+    ),
+    type = "character",
+    default = "cosangle",
+    choices = c(
+      "cosangle",
+      "abscosangle",
+      "euclid",
+      "abseuclid",
+      "cor",
+      "abscor"
+    )
+  )
+  parser$add_argument(
+    "--columndist",
+    help = paste(
+      "Distance metric for HOPACH column clustering. Ignored if --cluster is not",
+      "provided. Default: euclid"
+    ),
+    type = "character",
+    default = "euclid",
+    choices = c(
+      "cosangle",
+      "abscosangle",
+      "euclid",
+      "abseuclid",
+      "cor",
+      "abscor"
+    )
   )
   parser$add_argument(
     "--cluster",
@@ -415,66 +466,65 @@ generate_lrt_md <- function(deseq_results, full_formula, reduced_formula, output
 }
 
 # Function to generate main effect contrasts with different reference levels
+
 generate_main_effect_contrasts <- function(dds, factors, factor_levels) {
 
   start_time <- proc.time()
   contrasts  <- list()
 
-  # Helper function to rebuild a DESeqDataSet from scratch
-  rebuild_dds <- function(dds, factor_ref_list) {
-    # 1) Convert colData to a plain data.frame so we can manipulate it
-    colData_df <- as.data.frame(colData(dds))
+  message("🔹 Optimizing main effect contrast generation...")
 
-    # 2) Re-level factors as specified in factor_ref_list, e.g.
-    #    factor_ref_list might be list(grouped_ref = c("grouped" = "0H_GFP_N"))
-    for (f_name in names(factor_ref_list)) {
-      # factor_ref_list[[f_name]] is the new reference level for factor f_name
-      ref_level <- factor_ref_list[[f_name]]
-      colData_df[[f_name]] <- relevel(as.factor(colData_df[[f_name]]), ref = ref_level)
-    }
+  # Store precomputed DESeq2 objects for each factor reference level
+  prebuilt_dds <- list()
 
-    # 3) Build a new DESeqDataSet
-    dds_new <- DESeqDataSetFromMatrix(
-      countData = counts(dds),
-      colData   = colData_df,
-      design    = design(dds)
-    )
-    return(dds_new)
-  }
-
-  # 1) SINGLE-FACTOR scenario
-  #    (e.g. ~ grouped with multiple levels)
-  if (length(factors) == 1) {
-    factor <- factors[[1]]
+  for (factor in factors) {
     all_levels <- factor_levels[[factor]]
 
-    # For each level, define it as reference, compare to others
+    # message(glue::glue("🔍 Processing factor: {factor}"))
+
     for (ref_level in all_levels) {
 
-      # Build a new copy where 'ref_level' is the reference
-      dds_temp <- rebuild_dds(
-        dds,
-        factor_ref_list = setNames(list(ref_level), factor)
-      )
+      key <- paste0(factor, "::", ref_level)  # More robust key format
 
-      # Run DESeq once for that new reference
-      dds_temp <- DESeq(dds_temp, test = "Wald")
+      if (!key %in% names(prebuilt_dds)) {
+        if (!(ref_level %in% levels(colData(dds)[[factor]]))) {
+          # message(glue::glue("⚠️ Warning: Reference level {ref_level} is not found in factor {factor}. Skipping..."))
+          next
+        }
+
+        # Build a new DESeqDataSet with the selected reference level
+        dds_temp <- dds
+        colData(dds_temp)[[factor]] <- relevel(colData(dds_temp)[[factor]], ref = ref_level)
+
+        # Run DESeq **only once** for the new reference level
+        dds_temp <- DESeq(dds_temp, test = "Wald", quiet = TRUE)
+        prebuilt_dds[[key]] <- dds_temp
+      }
+
+      dds_temp <- prebuilt_dds[[key]]
 
       # Compare each *other* level to ref_level
       for (lvl in all_levels) {
         if (lvl != ref_level) {
           contrast_name <- paste(factor, lvl, "vs", ref_level, sep = "_")
 
-          # results() using name = "factor_lvl_vs_ref" style
+          # Ensure contrast exists before running `results()`
+          available_contrasts <- resultsNames(dds_temp)
+          if (!(contrast_name %in% available_contrasts)) {
+            # message(glue::glue("⚠️ Warning: Contrast '{contrast_name}' not found in resultsNames(dds_temp). Skipping..."))
+            next
+          }
+
+          # Extract results for this contrast
           contrast_res <- results(
             dds_temp,
             name                = contrast_name,
             alpha               = args$fdr,
-            lfcThreshold        = ifelse(args$use_lfc_thresh, args$lfcthreshold, 0),
+            lfcThreshold        = lfcthreshold,
             independentFiltering = TRUE
           )
 
-          sig_genes <- sum(contrast_res$padj < args$fdr, na.rm = TRUE)
+          significant_genes <- nrow(subset(contrast_res, padj < args$fdr & abs(log2FoldChange) > args$lfcthreshold))
 
           contrasts <- append(contrasts, list(list(
             effect_type       = "main",
@@ -482,75 +532,16 @@ generate_main_effect_contrasts <- function(dds, factors, factor_levels) {
             numerator         = lvl,
             denominator       = ref_level,
             contrast          = contrast_name,
-            subset            = dds_temp,
             contrast_res      = contrast_res,
-            significant_genes = sig_genes
+            significant_genes = significant_genes
           )))
-        }
-      }
-    }
-
-    # 2) MULTI-FACTOR scenario
-  } else {
-    for (factor in factors) {
-      other_factors <- setdiff(factors, factor)
-
-      for (other_factor in other_factors) {
-        other_levels <- factor_levels[[other_factor]]
-
-        for (other_level in other_levels) {
-
-          for (ref_level in factor_levels[[factor]]) {
-
-            # Build a new copy where factor=ref_level and other_factor=other_level
-            dds_temp <- rebuild_dds(
-              dds,
-              factor_ref_list = c(
-                setNames(list(ref_level), factor),
-                setNames(list(other_level), other_factor)
-              )
-            )
-
-            # Run DESeq with these new references
-            dds_temp <- DESeq(dds_temp, test = "Wald")
-
-            # For each non-ref level of 'factor'
-            for (lvl in factor_levels[[factor]]) {
-              if (lvl != ref_level) {
-                specificity_group <- paste(other_factor, other_level, sep = "_")
-                contrast_name     <- paste(factor, lvl, "vs", ref_level, sep = "_")
-
-                contrast_res <- results(
-                  dds_temp,
-                  name                = contrast_name,
-                  alpha               = args$fdr,
-                  lfcThreshold        = ifelse(args$use_lfc_thresh, args$lfcthreshold, 0),
-                  independentFiltering = TRUE
-                )
-
-                sig_genes <- sum(contrast_res$padj < args$fdr, na.rm = TRUE)
-
-                contrasts <- append(contrasts, list(list(
-                  effect_type       = "main",
-                  specificity_group = specificity_group,
-                  numerator         = lvl,
-                  denominator       = ref_level,
-                  contrast          = contrast_name,
-                  subset            = dds_temp,
-                  contrast_res      = contrast_res,
-                  significant_genes = sig_genes
-                )))
-              }
-            }
-          }
         }
       }
     }
   }
 
   end_time <- proc.time() - start_time
-  message("Total time of generate_main_effect_contrasts function execution: ")
-  print(end_time)
+  message(glue::glue("✅ Total execution time of generate_main_effect_contrasts: {end_time['elapsed']} sec"))
 
   return(contrasts)
 }
@@ -568,8 +559,9 @@ extract_factors_and_levels <- function(term) {
 # Function to generate interaction effect contrasts
 generate_interaction_effect_contrasts <- function(dds) {
 
-  start_time <- proc.time()
+  message("Optimizing interaction effect contrast generation...")
 
+  start_time <- proc.time()
   contrasts <- list()
   interaction_names <- resultsNames(dds)
 
@@ -577,6 +569,8 @@ generate_interaction_effect_contrasts <- function(dds) {
   interaction_terms <- grep("\\.", interaction_names, value = TRUE)
 
   for (interaction in interaction_terms) {
+    
+    # Extract factors and levels dynamically
     factors_levels <- extract_factors_and_levels(interaction)
     factor1 <- factors_levels$factor1
     level1 <- factors_levels$level1
@@ -586,90 +580,64 @@ generate_interaction_effect_contrasts <- function(dds) {
     levels1 <- levels(colData(dds)[[factor1]])
     levels2 <- levels(colData(dds)[[factor2]])
 
-    # Generate contrasts for factor1 vs factor2
+    # message(glue::glue("Processing interaction term: {interaction}"))
+
+    # Store prebuilt dds objects for each reference level combination
+    prebuilt_dds <- list()
+
     for (ref_level1 in levels1) {
       for (ref_level2 in levels2) {
-        if ((ref_level1 != level1 || ref_level2 != level2) && (ref_level2 != level2)) {
-          specificity_group <- paste(factor2, level2, "vs", ref_level2, sep = "_")
-          numerator <- paste0(factor1, level1)
-          denominator <- paste0(factor1, ref_level1)
+        
+        # Skip if both reference levels are the same as the current levels
+        if (ref_level1 == level1 && ref_level2 == level2) next 
 
-          if (numerator != denominator && specificity_group != paste(factor2, ref_level2, "vs", ref_level2, sep = "_")) {
-            # dds_subset <- dds[colData(dds)[[factor2]] == ref_level2, ]
-            dds_subset <- dds
-            colData(dds_subset)[[factor1]] <- relevel(colData(dds_subset)[[factor1]], ref = ref_level1)
+        key <- paste(ref_level1, ref_level2, sep = "_")
+        
+        if (!key %in% names(prebuilt_dds)) {
+          # Build a single dds object per factor-level pair
+          dds_relevel <- dds
+          colData(dds_relevel)[[factor1]] <- relevel(colData(dds_relevel)[[factor1]], ref = ref_level1)
+          colData(dds_relevel)[[factor2]] <- relevel(colData(dds_relevel)[[factor2]], ref = ref_level2)
 
-            dds_subset <- DESeq(dds_subset, test = "Wald")
-
-            contrast_res <- results(dds_subset,
-              name = interaction,
-              alpha = args$fdr,
-              lfcThreshold = ifelse(args$use_lfc_thresh, args$lfcthreshold, 0),
-              independentFiltering = TRUE
-            )
-
-            significant_genes <- sum(contrast_res$padj < args$fdr, na.rm = TRUE)
-
-            contrasts <- append(contrasts, list(list(
-              effect_type = "interaction",
-              specificity_group = specificity_group,
-              numerator = numerator,
-              denominator = denominator,
-              contrast = interaction,
-              subset = dds_subset,
-              contrast_res = contrast_res,
-              significant_genes = significant_genes
-            )))
-          }
+          # Run DESeq once for the new reference levels
+          dds_relevel <- DESeq(dds_relevel, test = "Wald")
+          prebuilt_dds[[key]] <- dds_relevel
         }
-      }
-    }
 
-    # Generate contrasts for factor2 vs factor1
-    for (ref_level2 in levels2) {
-      for (ref_level1 in levels1) {
-        if ((ref_level2 != level2 || ref_level1 != level1) && (ref_level1 != level1)) {
-          specificity_group <- paste(factor1, level1, "vs", ref_level1, sep = "_")
-          numerator <- paste0(factor2, level2)
-          denominator <- paste0(factor2, ref_level2)
+        dds_subset <- prebuilt_dds[[key]]
 
-          if (numerator != denominator && specificity_group != paste(factor1, ref_level1, "vs", ref_level1, sep = "_")) {
-            # dds_subset <- dds[colData(dds)[[factor1]] == ref_level1, ]
-            dds_subset <- dds
-            colData(dds_subset)[[factor2]] <- relevel(colData(dds_subset)[[factor2]], ref = ref_level2)
+        # Extract contrast results
+        contrast_res <- results(dds_subset,
+          name = interaction,
+          alpha = args$fdr,
+          lfcThreshold = lfcthreshold,
+          independentFiltering = TRUE
+        )
 
-            dds_subset <- DESeq(dds_subset, test = "Wald")
+        significant_genes <- nrow(subset(contrast_res, padj < args$fdr & abs(log2FoldChange) > args$lfcthreshold))
 
-            contrast_res <- results(dds_subset,
-              name = interaction,
-              alpha = args$fdr,
-              lfcThreshold = ifelse(args$use_lfc_thresh, args$lfcthreshold, 0),
-              independentFiltering = TRUE
-            )
+        specificity_group <- paste(factor2, level2, "vs", ref_level2, sep = "_")
+        numerator <- paste0(factor1, level1)
+        denominator <- paste0(factor1, ref_level1)
 
-            significant_genes <- sum(contrast_res$padj < args$fdr, na.rm = TRUE)
-
-            contrasts <- append(contrasts, list(list(
-              effect_type = "interaction",
-              specificity_group = specificity_group,
-              numerator = numerator,
-              denominator = denominator,
-              contrast = interaction,
-              subset = dds_subset,
-              contrast_res = contrast_res,
-              significant_genes = significant_genes
-            )))
-          }
+        if (numerator != denominator) {
+          contrasts <- append(contrasts, list(list(
+            effect_type = "interaction",
+            specificity_group = specificity_group,
+            numerator = numerator,
+            denominator = denominator,
+            contrast = interaction,
+            contrast_res = contrast_res,
+            significant_genes = significant_genes
+          )))
         }
       }
     }
   }
 
   end_time <- proc.time() - start_time
-
-  print("Total time of generate_interaction_effect_contrasts function execution: ")
-  print(end_time)
-
+  # message(glue::glue("✅ Total execution time of generate_interaction_effect_contrasts: {end_time['elapsed']} sec"))
+  
   return(contrasts)
 }
 
@@ -700,7 +668,11 @@ generate_contrasts <- function(dds) {
   print("Head of all_contrasts:")
   print(head(all_contrasts))
 
-  all_contrasts <- purrr::list_modify(all_contrasts, expression_data_df = expression_data_df)
+  all_contrasts <- purrr::list_modify(
+    all_contrasts,
+    expression_data_df = expression_data_df,
+    deseq_obj = dds
+  )
 
   print(paste("Exporting contrasts list to", paste0(args$output, "_contrasts.rds"), sep = " "))
   saveRDS(all_contrasts, file = paste0(args$output, "_contrasts.rds"))
@@ -790,6 +762,207 @@ export_mds_html_plot <- function(norm_counts_data, location) {
 # 3. Cluster only the filtered subset.
 # 4. Write filtered (and clustered) GCT file.
 
+# Removed clustering from here. Just export MDS and call export_gct_data().
+export_charts <- function(res, annotated_expression_df, column_data, normCounts, output, args) {
+  # Export MDS plot
+  print("Exporting MDS plot")
+  # In case we have original counts, we need to use them for MDS plot
+  # It means that we have some sort of batch-correction function applied
+  if (exists("original_counts")) {
+
+    dse <- DESeqDataSetFromMatrix(
+      countData = original_counts,
+      colData   = metadata_df,
+      design    = design_formula
+    )
+
+    rlog_original_counts <- assay(rlog(dse, blind = FALSE))
+
+    print("Exporting MDS plot with original counts")
+
+    export_mds_html_plot(rlog_original_counts, paste0(output, "_mds_plot.html"))
+
+    print("Exporting MDS plot with batch correction")
+
+    # normCounts is supposed to be batch-corrected here and rlog-normalised
+    export_mds_html_plot(normCounts, paste0(output, "_mds_plot_corrected.html"))
+
+  } else {
+    export_mds_html_plot(normCounts, paste0(output, "_mds_plot.html"))
+  }
+
+  # Now just call export_gct_data directly without clustering here.
+  export_gct_data(normCounts, annotated_expression_df, column_data, output)
+}
+
+# Function to generate clusters
+get_clustered_data <- function(expression_data, by = "row", k = 3, kmax = 5, dist = "cosangle", scaling_type = "zscore") {
+
+  start_time <- proc.time()
+
+  if (!(by %in% c("row", "col"))) {
+    stop("Invalid value for 'by'. Choose either 'row' or 'col'.")
+  }
+
+  # If clustering by columns, transpose so that columns become rows for scaling.
+  if (by == "col") {
+    print("Transposing expression data to scale columns")
+    expression_data <- t(expression_data)
+  }
+
+  # Apply scaling per row (which is the desired unit, either original rows or columns)
+  expression_data <- switch(scaling_type,
+    "minmax" = t(apply(expression_data, 1, scale_min_max)),
+    "zscore" = {
+      scaled_data <- t(scale(t(expression_data), center = TRUE, scale = TRUE))
+      scaled_data[is.na(scaled_data)] <- 0  # Handle zero-variance rows
+      scaled_data
+    },
+    stop("Invalid scaling type. Choose 'minmax' or 'zscore'.")
+  )
+
+  # If data was transposed for column scaling, transpose back to original orientation.
+  if (by == "col") {
+    print("Transposing expression data back to original orientation")
+    expression_data <- t(expression_data)
+  }
+
+  print(paste0("Running HOPACH for ", nrow(expression_data), "  features"))
+  hopach_results <- hopach::hopach(expression_data,
+                                   verbose = TRUE,
+                                   K       = k,
+                                   kmax    = kmax,
+                                   khigh   = kmax,
+                                   d = dist
+  )
+
+  print("Parsing cluster labels")
+  # hopach_results$clustering$labels gives final cluster labels as integers
+  # hopach returns them as numeric without the "c" prefix, so we add "c" ourselves or just rely on numeric.
+  # Actually hopach by default returns numeric labels (1,11,12...). We'll add "c" prefix ourselves for consistency.
+
+  # Final labels (no prefix 'c' in hopach by default)
+  final_labels      <- hopach_results$clustering$labels[hopach_results$clustering$order]
+  # Convert to character
+  final_labels_char <- as.character(final_labels)
+
+  # Add "c" prefix if desired (optional)
+  # final_labels_char <- paste0("c", final_labels_char)
+
+  # Each digit in the label corresponds to a level.
+  # Determine max number of levels
+  max_levels <- max(nchar(final_labels_char))
+
+  # Create a data frame for clusters
+  clusters           <- data.frame(Label = final_labels_char, stringsAsFactors = FALSE)
+  rownames(clusters) <- rownames(expression_data)[hopach_results$clustering$order]
+
+  # Split labels into levels
+  # For each label, we split into characters and assign to new columns
+  level_data <- do.call(rbind, lapply(clusters$Label, function(lbl) {
+    # Split into individual characters
+    chars <- unlist(strsplit(lbl, split = ""))
+    # If shorter than max_levels, pad with NA
+    if (length(chars) < max_levels) {
+      chars <- c(chars, rep(NA, max_levels - length(chars)))
+    }
+    return(chars)
+  }))
+
+  # Name the columns
+  colnames(level_data) <- paste0("Cluster_Level_", seq_len(max_levels))
+
+  # Combine into clusters
+  clusters <- cbind(clusters, level_data)
+
+  # Optionally remove the original 'Label' column if not needed
+  # Or rename it to something else
+  clusters$HCL   <- paste0("c", clusters$Label)
+  clusters$Label <- NULL
+
+  end_time <- proc.time() - start_time
+
+  print("Total time of get_clustered_data function execution: ")
+  print(end_time)
+
+  return(list(
+    order      = hopach_results$clustering$order,
+    expression = expression_data,
+    clusters   = clusters
+  ))
+}
+
+# Function for min-max scaling
+scale_min_max <- function(x,
+                          min_range = -2,
+                          max_range = 2) {
+  min_val <- min(x)
+  max_val <- max(x)
+  scaled_x <-
+  (x - min_val) / (max_val - min_val) * (max_range - min_range) + min_range
+  return(scaled_x)
+}
+
+filter_rpkm <- function(expression_df, n) {
+  expression_df %>%
+    filter(if_any(contains("Rpkm"), ~. > n))
+}
+
+cluster_and_reorder <- function(normCounts, col_metadata, row_metadata, args) {
+
+  start_time <- proc.time()
+
+  if (args$cluster != "none") {
+    if (args$test_mode) {
+        k    <- 2
+        kmax <- 2
+      } else {
+        k    <- args$k
+        kmax <- args$kmax
+      }
+    # Column clustering if requested
+    if (args$cluster == "column" || args$cluster == "both") {
+      clustered_data_cols <- get_clustered_data(normCounts, by = "col", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$columndist)
+      normCounts          <- normCounts[, clustered_data_cols$order, drop = FALSE]
+      col_metadata        <- col_metadata[clustered_data_cols$order, , drop = FALSE]
+      # After reordering, cbind cluster info
+      col_metadata        <- cbind(col_metadata, clustered_data_cols$clusters)
+    }
+    # Row clustering if requested
+    if (args$cluster == "row" || args$cluster == "both") {
+      clustered_data_rows <- get_clustered_data(normCounts, by = "row", k = k, kmax = kmax, scaling_type = args$scaling_type, dist = args$rowdist)
+      normCounts          <- clustered_data_rows$expression[clustered_data_rows$order, , drop = FALSE]
+      row_metadata        <- row_metadata[clustered_data_rows$order, , drop = FALSE]
+      # After reordering rows, add cluster annotations
+      row_metadata        <- cbind(row_metadata, clustered_data_rows$clusters)
+    }
+  } else {
+    # No clustering
+  }
+
+  end_time <- proc.time() - start_time
+
+  print("Total time of execution cluster_and_reorder function: ")
+  print(end_time)
+
+  print("Clustered data:")
+  print(head(normCounts))
+  print("Row metadata:")
+  print(head(row_metadata))
+  print("Column metadata:")
+  print(head(col_metadata))
+
+  return(list(normCounts = normCounts, col_metadata = col_metadata, row_metadata = row_metadata))
+}
+
+# Function to export normalized counts and filtered counts to GCT format
+# TODO: this function should also return levels of HOPACH clustering in the row annotation
+# Updated export_gct_data function:
+# 1. Write full GCT file without clustering.
+# 2. Filter rows by padj.
+# 3. Cluster only the filtered subset.
+# 4. Write filtered (and clustered) GCT file.
+
 export_gct_data <- function(normCounts, row_metadata, col_metadata, output_prefix) {
   tryCatch({
     # Ensure col_metadata columns are vectors
@@ -801,18 +974,11 @@ export_gct_data <- function(normCounts, row_metadata, col_metadata, output_prefi
     print(paste("Exporting GCT data to", paste0(output_prefix, "_counts_all.gct")))
 
     # Filter by padj if available
-    if ('padj' %in% colnames(row_metadata)) {
-      row_metadata_filtered <- row_metadata %>% filter(padj <= args$fdr)
-      print("=== After Filtering by padj ===")
-      print(paste("Number of rows in row_metadata_filtered:", nrow(row_metadata_filtered)))
-      print("Sample row names in row_metadata_filtered:")
-      print(head(rownames(row_metadata_filtered)))
+    row_metadata_filtered <- if ("padj" %in% colnames(row_metadata)) {
+      row_metadata %>% filter(padj <= args$fdr)
     } else {
-      row_metadata_filtered <- row_metadata
-      print("=== No Filtering by padj ===")
-      print(paste("Number of rows in row_metadata_filtered:", nrow(row_metadata_filtered)))
+      row_metadata
     }
-
     # Convert to uppercase and trim whitespace
     rownames(row_metadata_filtered) <- toupper(trimws(rownames(row_metadata_filtered)))
     rownames(normCounts)            <- toupper(trimws(rownames(normCounts)))
@@ -910,182 +1076,6 @@ export_gct_data <- function(normCounts, row_metadata, col_metadata, output_prefi
   })
 }
 
-# Removed clustering from here. Just export MDS and call export_gct_data().
-export_charts <- function(res, annotated_expression_df, column_data, normCounts, output, args) {
-  # Export MDS plot
-  print("Exporting MDS plot")
-  # In case we have original counts, we need to use them for MDS plot
-  # It means that we have some sort of batch-correction function applied
-  if (exists("original_counts")) {
-
-    dse <- DESeqDataSetFromMatrix(
-      countData = original_counts,
-      colData   = metadata_df,
-      design    = design_formula
-    )
-
-    rlog_original_counts <- assay(rlog(dse, blind = FALSE))
-
-    print("Exporting MDS plot with original counts")
-
-    export_mds_html_plot(rlog_original_counts, paste0(output, "_mds_plot.html"))
-
-    print("Exporting MDS plot with batch correction")
-
-    # normCounts is supposed to be batch-corrected here and rlog-normalised
-    export_mds_html_plot(normCounts, paste0(output, "_mds_plot_corrected.html"))
-
-  } else {
-    export_mds_html_plot(normCounts, paste0(output, "_mds_plot.html"))
-  }
-
-  # Now just call export_gct_data directly without clustering here.
-  export_gct_data(normCounts, annotated_expression_df, column_data, output)
-}
-
-# Function to generate clusters
-get_clustered_data <- function(expression_data, transpose = FALSE, k = 3, kmax = 5) {
-
-  start_time <- proc.time()
-
-  if (transpose) {
-    print("Transposing expression data")
-    expression_data <- t(expression_data)
-  }
-
-  # Apply scaling per row
-  expression_data <- t(apply(expression_data, 1, scale_min_max))
-
-  if (transpose) {
-    print("Transposing expression data back")
-    expression_data <- t(expression_data)
-  }
-
-  print(paste0("Running HOPACH for ", nrow(expression_data), "  features"))
-  hopach_results <- hopach::hopach(expression_data,
-                                   verbose = TRUE,
-                                   K       = k,
-                                   kmax    = kmax,
-                                   khigh   = kmax
-  )
-
-  print("Parsing cluster labels")
-  # hopach_results$clustering$labels gives final cluster labels as integers
-  # hopach returns them as numeric without the "c" prefix, so we add "c" ourselves or just rely on numeric.
-  # Actually hopach by default returns numeric labels (1,11,12...). We'll add "c" prefix ourselves for consistency.
-
-  # Final labels (no prefix 'c' in hopach by default)
-  final_labels      <- hopach_results$clustering$labels[hopach_results$clustering$order]
-  # Convert to character
-  final_labels_char <- as.character(final_labels)
-
-  # Add "c" prefix if desired (optional)
-  # final_labels_char <- paste0("c", final_labels_char)
-
-  # Each digit in the label corresponds to a level.
-  # Determine max number of levels
-  max_levels <- max(nchar(final_labels_char))
-
-  # Create a data frame for clusters
-  clusters           <- data.frame(Label = final_labels_char, stringsAsFactors = FALSE)
-  rownames(clusters) <- rownames(expression_data)[hopach_results$clustering$order]
-
-  # Split labels into levels
-  # For each label, we split into characters and assign to new columns
-  level_data <- do.call(rbind, lapply(clusters$Label, function(lbl) {
-    # Split into individual characters
-    chars <- unlist(strsplit(lbl, split = ""))
-    # If shorter than max_levels, pad with NA
-    if (length(chars) < max_levels) {
-      chars <- c(chars, rep(NA, max_levels - length(chars)))
-    }
-    return(chars)
-  }))
-
-  # Name the columns
-  colnames(level_data) <- paste0("Cluster_Level_", seq_len(max_levels))
-
-  # Combine into clusters
-  clusters <- cbind(clusters, level_data)
-
-  # Optionally remove the original 'Label' column if not needed
-  # Or rename it to something else
-  clusters$HCL   <- paste0("c", clusters$Label)
-  clusters$Label <- NULL
-
-  end_time <- proc.time() - start_time
-
-  print("Total time of get_clustered_data function execution: ")
-  print(end_time)
-
-  return(list(
-    order = hopach_results$clustering$order,
-    expression = expression_data,
-    clusters = clusters
-  ))
-}
-
-# Function for min-max scaling
-scale_min_max <- function(x,
-                          min_range = -2,
-                          max_range = 2) {
-  min_val <- min(x)
-  max_val <- max(x)
-  scaled_x <-
-  (x - min_val) / (max_val - min_val) * (max_range - min_range) + min_range
-  return(scaled_x)
-}
-
-cluster_and_reorder <- function(normCounts, col_metadata, row_metadata, args) {
-
-  start_time <- proc.time()
-
-  if (args$cluster != "none") {
-    # Column clustering if requested
-    if (args$cluster == "column" || args$cluster == "both") {
-      clustered_data_cols <- get_clustered_data(normCounts, transpose = TRUE)
-      # TODO: should we use drop T or F here? (it fails with F, but works with T), I'm not quite sure if is it
-      #  correct way
-      normCounts <- normCounts[, clustered_data_cols$order]
-      col_metadata        <- col_metadata[clustered_data_cols$order, , drop = FALSE]
-      # After reordering, cbind cluster info
-      col_metadata        <- cbind(col_metadata, clustered_data_cols$clusters)
-    }
-    # Row clustering if requested
-    if (args$cluster == "row" || args$cluster == "both") {
-      if (args$test_mode) {
-        k    <- 2
-        kmax <- 2
-      } else {
-        k    <- args$k
-        kmax <- args$kmax
-      }
-      clustered_data_rows <- get_clustered_data(normCounts, transpose = FALSE, k = k, kmax = kmax)
-      normCounts          <- clustered_data_rows$expression[clustered_data_rows$order, , drop = FALSE]
-      row_metadata        <- row_metadata[clustered_data_rows$order, , drop = FALSE]
-      # After reordering rows, add cluster annotations
-      row_metadata        <- cbind(row_metadata, clustered_data_rows$clusters)
-    }
-  } else {
-    # No clustering
-  }
-
-  end_time <- proc.time() - start_time
-
-  print("Total time of execution cluster_and_reorder function: ")
-  print(end_time)
-
-  print("Clustered data:")
-  print(head(normCounts))
-  print("Row metadata:")
-  print(head(row_metadata))
-  print("Column metadata:")
-  print(head(col_metadata))
-
-  return(list(normCounts = normCounts, col_metadata = col_metadata, row_metadata = row_metadata))
-}
-
-
 # Parse arguments
 args <- get_args()
 
@@ -1104,14 +1094,20 @@ print(paste("Load metadata from", args$meta, sep = " "))
 print(metadata_df)
 
 # Load design formula
-design_formula <- as.formula(args$design)
+design_formula <- as.formula(tolower(args$design))
 print("Load design formula")
 print(design_formula)
 
 # Load reduced formula
-reduced_formula <- as.formula(args$reduced)
+reduced_formula <- as.formula(tolower(args$reduced))
 print("Load reduced formula")
 print(reduced_formula)
+
+print("Using use_lfc_thresh argument as:")
+print(args$use_lfc_thresh)
+print("So, the lfc threshold is:")
+lfcthreshold <- ifelse(args$use_lfc_thresh, args$lfcthreshold, 0)
+print(lfcthreshold)
 
 # Clean sample names
 args$name <- clean_sample_names(args$name)
@@ -1126,8 +1122,20 @@ print(rownames(metadata_df))
 
 # Load expression data
 expression_data_df <- load_expression_data(args$input, args$name, READ_COL, RPKM_COL, INTERSECT_BY)
-print("Expression data")
+print("Expression data to analyze: ")
 print(head(expression_data_df))
+print(dim(expression_data_df))
+
+if (!is.null(args$rpkm_cutoff)) {
+  print("Using RPKM cutoff for filtering:")
+  print(args$rpkm_cutoff)
+  if (!is.null(args$rpkm_cutoff) && args$rpkm_cutoff > 0) {
+    expression_data_df <- filter_rpkm(expression_data_df, args$rpkm_cutoff)
+  }
+  print("Expression data after RPKM filtering: ")
+  print(head(expression_data_df))
+  print(dim(expression_data_df))
+}
 
 # Select all columns with read counts data, reorder them based on the row names from metadata_df
 read_counts_columns <- grep(
@@ -1201,7 +1209,7 @@ if (args$batchcorrection != "none") {
       # Case 3: Include 'batch' in the design formula
       print("Including 'batch' in the design formula for limma batch correction")
       # Remove '~' from the original design formula string
-      original_design <- substring(args$design, 2)
+      original_design <- substring(tolower(args$design), 2)
       # Create new design formula with 'batch' included
       design_formula <- as.formula(paste("~ batch +", original_design))
       # Note: We do not modify counts at this stage
@@ -1218,6 +1226,14 @@ if (args$batchcorrection != "none") {
   # Design formula remains as provided
   print("No batch correction provided; proceeding with default settings")
 }
+
+print("Starting DESeq object creation using:")
+print("Coldata:")
+print(metadata_df)
+print("Countdata:")
+print(head(countData))
+print("Design formula:")
+print(design_formula)
 
 # Create DESeq2 dataset
 dse <- DESeqDataSetFromMatrix(
@@ -1334,6 +1350,7 @@ annotated_expression_df <- expression_data_df %>%
     `-LOG10(pval)` = -log10(as.numeric(pvalue)),
     `-LOG10(padj)` = -log10(as.numeric(padj))
   )
+
 
 lrt_report_filename <- paste0(args$output, "_lrt_result.md")
 summary(dsq_lrt_res)
