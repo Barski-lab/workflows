@@ -1,0 +1,73 @@
+name: Deploy to HPC with Singularity
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Image"]
+    types:
+      - completed
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_TAG: v0.0.30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        
+      - name: Make script executable
+        run: chmod +x scripts/deploy_to_hpc.sh
+        
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.HPC_SSH_KEY }}
+          
+      - name: Setup SSH Config for ProxyJump
+        run: |
+          mkdir -p ~/.ssh
+          cat > ~/.ssh/config << 'EOL'
+          Host bmicluster
+            HostName bmiclusterp.chmcres.cchmc.org
+            User ${{ secrets.HPC_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+            StrictHostKeyChecking no
+
+          Host bmicluster-compute
+            User ${{ secrets.HPC_USER }}
+            HostName bmi-460g10-04.chmcres.cchmc.org
+            IdentitiesOnly yes
+            ProxyJump bmicluster
+            StrictHostKeyChecking no
+          EOL
+          chmod 600 ~/.ssh/config
+          
+      - name: Add SSH key fingerprints to known hosts
+        run: |
+          ssh-keyscan bmiclusterp.chmcres.cchmc.org >> ~/.ssh/known_hosts
+          
+      - name: Test SSH Connection
+        run: |
+          ssh -v bmicluster-compute "hostname && whoami"
+          
+      - name: Copy deployment script to HPC
+        run: |
+          scp scripts/deploy_to_hpc.sh bmicluster-compute:/tmp/deploy_to_hpc.sh
+          
+      - name: Execute deployment on HPC
+        run: |
+          ssh bmicluster-compute << 'EOF'
+            chmod +x /tmp/deploy_to_hpc.sh
+            /tmp/deploy_to_hpc.sh ${{ env.DOCKER_TAG }}
+            rm /tmp/deploy_to_hpc.sh  # Clean up
+          EOF
+          
+      - name: Verify deployment
+        run: |
+          ssh bmicluster-compute << 'EOF'
+            ls -la /data/barskilab/scidap_server/singularity_images/biowardrobe2_scidap-deseq:*.sif
+            cat /data/barskilab/scidap_server/singularity_images/scidap-deseq-version.txt
+          EOF 

@@ -1,0 +1,85 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - master  # your default branch
+    paths:
+      - 'Dockerfile'
+      - 'tools/dockerfiles/**'
+      - 'tools/dockerfiles/scripts/**'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'Dockerfile'
+      - 'tools/dockerfiles/**'
+      - 'tools/dockerfiles/scripts/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE_NAME: scidap-deseq
+      DOCKER_TAG: v0.0.30
+      # Hardcode your lowercase repository owner name here
+      REPO_OWNER_LOWERCASE: ndeeseee
+      DOCKER_HUB_REPO: biowardrobe2
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        
+      - name: Debug Info
+        run: |
+          echo "GitHub Repository: ${{ github.repository }}"
+          echo "Repository Owner: ${{ github.repository_owner }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Our hardcoded lowercase: ${{ env.REPO_OWNER_LOWERCASE }}"
+          echo "Target GHCR path: ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}"
+          echo "Target Docker Hub path: ${{ env.DOCKER_HUB_REPO }}/${{ env.DOCKER_IMAGE_NAME }}"
+          echo "Has Docker Hub username? ${{ secrets.DOCKER_USERNAME != '' }}"
+          echo "Has Docker Hub password? ${{ secrets.DOCKER_PASSWORD != '' }}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image to GHCR
+        uses: docker/build-push-action@v4
+        with:
+          context: tools/dockerfiles
+          file: tools/dockerfiles/scidap-deseq-Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image to Docker Hub
+        uses: docker/build-push-action@v4
+        with:
+          context: tools/dockerfiles
+          file: tools/dockerfiles/scidap-deseq-Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}
+            ${{ env.DOCKER_HUB_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:latest
