@@ -1,0 +1,26 @@
+body {
+    font-family: 'Noto Sans', sans-serif;
+}
+
+/* make active tab distinguishable */
+.tablinks-active{
+    color: #1f1;
+}
+.tablinks-active:hover{
+    background-color: black;
+}
+#sidebar {
+    min-width: 200px;
+    max-width: 30%;
+}
+/*
+#sidebar.active {
+    margin-left: -25%;
+}*/
+
+.content{
+    flex: 1;
+}
+.thresholdLines {
+    clip-path: url(#clip);
+}

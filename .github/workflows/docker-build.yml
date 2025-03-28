@@ -1,0 +1,132 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'Dockerfile'
+      - 'tools/dockerfiles/**'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    branches:
+      - master
+      - main
+    paths:
+      - 'Dockerfile'
+      - 'tools/dockerfiles/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: 'Docker image tag to build (overrides auto-detection)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Skip running on pull request if it's from the same repository (avoids duplicate runs)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    
+    outputs:
+      docker_tag: ${{ steps.set-tag.outputs.docker_tag }}
+      
+    env:
+      DOCKER_IMAGE_NAME: scidap-deseq
+      DOCKER_HUB_REPO: biowardrobe2
+      DOCKERFILE_PATH: tools/dockerfiles/scidap-deseq-Dockerfile
+      
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Extract Version from Dockerfile
+        id: extract-version
+        run: |
+          # Look for version pattern in Dockerfile (# Software Version: v0.0.xx)
+          if [ -f "${{ env.DOCKERFILE_PATH }}" ]; then
+            VERSION=$(grep -oP "Software Version: \K[^\s]+" "${{ env.DOCKERFILE_PATH }}" | head -n 1)
+            
+            # If version not found in the header comment, try the build command
+            if [ -z "$VERSION" ]; then
+              VERSION=$(grep -oP "docker build .+\s+biowardrobe2/scidap-deseq:\K[^\s]+" "${{ env.DOCKERFILE_PATH }}" | head -n 1)
+            fi
+            
+            if [ -n "$VERSION" ]; then
+              echo "Extracted version from Dockerfile: $VERSION"
+              echo "dockerfile_version=$VERSION" >> $GITHUB_OUTPUT
+            else
+              echo "No version found in Dockerfile, using default"
+              echo "dockerfile_version=v0.0.31" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Dockerfile not found at path: ${{ env.DOCKERFILE_PATH }}"
+            echo "dockerfile_version=v0.0.31" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Set Docker Tag
+        id: set-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.docker_tag }}" ]; then
+            # Use manually specified tag if provided
+            DOCKER_TAG="${{ github.event.inputs.docker_tag }}"
+            echo "Using manually specified Docker tag: ${DOCKER_TAG}"
+          else
+            # Use version extracted from Dockerfile
+            DOCKER_TAG="${{ steps.extract-version.outputs.dockerfile_version }}"
+            echo "Using Docker tag from Dockerfile: ${DOCKER_TAG}"
+          fi
+          
+          echo "docker_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
+          
+          # Convert repository owner to lowercase for Docker tags
+          REPO_OWNER_LOWERCASE=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "repo_owner_lowercase=${REPO_OWNER_LOWERCASE}" >> $GITHUB_OUTPUT
+          echo "Repository owner (lowercase): ${REPO_OWNER_LOWERCASE}"
+          
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Images
+        uses: docker/build-push-action@v5
+        with:
+          context: tools/dockerfiles
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ steps.set-tag.outputs.repo_owner_lowercase }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.set-tag.outputs.docker_tag }}
+            ghcr.io/${{ steps.set-tag.outputs.repo_owner_lowercase }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+            ${{ env.DOCKER_HUB_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.set-tag.outputs.docker_tag }}
+            ${{ env.DOCKER_HUB_REPO }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Save Docker tag as artifact
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ steps.set-tag.outputs.docker_tag }}" > docker_tag.txt
+      
+      - name: Upload Docker tag artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-tag
+          path: docker_tag.txt
+          retention-days: 1
