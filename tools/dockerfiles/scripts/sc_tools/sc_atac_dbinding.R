@@ -52,9 +52,13 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
         args$splitby
     )
     aggr_names <- levels(ordered_metadata[[aggr_criteria]])                         # both "new.ident" and args$splitby are already factors
-    aggr_conditions <- ordered_metadata[[args$splitby]][                            # safe to use the first matched value even for new.ident because we
-        match(aggr_names, ordered_metadata[[aggr_criteria]])                        # checked that --splitby doesn't divide cells from the same datasets
-    ]
+    aggr_conditions <- as.vector(                                                   # we don't want to have factors here
+        as.character(
+            ordered_metadata[[args$splitby]][                                       # safe to use the first matched value even for new.ident because we
+                match(aggr_names, ordered_metadata[[aggr_criteria]])                # checked that --splitby doesn't divide cells from the same datasets
+            ]
+        )
+    )
     rm(ordered_metadata)                                                            # no reason to keep ordered_metadata anymore
 
     mapped_counts <- AverageCounts(                                                 # need it for bigWig scaling
@@ -65,15 +69,19 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
 
     metadata <- NULL                                                                # a dataframe to collect files locations
     for (i in 1:length(aggr_names)){
-        current_name <- aggr_names[i]
-        current_suffix <- tolower(
-            gsub("'|\"|\\s|\\t|#|%|&|-", "_", current_name)
+        current_name <- aggr_names[i]                                               # this is used only for labels
+        current_condition <- aggr_conditions[i]                                     # this is used both for labels and file names
+        current_suffix <- paste(                                                    # this is used only for file names
+            tolower(
+                gsub("'|\"|\\s|\\t|#|%|&|-", "_", current_name)
+            ),
+            ifelse(current_condition == args$first, "first", "second"),            # here we always have either args$first or args$seconds values
+            sep="_"
         )
-
         current_data <- data.frame(
             name=current_name,
             suffix=current_suffix,
-            condition=aggr_conditions[i],
+            condition=current_condition,
 
             fragments=paste0(                                                       # temporary files, we use it to search for files
                 args$tmpdir, "/",
@@ -91,9 +99,9 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
             occupancy=paste(current_suffix, "occupancy", sep="."),                  # will be used by MAnorm for normalization
             scaling=10^6/mapped_counts[current_name],                               # for scaling coverage
             stringsAsFactors=FALSE,
-            check.names=FALSE
+            check.names=FALSE,
+            row.names=i                                                             # otherwise it puts the current_name as the rowname
         )
-        rownames(current_data) <- i                                                 # otherwise it somehow puts current_name as the rowname
 
         if (is.null(metadata)) {
             metadata <- current_data
@@ -356,6 +364,39 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
         pdf=args$pdf
     )
 
+    all_db_sites <- db_results$db_sites %>%                                           # all not filtered diff. acc. regions
+                    dplyr::mutate(
+                        "name"=paste0(
+                            "padj=", format(padj, digits=3, trim=TRUE),
+                            ";log2FC=", format(log2FoldChange, digits=3, trim=TRUE)
+                        ),
+                        "itemRgb"=dplyr::case_when(
+                                    log2FoldChange >= 0 ~ graphics$FALSE_COLOR,
+                                    .default = graphics$TRUE_COLOR
+                                )
+                    ) %>%
+                    dplyr::mutate("score"=-log10(padj)*10) %>%                                             # similar to what MACS2 does
+                    dplyr::select(
+                        c("chr", "start", "end", "name", "score", "itemRgb", "log2FoldChange", "padj")     # we keep log2FoldChange and padj for row_metadata in morpheus heatmap
+                    )
+    all_db_ranges <- makeGRangesFromDataFrame(
+        all_db_sites,
+        seqinfo=seqinfo_data,
+        keep.extra.columns=TRUE
+    )
+    all_db_location <- paste0(args$output, "_all_db_sites.bed")                                                # should be kept as output, the same as all_db_sites.tsv
+    export.bed(all_db_ranges, all_db_location, ignore.strand=TRUE)
+    writeLines(
+        c(
+            paste(
+                "track name=\"All diff. acc. regions\"",
+                "description=\"All diff. acc. regions\"",
+                "itemRgb=\"On\""),
+            readLines(all_db_location)
+        ),
+        all_db_location
+    )
+
     print(
         paste(
             "Filtering differentially accessible regions to",
@@ -364,30 +405,32 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
             "bigger or equal to", args$logfc
         )
     )
-    filtered_db_sites <- db_results$db_sites %>%
+    filtered_db_sites <- all_db_sites %>%
                          dplyr::filter(.$padj <= args$padj) %>%                                      # to include only significant diff. accessible regions
-                         dplyr::filter(abs(.$log2FoldChange) >= args$logfc) %>%                      # to include only |log2FoldChange| >= args$logfc
-                         dplyr::mutate(
-                             "name"=paste0(
-                                 "padj=", format(padj, digits=3, trim=TRUE),
-                                 ";log2FC=", format(log2FoldChange, digits=3, trim=TRUE)
-                             )
-                         ) %>%
-                         dplyr::mutate("score"=-log10(padj)*10) %>%                                  # similar to what MACS2 does
-                         dplyr::select(
-                             c("chr", "start", "end", "name", "score", "log2FoldChange", "padj")     # we keep log2FoldChange and padj for morpheus heatmap
-                         )
+                         dplyr::filter(abs(.$log2FoldChange) >= args$logfc)                          # to include only |log2FoldChange| >= args$logfc
     print(head(filtered_db_sites))
 
     if (nrow(filtered_db_sites) > 0){
-        first_db_location <- paste0(args$output, "_first_enrch.bed")                                 # should be kept as output
-        second_db_location <- paste0(args$output, "_second_enrch.bed")                               # should be kept as output
+        filtered_db_location <- paste0(args$output, "_fltr_db_sites.bed")                            # should be kept as output
+        first_db_location <- paste0(args$tmpdir, "/", "first_enrch.bed")                             # temporary file, needed only for deeptools
+        second_db_location <- paste0(args$tmpdir, "/", "second_enrch.bed")                           # temporary file, needed only for deeptools
         score_matrix_location <- paste0(args$tmpdir, "/", "score_matrix.gz")                         # no reason to keep it
 
         filtered_db_ranges <- makeGRangesFromDataFrame(                                              # fails when filtered_db_sites is empty
             filtered_db_sites,
             seqinfo=seqinfo_data,
             keep.extra.columns=TRUE                                                                  # to keep the log2FoldChange column
+        )
+        export.bed(filtered_db_ranges, filtered_db_location, ignore.strand=TRUE)
+        writeLines(
+            c(
+                paste(
+                    "track name=\"Filtered diff. acc. regions\"",
+                    "description=\"Filtered diff. acc. regions\"",
+                    "itemRgb=\"On\""),
+                readLines(filtered_db_location)
+            ),
+            filtered_db_location
         )
 
         first_db_ranges <- filtered_db_ranges[filtered_db_ranges$log2FoldChange <= -args$logfc, ]    # at least one of these groups won't be empty
@@ -483,18 +526,11 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
                 stringsAsFactors=FALSE,
                 quote=""                                                        # safety measure
             ) %>%
-            tidyr::separate(
-                col="V4",                                                       # has "chr:start-end" structure
-                into=c("chr", "start", "end"),
-                sep=":|-",
-                remove=TRUE,
-                convert=TRUE                                                    # will make start and end numeric
-            ) %>%
             dplyr::mutate(
-                peak=base::paste0(chr, ":", start+1, "-", end)                  # there is 1 bp mismatch that we need to correct
+                peak=base::paste0(V1, ":", V2+1, "-", V3)
             ) %>%
             dplyr::select(
-                -c("V1", "V2", "V3", "V5", "chr", "start", "end", "V6")
+                -c("V1", "V2", "V3", "V4", "V5", "V6")
             ) %>%
             tibble::remove_rownames() %>%
             tibble::column_to_rownames("peak")
@@ -1050,7 +1086,7 @@ print(head(db_results$db_sites))
 ## ----
 io$export_data(
     db_results$db_sites,                                                                   # not filtered na-removed differentially bound sites
-    paste0(args$output, "_db_sites.tsv")
+    paste0(args$output, "_all_db_sites.tsv")
 )
 
 ## ----
@@ -1059,3 +1095,63 @@ export_processed_plots(
     seqinfo_data=seqinfo_data,
     args
 )
+
+if (args$test %in% c("manorm2-full", "manorm2-half")){                                     # these are the only two cases when we create peaks, summits, and xls files
+    for (i in 1:nrow(args$metadata)){                                                      # we update files after we run MAnorm because it fails with track information
+        current_row <- as.list(args$metadata[i, ])
+        track_label <- ifelse(
+            args$test == "manorm2-full",
+            paste(current_row$name, current_row$condition, sep=", "),                      # we include the dataset name only for manorm2-full analysis
+            current_row$condition
+        )
+        track_color <- ifelse(
+            current_row$condition == args$first,
+            "0,145,106",                                                                   # TRUE_COLOR
+            "235,99,49"                                                                    # FALSE_COLOR
+        )
+        track_info <- paste0(
+            "track name=\"", track_label, "\" ",
+            "description=\"", track_label, "\" ",
+            "color=\"", track_color, "\""
+        )
+
+        for (current_ext in c("_peaks.narrowPeak", "_summits.bed", "_peaks.xls")){
+            current_source <- paste0(args$output, "_", current_row$suffix, current_ext)    # the same way we define it in the prepare_fragments_and_peaks
+            if(file.exists(current_source)){                                               # safety measure
+                if (args$test == "manorm2-full"){                                          # keep all files, add track information to BED files
+                    if(current_ext != "_peaks.xls"){                                       # we add track information only to peaks and summits files
+                        print(paste("Adding track information to", current_source))
+                        writeLines(
+                            c(track_info, readLines(current_source)),
+                            current_source
+                        )
+                    }
+                } else {                                                                   # rename files, remove dublicates, add track information to BED files
+                    updated_suffix <- paste(                                               # we want to exclude datasets from the filenames
+                        tolower(
+                            gsub("'|\"|\\s|\\t|#|%|&|-", "_", current_row$condition)       # the same as we did it in the prepare_fragments_and_peaks but using condition
+                        ),
+                        ifelse(current_row$condition == args$first, "first", "second"),
+                        sep="_"
+                    )
+                    target_location <- paste0(
+                        args$output, "_",
+                        updated_suffix,                                                    # this now include only condition information
+                        current_ext
+                    )
+                    if(!file.exists(target_location)){                                     # we write the file only if it has not been already created
+                        print(paste("Copying", current_source, "to", target_location))
+                        current_data <- readLines(current_source)
+                        if(current_ext != "_peaks.xls"){                                   # we add track information only to peaks and summits files
+                            print(paste("Adding", track_info))
+                            current_data <- c(track_info, current_data)
+                        }
+                        writeLines(current_data, target_location)
+                    }
+                    print(paste("Removing", current_source))
+                    file.remove(current_source)                                            # we always remove the source file
+                }
+            }
+        }
+    }
+}

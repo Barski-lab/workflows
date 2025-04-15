@@ -55,6 +55,10 @@
 #   pseudo bulk form per dataset. If --test is set to
 #   manorm2-half, reads will be aggregated per condition
 #   but MAnorm2 will be still run by datasets.
+#   Export both unfiltered and filtered diff. acc. regions
+#   as BED files, add track information to all BED/narrowPeak
+#   outputs. Do not output multiple narrowPeak files when
+#   run with the --test set to manorm2-half.
 # - Installed deeptools to build tag density heatmaps
 #   from the sc_atac_dbinding.R script.
 # - Moved P value labels on the composition_box_plot
