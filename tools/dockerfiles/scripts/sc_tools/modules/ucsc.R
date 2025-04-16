@@ -218,6 +218,9 @@ cb_build <- function(object, slot, short_label, rootname, label_field, show_labe
         row.names=FALSE
     )
 
+    # we set geneIdType to "symbol" to prevent UCSC CellBrowser
+    # from guessing the gene type and printing lots of warnings
+
     local_config <- '
 name="%s"
 shortLabel="%s"
@@ -228,7 +231,7 @@ defQuantPal="tol-sq-blue"
 defCatPal="rainbow"
 radius=%i
 alpha=%f
-geneIdType="auto"
+geneIdType="symbol"
 clusterField="%s"
 labelField="%s"
 enumFields=%s
