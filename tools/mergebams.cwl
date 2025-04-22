@@ -13,12 +13,35 @@ hints:
 
 inputs:
 
+  script:
+    type: string?
+    default: |
+      #!/bin/bash
+      if [ "$0" = "true" ]
+      then
+        echo "Skip running mergebams"
+      else
+        echo "Running mergebams ${@:1}"
+        mergebams "${@:1}"
+      fi
+    inputBinding:
+      position: 1
+    doc: "Bash script to optionally skip running mergebams"
+
+  skip:
+    type: boolean?
+    default: false
+    inputBinding:
+      position: 2
+      valueFrom: $(self?"true":"false")      # need to have it as a string, otherwise false is not propogated.
+    doc: "If true, skip running the tool"
+
   possorted_genome_bam_bai:
     type: File[]
     secondaryFiles:
     - .bai
     inputBinding:
-      position: 1
+      position: 3
       prefix: "--inputs"
       itemSeparator: ","
     doc: |
@@ -30,7 +53,7 @@ inputs:
   output_filename:
     type: string
     inputBinding:
-      position: 2
+      position: 4
       prefix: "--output"
     doc: |
       Output name for the merged
@@ -39,7 +62,7 @@ inputs:
   threads:
     type: int?
     inputBinding:
-      position: 3
+      position: 5
       prefix: "--threads"
     doc: |
       Number of cores/cpus to use.
@@ -49,7 +72,7 @@ inputs:
 outputs:
 
   merged_possorted_genome_bam_bai:
-    type: File
+    type: File?
     outputBinding:
       glob: "*.bam"
     secondaryFiles:
@@ -65,7 +88,7 @@ outputs:
     type: stderr
 
 
-baseCommand: ["mergebams"]
+baseCommand: ["bash", "-c"]
 
 
 stdout: mergebams_stdout.log
