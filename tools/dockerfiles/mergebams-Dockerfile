@@ -1,0 +1,63 @@
+##########################################################################################################
+# Dockerfile
+#
+# Software:         mergebams
+# Software Version: bfc788b6ab10a1a50defac97100f7037f3bef3e3
+# Description:      Dockerized version of the mergebams tool
+# Website:          https://github.com/michael-kotliar/mergebams
+# Provides:         mergebams
+# Base Image:       rust:1.86.0
+# Build Cmd:        docker build --platform linux/amd64 --no-cache --rm -t biowardrobe2/mergebams:v0.0.1 -f mergebams-Dockerfile .
+# Pull Cmd:         docker pull --platform linux/amd64 biowardrobe2/mergebams:v0.0.1
+# Run Cmd:          docker run --platform linux/amd64 --rm -ti biowardrobe2/mergebams:v0.0.1 /bin/bash
+##########################################################################################################
+
+# v0.0.1
+# Modified version of the original mergebams
+# from https://github.com/furlan-lab/mergebams.
+# --labels, --bcs, and --celltag input parameters
+# were removed. Instead the barcode suffixes in the
+# merged BAM file will be replaced with -1, -2,
+# -N the same way as it is implemented in the
+# Cell Ranger Aggregate. Merged BAM file will be
+# sorted and indexed with Samtools.
+
+
+### Base Image
+FROM rust:1.86.0
+MAINTAINER Michael Kotliar "misha.kotliar@gmail.com"
+ENV DEBIAN_FRONTEND noninteractive
+
+################## BEGIN INSTALLATION ######################
+
+WORKDIR /tmp
+
+ENV MERGEBAMS_URL "https://github.com/michael-kotliar/mergebams.git"
+ENV MERGEBAMS_VERSION "a689525e8e752364af586b3e537829df935e7d19"
+
+ENV SAMTOOLS_VERSION "1.21"
+ENV HTSLIB_URL "https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VERSION}/htslib-${SAMTOOLS_VERSION}.tar.bz2"
+ENV SAMTOOLS_URL "https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2"
+
+RUN apt-get update && \
+    apt-get install -y vim && \
+### Installing Samtools
+    wget -q -O - $HTSLIB_URL | tar -jxv && \
+    cd htslib-${SAMTOOLS_VERSION} && \
+    ./configure --prefix=/usr/local/ && \
+    make -j 4 && \
+    make install && \
+    cd .. && \
+    wget -q -O - $SAMTOOLS_URL | tar -jxv && \
+    cd samtools-${SAMTOOLS_VERSION} && \
+    ./configure --prefix=/usr/local/ && \
+    make -j 4 && \
+    make install && \
+    cd .. && \
+### Installing mergebams
+    cargo install --git $MERGEBAMS_URL --rev $MERGEBAMS_VERSION && \
+### Cleaning
+    apt-get clean && \
+    apt-get purge && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* && \
+    strip /usr/local/bin/*; true
