@@ -179,6 +179,7 @@ inputs:
     inputBinding:
       position: 22
       prefix: "--ignore"
+      valueFrom: $(self?"True":"False")                 # Souporcell expects word, not just boolean flag
     doc: |
       Set to True to ignore data error assertions
 
