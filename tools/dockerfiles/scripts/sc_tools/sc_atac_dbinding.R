@@ -13,6 +13,7 @@ suppressMessages(library(modules))
 suppressMessages(library(argparse))
 suppressMessages(library(rtracklayer))
 suppressMessages(library(tidyverse))
+suppressMessages(library(GenomeInfoDb))
 
 HERE <- (function() {return (dirname(sub("--file=", "", commandArgs(trailingOnly=FALSE)[grep("--file=", commandArgs(trailingOnly=FALSE))])))})()
 suppressMessages(analyses <- modules::use(file.path(HERE, "modules/analyses.R")))
@@ -47,7 +48,7 @@ get_ordered_metadata <- function(seurat_data, args){                            
 prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
     ordered_metadata <- get_ordered_metadata(seurat_data, args)                     # we need it for a proper order of items shown on the plots
     aggr_criteria <- ifelse(
-        args$test %in% c("manorm2-full", "manorm2-half"),
+        args$test %in% c("manorm2-full", "manorm2-half", "diffbind-deseq-full", "diffbind-deseq-half", "diffbind-edger-full", "diffbind-edger-half"),
         "new.ident",
         args$splitby
     )
@@ -67,7 +68,18 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
         seurat_data, group.by=aggr_criteria
     )
 
-    metadata <- NULL                                                                # a dataframe to collect files locations
+    chrom_length_location <- paste0(args$tmpdir, "/", "chrom_length.tsv")           # temporary file is needed only for DiffBind
+                                                                                    # we place it in the metadata_struct for easy access
+    io$export_data(
+        data=base::data.frame(
+            names(GenomeInfoDb::seqlengths(seqinfo_data)),
+            as.numeric(GenomeInfoDb::seqlengths(seqinfo_data))
+        ),
+        location=chrom_length_location,
+        col_names=FALSE
+    )
+
+    metadata_struct <- NULL                                                         # a dataframe to collect files locations
     for (i in 1:length(aggr_names)){
         current_name <- aggr_names[i]                                               # this is used only for labels
         current_condition <- aggr_conditions[i]                                     # this is used both for labels and file names
@@ -79,8 +91,8 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
             sep="_"
         )
         current_data <- data.frame(
-            name=current_name,
-            suffix=current_suffix,
+            name=current_name,                                                      # used in labels
+            suffix=current_suffix,                                                  # is used for file names
             condition=current_condition,
 
             fragments=paste0(                                                       # temporary files, we use it to search for files
@@ -90,10 +102,12 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
                 ".bed"
             ),
             tn5ct=paste0(args$tmpdir, "/", current_suffix, "_tn5ct.bed"),           # temporary files, we use it to create files
+            bams=paste0(args$tmpdir, "/", current_suffix, ".bam"),                  # temporary files, we use it to create files
             coverage=paste0(args$output, "_", current_suffix, ".bigWig"),           # will be saved as output, we use it to create files
             peaks=paste0(args$output, "_", current_suffix, "_peaks.narrowPeak"),    # will be saved as output, we use it to search for files
             summits=paste0(args$output, "_", current_suffix, "_summits.bed"),       # will be saved as output, we use it to search for files
             xls=paste0(args$output, "_", current_suffix, "_peaks.xls"),             # will be saved as output, we use it to search for files
+            chr_length=chrom_length_location,                                       # temporary file, we use it to search for file
 
             read_cnt=paste(current_suffix, "read_cnt", sep="."),                    # will be used by MAnorm for normalization
             occupancy=paste(current_suffix, "occupancy", sep="."),                  # will be used by MAnorm for normalization
@@ -103,10 +117,10 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
             row.names=i                                                             # otherwise it puts the current_name as the rowname
         )
 
-        if (is.null(metadata)) {
-            metadata <- current_data
+        if (is.null(metadata_struct)) {
+            metadata_struct <- current_data
         } else {
-            metadata <- base::rbind(metadata, current_data)
+            metadata_struct <- base::rbind(metadata_struct, current_data)
         }
     }
 
@@ -125,8 +139,8 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
         verbose=TRUE
     )
 
-    for (i in 1:nrow(metadata)){                                                    # iterating over the collected locations
-        current_row <- as.list(metadata[i, ])                                       # to have it as list instead of a data.frame with the single row
+    for (i in 1:nrow(metadata_struct)){                                             # iterating over the collected locations
+        current_row <- as.list(metadata_struct[i, ])                                # to have it as list instead of a data.frame with the single row
         print(paste("Processing", current_row$name, "dataset"))
         print(
             paste(
@@ -140,30 +154,48 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
             genome=seqinfo_data
         )
 
-        io$export_fragments_coverage(
-            fragments_data=fragments_data,
-            location=current_row$coverage,
-            scaling_coef=current_row$scaling
-        )
-
-        if (args$test %in% c("manorm2-full", "manorm2-half")){                      # for MAnorm2 we will need to have Tn5 cut sites for later calling with MACS2
+        if (args$test %in% c(                                                        # for MAnorm2 and DiffBind we need to have Tn5 cut sites for peak calling with MACS2
+                "manorm2-full", "manorm2-half",
+                "diffbind-deseq-full", "diffbind-deseq-half",
+                "diffbind-edger-full", "diffbind-edger-half"
+            )
+        ){
             print(
                 paste(
                     "Extracting Tn5 cut sites (1bp length)",
-                    "from the loaded ATAC fragments data"
+                    "from the loaded ATAC fragments data",
+                    "and extending them to the 40bp length"
                 )
             )
-            tn5ct_data <- unlist(as(list(
-                resize(fragments_data, 1, fix="start", ignore.strand=TRUE),         # will be 1bp region that corresponds to the beginning of the fragment
-                resize(fragments_data, 1, fix="end", ignore.strand=TRUE)            # will be 1bp region that corresponds to the end of the fragment
-            ), "GRangesList"))
+            tn5ct_data <- resize(
+                unlist(as(list(
+                    resize(fragments_data, 1, fix="start", ignore.strand=TRUE),     # will be 1bp region that corresponds to the beginning of the fragment
+                    resize(fragments_data, 1, fix="end", ignore.strand=TRUE)        # will be 1bp region that corresponds to the end of the fragment
+                ), "GRangesList")),
+                width=40,                                                           # will extend each region to 40bp length around the center
+                fix="center",
+                ignore.strand=TRUE
+            )
 
-            rtracklayer::export.bed(
+            rtracklayer::export.bed(                                                # we will use it for peak calling with MACS2
                 tn5ct_data,
                 current_row$tn5ct,
                 ignore.strand=TRUE                                                  # we need to ignore strand otherwise MACS2 will fail to parse it
             )
+
+            io$export_fragments_coverage(                                           # we show coverage from the extended Tn5 cut site to
+                fragments_data=tn5ct_data,                                          # correspond to what we used for peak calling
+                location=current_row$coverage,
+                scaling_coef=current_row$scaling
+            )
+
             rm(tn5ct_data)                                                          # no reason to keep it
+        } else {
+            io$export_fragments_coverage(                                           # we show coverage from the whole fragments if we haven't run
+                fragments_data=fragments_data,                                      # peak calling with MACS2 and used Seurat peaks instead.
+                location=current_row$coverage,
+                scaling_coef=current_row$scaling
+            )
         }
         rm(fragments_data)
         gc(verbose=FALSE)
@@ -172,14 +204,23 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
     # we call peaks in a separate for loop because we need to have all
     # tn5ct files already created in case the --test was set to manorm2-half
 
-    if (args$test %in% c("manorm2-full", "manorm2-half")){                          # for MAnorm2 we need to call peaks with MACS2
-        for (i in 1:nrow(metadata)){                                                # iterating over the collected locations
-            current_row <- as.list(metadata[i, ])                                   # to have it as list instead of a data.frame with the single row
+    if (args$test %in% c(                                                           # for MAnorm2 and DiffBind we need to call peaks with MACS2
+            "manorm2-full", "manorm2-half",
+            "diffbind-deseq-full", "diffbind-deseq-half",
+            "diffbind-edger-full", "diffbind-edger-half"
+        )
+    ){
+        for (i in 1:nrow(metadata_struct)){                                         # iterating over the collected locations
+            current_row <- as.list(metadata_struct[i, ])                            # to have it as list instead of a data.frame with the single row
             tn5ct_location <- current_row$tn5ct                                     # default tn5ct location from the current dataset
-            if (args$test == "manorm2-half"){
+            if (args$test %in% c(
+                    "manorm2-half",
+                    "diffbind-deseq-half", "diffbind-edger-half"
+                )
+            ){
                 tn5ct_location <- as.vector(                                        # all tn5ct locations that belong to the current comparison group
-                    metadata[                                                       # they are all shoudl have been already created in the previous for loop
-                        metadata$condition == current_row$condition,
+                    metadata_struct[                                                # they are all shoudl have been already created in the previous for loop
+                        metadata_struct$condition == current_row$condition,
                         "tn5ct"
                     ]
                 )
@@ -189,10 +230,10 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
                     print(
                         paste0(
                             "Calling peaks with MACS2 for ", current_row$name,
-                            " dataset from the extracted Tn5 cut sites (",
+                            " dataset from the extended Tn5 cut sites (",
                             paste(basename(tn5ct_location), collapse=", "), ") ",
                             "with the following parameters: --qvalue ", args$qvalue,
-                            " --shift -25 --extsize 50 --keep-dup all --gsize ",
+                            " --shift 0 --extsize 40 --keep-dup all --gsize ",
                             args$genome
                         )
                     )
@@ -200,8 +241,8 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
                         object=tn5ct_location,
                         outdir=dirname(args$output),                                        # we save output files directly to the output folder
                         name=paste0(basename(args$output), "_", current_row$suffix),        # set the name so we can use our peaks, summits, and xls locations
-                        extsize=50,                                                         # will be always called with --nomodel, so --shift
-                        shift=-25,                                                          # and --extsize make difference
+                        extsize=40,                                                         # will be always called with --nomodel, so --shift
+                        shift=0,                                                            # and --extsize make difference
                         effective.genome.size=args$genome,
                         additional.args=paste(
                             "-q", args$qvalue,
@@ -217,7 +258,7 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
                     logger$info(
                         paste0(
                             "Failed to call peaks with MACS2 for ", current_row$name,
-                            " dataset from the extracted Tn5 cut sites (",
+                            " dataset from the extended Tn5 cut sites (",
                             paste(basename(tn5ct_location), collapse=", "), "). ",
                             "Exiting. ", e
                         )
@@ -238,7 +279,7 @@ prepare_fragments_and_peaks <- function(seurat_data, seqinfo_data, args){
         paste0(args$output, "_dflt_peaks.bigBed")                                   # only for visualization purposes
     )
 
-    return (metadata)
+    return (metadata_struct)
 }
 
 ## ----
@@ -293,20 +334,32 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
     graphics$geom_bar_plot(
         data=ordered_metadata,
         x_axis=ifelse(
-            args$test %in% c("manorm2-full", "manorm2-half"),
+            args$test %in% c(
+                "manorm2-full", "manorm2-half",
+                "diffbind-deseq-full", "diffbind-deseq-half",
+                "diffbind-edger-full", "diffbind-edger-half"
+            ),
             "new.ident",
             args$splitby
         ),
         color_by=args$splitby,
         x_label=ifelse(
-            args$test %in% c("manorm2-full", "manorm2-half"),
+            args$test %in% c(
+                "manorm2-full", "manorm2-half",
+                "diffbind-deseq-full", "diffbind-deseq-half",
+                "diffbind-edger-full", "diffbind-edger-half"
+            ),
             "Dataset",
             args$splitby
         ),
         y_label="Cell counts",
         legend_title="Tested\ncondition",
         plot_title=ifelse(
-            args$test %in% c("manorm2-full", "manorm2-half"),
+            args$test %in% c(
+                "manorm2-full", "manorm2-half",
+                "diffbind-deseq-full", "diffbind-deseq-half",
+                "diffbind-edger-full", "diffbind-edger-half"
+            ),
             "Number of cells per dataset",
             paste(
                 "Number of cells per tested",
@@ -364,7 +417,7 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
         pdf=args$pdf
     )
 
-    all_db_sites <- db_results$db_sites %>%                                           # all not filtered diff. acc. regions
+    all_db_sites <- db_results$db_sites %>%                                       # all not filtered diff. acc. regions
                     dplyr::mutate(
                         "name"=paste0(
                             "padj=", format(padj, digits=3, trim=TRUE),
@@ -375,16 +428,19 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
                                     .default = graphics$TRUE_COLOR
                                 )
                     ) %>%
-                    dplyr::mutate("score"=-log10(padj)*10) %>%                                             # similar to what MACS2 does
+                    dplyr::mutate("score"=-log10(padj)*10) %>%                    # similar to what MACS2 does
                     dplyr::select(
-                        c("chr", "start", "end", "name", "score", "itemRgb", "log2FoldChange", "padj")     # we keep log2FoldChange and padj for row_metadata in morpheus heatmap
+                        c(                                                        # we keep log2FoldChange and padj for row_metadata in morpheus heatmap
+                            "chr", "start", "end", "name", "score",
+                            "itemRgb", "log2FoldChange", "padj"
+                        )
                     )
     all_db_ranges <- makeGRangesFromDataFrame(
         all_db_sites,
         seqinfo=seqinfo_data,
         keep.extra.columns=TRUE
     )
-    all_db_location <- paste0(args$output, "_all_db_sites.bed")                                                # should be kept as output, the same as all_db_sites.tsv
+    all_db_location <- paste0(args$output, "_all_db_sites.bed")                   # should be kept as output, the same as all_db_sites.tsv
     export.bed(all_db_ranges, all_db_location, ignore.strand=TRUE)
     writeLines(
         c(
@@ -459,7 +515,7 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
 
         compute_matrix_args <- c(
             "reference-point",
-            "--scoreFileName", args$metadata$coverage,
+            "--scoreFileName", args$metadata_struct$coverage,
             "--regionsFileName", regions_locations,
             "--referencePoint", "center",
             "--beforeRegionStartLength", 5000,
@@ -467,7 +523,7 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
             "--binSize", 100,
             "--sortRegions", "descend",                                         # sort by mean of each row in a descending order
             "--sortUsing", "mean",
-            "--samplesLabel", args$metadata$name,
+            "--samplesLabel", args$metadata_struct$name,
             "--outFileName", score_matrix_location,
             "--missingDataAsZero",
             "--numberOfProcessors", args$cpus
@@ -552,11 +608,16 @@ export_processed_plots <- function(db_results, seqinfo_data, args){
             row_metadata <- row_metadata[rownames(score_matrix_data), ]         # we want to have the rows order from deeptools results, should never fail
 
             col_metadata <- NULL
-            n_times <- ncol(score_matrix_data) / length(args$metadata$name)     # shouldn't fail, as it's alsways dividable by the number of coverage files
-            for (i in 1:length(args$metadata$name)){
-                current_name <- args$metadata$name[i]
-                current_condition <- args$metadata$condition[i]
-                if (args$test %in% c("manorm2-full", "manorm2-half")){
+            n_times <- ncol(score_matrix_data) / length(args$metadata_struct$name)     # shouldn't fail, as it's alsways dividable by the number of coverage files
+            for (i in 1:length(args$metadata_struct$name)){
+                current_name <- args$metadata_struct$name[i]
+                current_condition <- args$metadata_struct$condition[i]
+                if (args$test %in% c(
+                        "manorm2-full", "manorm2-half",
+                        "diffbind-deseq-full", "diffbind-deseq-half",
+                        "diffbind-edger-full", "diffbind-edger-half"
+                    )
+                ){
                     current_col_metadata <- setNames(
                         data.frame(
                             list(
@@ -694,9 +755,9 @@ get_args <- function(){
         help=paste(
             "Column from the Seurat object metadata to split cells into two groups to",
             "run --second vs --first differential accessibility analysis. If --test",
-            "parameter is set to manorm2-full or manorm2-half, the --splitby shouldn't",
-            "put cells from the same dataset into the different comparison groups.",
-            "May be one of the extra metadata columns added with --metadata or",
+            "parameter is set to any of the manorm2 or diffbind methods, the --splitby",
+            "shouldn't put cells from the same dataset into the different comparison",
+            "groups. May be one of the extra metadata columns added with --metadata or",
             "--barcodes parameters."
         ),
         type="character", required="True"
@@ -720,12 +781,11 @@ get_args <- function(){
     parser$add_argument(
         "--test",
         help=paste(
-            "Test type to use in the differential accessibility analysis. For all tests",
-            "except manorm2-full and manorm2-half, peaks already present in the loaded",
-            "Seurat object will be used. If manorm2-full or manorm2-half test is selected,",
-            "reads will be aggregated to pseudo bulk form either by dataset or comparison",
-            "group and then peaks will be called with MACS2 per dataset.",
-            "Default: logistic-regression"
+            "Test type to use in the differential accessibility analysis. For all test",
+            "methods except manorm2 and diffbind, peaks already present in the loaded",
+            "Seurat object will be used. Otherwise, peaks will be called with MACS2 either",
+            "per dataset (for methods ending with -full) or by the comparison group (for",
+            "meethods ending with -half). Default: logistic-regression"
         ),
         type="character", default="logistic-regression",
         choices=c(
@@ -734,7 +794,11 @@ get_args <- function(){
             "logistic-regression",        # (LR) Logistic Regression (use FindMarkers with peaks from Seurat object)
             "mast",                       # (MAST) MAST package (use FindMarkers with peaks from Seurat object)
             "manorm2-full",               # call peaks for each dataset with MACS2, then run MAnorm2 with datasets
-            "manorm2-half"                # call peaks for each comparison group with MACS2, then run MAnorm2 with datasets
+            "manorm2-half",               # call peaks for each comparison group with MACS2, then run MAnorm2 with datasets
+            "diffbind-deseq-full",        # call peaks for each dataset with MACS2, then run DiffBind (DESeq2) with datasets
+            "diffbind-deseq-half",        # call peaks for each comparison group with MACS2, then run DiffBind (DESeq2) with datasets
+            "diffbind-edger-full",        # call peaks for each dataset with MACS2, then run DiffBind (EdgeR) with datasets
+            "diffbind-edger-half"         # call peaks for each comparison group with MACS2, then run DiffBind (EdgeR) with datasets
         )
     )
     parser$add_argument(
@@ -743,7 +807,7 @@ get_args <- function(){
             "Genome type of the sequencing data loaded from the Seurat",
             "object. It will be used for effective genome size selection",
             "when calling peaks with MACS2. Ignored if --test is not set",
-            "to either manorm2-full or manorm2-half. Default: hs (2.7e9)"
+            "to either manorm2 or diffbind methods. Default: hs (2.7e9)"
         ),
         type="character", default="hs",
         choices=c(
@@ -755,7 +819,7 @@ get_args <- function(){
         "--qvalue",
         help=paste(
             "Minimum FDR (q-value) cutoff for MACS2 peak detection. Ignored",
-            "if --test is not set to either manorm2-full or manorm2-half.",
+            "if --test is not set to either manorm2 or diffbind methods.",
             "Default: 0.05"
         ),
         type="double", default=0.05
@@ -766,7 +830,7 @@ get_args <- function(){
             "If a distance between peaks is smaller than the provided value",
             "they will be merged before splitting them into reference genomic",
             "bins of size --binsize. Ignored if --test is not set to either",
-            "manorm2-full or manorm2-half. Default: 150"
+            "manorm2-full or manorm2-half methods. Default: 150"
         ),
         type="integer", default=150
     )
@@ -775,8 +839,9 @@ get_args <- function(){
         help=paste(
             "The size of non-overlapping reference genomic bins used by",
             "MAnorm2 when generating a table of reads counts per peaks.",
-            "Ignored if --test is not set to either manorm2-full or",
-            "manorm2-half. Default: 1000"
+            "Ignored if --test is not set to any of the manorm2 methods.",
+            "For diffbind methods binning is disabled (the original peak",
+            "sizes will be used instead. Default: 1000"
         ),
         type="integer", default=1000
     )
@@ -785,9 +850,9 @@ get_args <- function(){
         help=paste(
             "Keep only those reference genomic bins that are present",
             "in at least this fraction of datasets within each of the",
-            "comparison groups. Used only when --test is set to",
-            "manorm2-full. For manorm2-half this parameter will be",
-            "automatically set to 1. Default: 0.5"
+            "comparison groups. Used only when --test is set to the",
+            "methods ending with -full. For methods ending with -half",
+            "this parameter will be automatically set to 1. Default: 0.5"
         ),
         type="double", default=0.5
     )
@@ -797,7 +862,9 @@ get_args <- function(){
             "The maximum number of the most significant (based on qvalue)",
             "peaks to keep from each group of cells when constructing",
             "reference genomic bins. Ignored if --test is not set to",
-            "either manorm2-full or manorm2-half. Default: keep all peaks"
+            "either manorm2-full or manorm2-half methods. For diffbind",
+            "methods the minimum RPKM threshold (by default equal to 1)",
+            "is used instead. Default: keep all peaks"
         ),
         type="integer"
     )   
@@ -808,7 +875,7 @@ get_args <- function(){
             "to be filtered out before running differential accessibility analysis.",
             "Any reference genomic bin overlapping a blacklist region will be",
             "removed from the output. Ignored if --test is not set to either",
-            "manorm2-full or manorm2-half."
+            "manorm2-full or manorm2-half methods."
         ),
         type="character"
     )
@@ -889,9 +956,17 @@ get_args <- function(){
         "logistic-regression" = "LR",
         "mast"                = "MAST",
         "manorm2-full"        = "manorm2-full",
-        "manorm2-half"        = "manorm2-half"
+        "manorm2-half"        = "manorm2-half",
+        "diffbind-deseq-full" = "diffbind-deseq-full",
+        "diffbind-deseq-half" = "diffbind-deseq-half",
+        "diffbind-edger-full" = "diffbind-edger-full",
+        "diffbind-edger-half" = "diffbind-edger-half"
     )
-    if (args$test == "manorm2-half"){                                                            # when --test is set to "manorm2-half" all datasets within
+    if (args$test %in% c(                                                                        # when --test is set to "-half" methods all datasets within
+            "manorm2-half",
+            "diffbind-deseq-half", "diffbind-edger-half"
+        )
+    ){
         args$minoverlap <- 1                                                                     # the same comparison group have identical peaks so better
     }                                                                                            # to set --minoverlap to 1 to avoid confusion.
     logger$setup(
@@ -971,11 +1046,16 @@ if (!is.null(args$barcodes)){
 }
 
 ## ----
-if (args$test %in% c("manorm2-full", "manorm2-half")){
+if (args$test %in% c(
+        "manorm2-full", "manorm2-half",
+        "diffbind-deseq-full", "diffbind-deseq-half",
+        "diffbind-edger-full", "diffbind-edger-half"
+    )
+){
     # need to make sure that --splitby doesn't put
     # cells from the same dataset into the different
-    # comparison groups, because when we use manorm2-full
-    # or manorm2-half we aggregate fragments counts to
+    # comparison groups, because when we use manorm2
+    # or diffbind methods we aggregate fragments counts to
     # pseudobulk form per dataset.
     cells_counts <- table(
         seurat_data@meta.data$new.ident,
@@ -987,8 +1067,8 @@ if (args$test %in% c("manorm2-full", "manorm2-half")){
                 "Dividing cells by", args$splitby, "puts cells",
                 "from the same dataset into the different",
                 "comparison groups, which is not supported when",
-                "--test parameter is set to either manorm2-full",
-                "or manorm2-half. Exiting."
+                "--test parameter is set to either manorm2",
+                "or diffbind methods. Exiting."
             )
         )
         logger$info(cells_counts)
@@ -1062,7 +1142,51 @@ if (!all(table(seurat_data@meta.data[[args$splitby]]) > 0)){                    
 }
 
 ## ----
-if (!(args$test %in% c("manorm2-full", "manorm2-half"))){                                  # needed only for FindMarkers (not for MAnorm2)
+if (args$test %in% c(
+        "diffbind-deseq-full", "diffbind-deseq-half",
+        "diffbind-edger-full", "diffbind-edger-half"
+    )
+){
+    # need to check if we have at least two replicates
+    # in each condition to run DiffBind
+    datasets_count_first <- length(
+        unique(
+            as.vector(
+                as.character(
+                    seurat_data@meta.data$new.ident[seurat_data@meta.data[[args$splitby]] == args$first]
+                )
+            )
+        )
+    )
+    datasets_count_second <- length(
+        unique(
+            as.vector(
+                as.character(
+                    seurat_data@meta.data$new.ident[seurat_data@meta.data[[args$splitby]] == args$second]
+                )
+            )
+        )
+    )
+    if (any(c(datasets_count_first, datasets_count_second) < 2)){
+        logger$info(
+            paste(
+                "Dividing datasets by", args$splitby,
+                "doesn't provide enough replicates for",
+                "running", args$test, "analysis. Exiting."
+            )
+        )
+        logger$info(cells_counts)
+        quit(save="no", status=1, runLast=FALSE)
+    }
+}
+
+## ----
+if (!(args$test %in% c(                                                                    # needed only for FindMarkers (not for MAnorm2)
+        "manorm2-full", "manorm2-half",
+        "diffbind-deseq-full", "diffbind-deseq-half",
+        "diffbind-edger-full", "diffbind-edger-half"
+    ))
+){
     print("Normalizing ATAC counts after all filters applied")
     seurat_data <- Signac::RunTFIDF(                                                       # might be redundant as it may not depend on the number of cells
         seurat_data,
@@ -1073,7 +1197,7 @@ if (!(args$test %in% c("manorm2-full", "manorm2-half"))){                       
 }
 
 ## ----
-args$metadata <- prepare_fragments_and_peaks(
+args$metadata_struct <- prepare_fragments_and_peaks(
     seurat_data=seurat_data,
     seqinfo_data=seqinfo_data,
     args=args
@@ -1096,12 +1220,17 @@ export_processed_plots(
     args
 )
 
-if (args$test %in% c("manorm2-full", "manorm2-half")){                                     # these are the only two cases when we create peaks, summits, and xls files
-    for (i in 1:nrow(args$metadata)){                                                      # we update files after we run MAnorm because it fails with track information
-        current_row <- as.list(args$metadata[i, ])
+if (args$test %in% c(                                                                      # these are the only cases when we create peaks, summits, and xls files
+        "manorm2-full", "manorm2-half",
+        "diffbind-deseq-full", "diffbind-deseq-half",
+        "diffbind-edger-full", "diffbind-edger-half"
+    )
+){
+    for (i in 1:nrow(args$metadata_struct)){                                               # we update files after we run MAnorm because it fails with track information
+        current_row <- as.list(args$metadata_struct[i, ])
         track_label <- ifelse(
-            args$test == "manorm2-full",
-            paste(current_row$name, current_row$condition, sep=", "),                      # we include the dataset name only for manorm2-full analysis
+            args$test %in% c("manorm2-full", "diffbind-deseq-full", "diffbind-edger-full"),
+            paste(current_row$name, current_row$condition, sep=", "),                      # we include the dataset name only for "-full" test methods
             current_row$condition
         )
         track_color <- ifelse(
@@ -1118,7 +1247,10 @@ if (args$test %in% c("manorm2-full", "manorm2-half")){                          
         for (current_ext in c("_peaks.narrowPeak", "_summits.bed", "_peaks.xls")){
             current_source <- paste0(args$output, "_", current_row$suffix, current_ext)    # the same way we define it in the prepare_fragments_and_peaks
             if(file.exists(current_source)){                                               # safety measure
-                if (args$test == "manorm2-full"){                                          # keep all files, add track information to BED files
+                if (args$test %in% c(                                                      # keep all files, add track information to BED files
+                        "manorm2-full", "diffbind-deseq-full", "diffbind-edger-full"
+                    )
+                ){
                     if(current_ext != "_peaks.xls"){                                       # we add track information only to peaks and summits files
                         print(paste("Adding track information to", current_source))
                         writeLines(

@@ -11,6 +11,7 @@ import("Azimuth", attach=FALSE)
 import("harmony", attach=FALSE)
 import("tibble", attach=FALSE)
 import("glmGamPoi", attach=FALSE)  # safety measure. we don't use it directly, but SCTransform with method="glmGamPoi" needs it
+import("DiffBind", attach=FALSE)
 import("S4Vectors", attach=FALSE)
 import("slingshot", attach=FALSE)
 import("reticulate", attach=FALSE)
@@ -1835,18 +1836,18 @@ atac_dbinding_analyze <- function(seurat_data, args){
         )
         profile_bins_args <- c(
             base::paste0(
-                "--reads=", paste(args$metadata$tn5ct, collapse=",")
+                "--reads=", paste(args$metadata_struct$tn5ct, collapse=",")
             ),
             base::paste0(
-                "--peaks=", paste(args$metadata$peaks, collapse=",")
+                "--peaks=", paste(args$metadata_struct$peaks, collapse=",")
             ),
             base::paste0(
-                "--summits=", paste(args$metadata$summits, collapse=",")
+                "--summits=", paste(args$metadata_struct$summits, collapse=",")
             ),
             base::paste0("--typical-bin-size=", args$binsize),
             base::paste0("--min-peak-gap=", args$minpeakgap),
             base::paste0(
-                "--labs=", paste(args$metadata$suffix, collapse=",")
+                "--labs=", paste(args$metadata_struct$suffix, collapse=",")
             ),
             "--shiftsize=0",
             "--keep-dup=all",
@@ -1904,8 +1905,8 @@ atac_dbinding_analyze <- function(seurat_data, args){
 
         read_counts_data <- MAnorm2::normalize(                                         # Constructs a pseudo ChIP-seq profile by “averaging” the intesities from all samples.
             read_counts_data,                                                           # A reference genomic bin is occupied by the pseudo ChIP-seq sample if it was occupied
-            count=args$metadata$read_cnt,                                               # by at least one sample that it was constructed from. Then each sample is MA-normalized
-            occupancy=args$metadata$occupancy,                                          # to this pseudo reference using the common genomic bins between the reference and a sample.
+            count=args$metadata_struct$read_cnt,                                               # by at least one sample that it was constructed from. Then each sample is MA-normalized
+            occupancy=args$metadata_struct$occupancy,                                          # to this pseudo reference using the common genomic bins between the reference and a sample.
             baseline="pseudo-reference",
             common.peak.regions=!(                                                      # to exclude chrX and Y from being searched for common regions
                 read_counts_data$chrom %in% c("chrX", "chrY", "X", "Y")
@@ -1914,10 +1915,10 @@ atac_dbinding_analyze <- function(seurat_data, args){
         base::print(utils::head(read_counts_data))
 
         datasets_count_first <- length(
-            args$metadata$suffix[args$metadata$condition == args$first]
+            args$metadata_struct$suffix[args$metadata_struct$condition == args$first]
         )
         datasets_count_second <- length(
-            args$metadata$suffix[args$metadata$condition == args$second]
+            args$metadata_struct$suffix[args$metadata_struct$condition == args$second]
         )
         minoverlap_first <- max(round(args$minoverlap * datasets_count_first), 1)
         minoverlap_second <- max(round(args$minoverlap * datasets_count_second), 1)
@@ -1936,10 +1937,10 @@ atac_dbinding_analyze <- function(seurat_data, args){
         bio_conditions <- list(
             first = MAnorm2::bioCond(
                 norm.signal=read_counts_data[
-                    , args$metadata$read_cnt[args$metadata$condition == args$first]
+                    , args$metadata_struct$read_cnt[args$metadata_struct$condition == args$first]
                 ],
                 occupancy=read_counts_data[
-                    , args$metadata$occupancy[args$metadata$condition == args$first]
+                    , args$metadata_struct$occupancy[args$metadata_struct$condition == args$first]
                 ],
                 name="first",                                                           # influences the name of the column in the results
                 occupy.num=minoverlap_first,
@@ -1947,10 +1948,10 @@ atac_dbinding_analyze <- function(seurat_data, args){
             ),
             second = MAnorm2::bioCond(
                 norm.signal=read_counts_data[
-                    , args$metadata$read_cnt[args$metadata$condition == args$second]
+                    , args$metadata_struct$read_cnt[args$metadata_struct$condition == args$second]
                 ],
                 occupancy=read_counts_data[
-                    , args$metadata$occupancy[args$metadata$condition == args$second]
+                    , args$metadata_struct$occupancy[args$metadata_struct$condition == args$second]
                 ],
                 name="second",                                                          # influences the name of the column in the results
                 occupy.num=minoverlap_second
@@ -1960,8 +1961,8 @@ atac_dbinding_analyze <- function(seurat_data, args){
         if (datasets_count_first == 1 && datasets_count_second == 1){                   # we have only two datasets to compare, so need to add common condition
             print("Adding common biological condition")
             bio_conditions[["common"]] <- MAnorm2::bioCond(
-                norm.signal=read_counts_data[args$metadata$read_cnt],
-                occupancy=read_counts_data[args$metadata$occupancy],
+                norm.signal=read_counts_data[args$metadata_struct$read_cnt],
+                occupancy=read_counts_data[args$metadata_struct$occupancy],
                 occupy.num=2,                                                           # should always be 2 because we have only 2 datasets
                 name="common"                                                           # influences the name of the column in the results
             )
@@ -2013,7 +2014,245 @@ atac_dbinding_analyze <- function(seurat_data, args){
             )
         )
         base::rm(bio_conditions)
+        results$db_sites <- db_sites                                                    # not filtered differentialy bound sites
+    } else if (args$test %in% c(
+            "diffbind-deseq-full", "diffbind-deseq-half",
+            "diffbind-edger-full", "diffbind-edger-half"
+        )
+    ){
+        for (i in 1:base::nrow(args$metadata_struct)){
+            current_row <- base::as.list(args$metadata_struct[i, ])
+            base::print(
+                base::paste(
+                    "Converting extended to 40bp Tn5 cut sites",
+                    "from", current_row$tn5ct, "to", current_row$bams,
+                    "for", current_row$suffix, "dataset."
+                )
+            )
+            bed_to_bam_args <- c(
+                current_row$tn5ct,
+                current_row$bams,
+                current_row$chr_length,
+                args$cpus
+            )
+            exit_code <- sys::exec_wait(
+                cmd=base::file.path(HERE, "modules/bed_to_bam.sh"),
+                args=bed_to_bam_args
+            )
+            if (exit_code != 0){                                                            # we were able to run profile_bins, but something went wrong
+                base::print(
+                    base::paste0(
+                        "Failed to run bed_to_bam.sh ",
+                        "with exit code ", exit_code,
+                        ". Exiting."
+                    )
+                )
+                base::quit(save="no", status=1, runLast=FALSE)
+            }
+        }
+
+        base::print("Preparing metadata for running DiffBind analysis")
+        dba_metadata <- args$metadata_struct %>%
+                        dplyr::select(
+                            c("suffix", "condition", "bams", "xls")
+                        ) %>%
+                        dplyr::rename(
+                            "SampleID"="suffix",        # we use suffix instead of the name just in case
+                            "Condition"="condition",
+                            "bamReads"="bams",
+                            "Peaks"="xls"
+                        )
+        base::print(dba_metadata)
+
+        analysis_method <- switch(
+            args$test,
+            "diffbind-deseq-full" = DiffBind::DBA_DESEQ2,
+            "diffbind-deseq-half" = DiffBind::DBA_DESEQ2,
+            "diffbind-edger-full" = DiffBind::DBA_EDGER,
+            "diffbind-edger-half" = DiffBind::DBA_EDGER
+        )
+
+        dba_default_params <- list(
+            minOverlap=1,                               # we should set it to 1, otherwise minOverlap is getting applied even when we load data
+            peakCaller="macs",                          # we don't set peakFormat and scoreCol as they will be derived from the peakCaller value
+            peakFormat="macs",
+            scoreCol=9,                                 # column 9 corresponds to -log10 qvalue. We called peaks with qvalue threshold
+            filter=-log10(args$qvalue),                 # the same that we used for peak calling with MACS2 (shouldn't impact the number of peaks used)
+            bLowerScoreBetter=FALSE,                    # for -log10 column, so lower values are not better
+            config=list(                                # default config with certain parameters overwritten
+                AnalysisMethod=analysis_method,
+                th=1,                                   # shouldn't impact anything, but just in case set it to 1 to not loose any diff. regions
+                DataType=DiffBind::DBA_DATA_FRAME,      # to return data as dataframe
+                RunParallel=TRUE, 
+                minQCth=15,                             # all of the reads in our bam files have 255, so this filter doesn't impact anything
+                fragmentSize=0,                         # we don't want to extend our fragments because out Tn5 cut sites are already extended to 40bp length
+                bCorPlot=FALSE,
+                reportInit="DBA", 
+                bUsePval=FALSE,
+                design=TRUE,
+                doBlacklist=FALSE,
+                doGreylist=FALSE,
+                cores=args$cpus
+            )
+        )
+
+        base::print("Loading peaks all peaks")
+        dba_data <- base::do.call(
+            DiffBind::dba,
+            base::append(dba_default_params, list(sampleSheet=dba_metadata))
+        )
+
+        base::print("Counting reads in peaks")
+        dba_count_default_params <- list(
+            DBA=dba_data,
+            bRemoveDuplicates=FALSE,                    # set to FALSE because our fragments do not include replicates
+            bUseSummarizeOverlaps=FALSE,                # to make sure fragmentSize parameter is used
+            summits=FALSE,                              # keeps the original sizes of the consensus peaks
+            filter=1,                                   # keep only those peaks where max RPKM for all datasets is bigger or equal to 1
+            bParallel=TRUE
+        )
+
+        base::print(
+            base::paste(
+                "Searching for the consensus peaks",
+                "with minimum peakset overlap",
+                args$minoverlap, "applied to each",
+                "biological condition individually"
+            )
+        )
+        dba_peakset_default_params <- list(
+            peak.caller="macs",
+            peak.format="macs",
+            scoreCol=9,
+            bLowerScoreBetter=FALSE,
+            filter=-log10(args$qvalue),
+            DataType=DiffBind::DBA_DATA_FRAME
+        )
+
+        dba_data_temp <- do.call(                                   # temporary object for consensus peaks identification
+            DiffBind::dba.peakset,
+            base::append(
+                dba_peakset_default_params,
+                list(
+                    DBA=dba_data,
+                    consensus=DiffBind::DBA_CONDITION,
+                    minOverlap=args$minoverlap                      # applying --minoverlap per DBA_CONDITION
+                )
+            )
+        )
+        if (!("Consensus" %in% names(dba_data_temp$masks))){        # should never happen, but just in case we check it
+            base::print(
+                base::paste(
+                    "Failed to identify consensus",
+                    "peaks. Exiting."
+                )
+            )
+            base::quit(save="no", status=1, runLast=FALSE)
+        }
+
+        dba_data_temp <- do.call(
+            DiffBind::dba,
+            base::append(
+                dba_default_params,
+                list(
+                    DBA=dba_data_temp,
+                    mask=dba_data_temp$masks$Consensus
+                )
+            )
+        )
+
+        consensus_peaks <- do.call(
+            DiffBind::dba.peakset,
+            base::append(
+                dba_peakset_default_params,
+                list(
+                    DBA=dba_data_temp,
+                    minOverlap=1,                                   # force it to 1 to get the union of peaks from each of the conditions
+                    bRetrieve=TRUE
+                )
+            )
+        )
+        base::print(
+            base::paste(
+                "Found", base::nrow(consensus_peaks),
+                "consensus peaks"
+            )
+        )
+        base::print(utils::head(consensus_peaks))
+
+        dba_data <- do.call(
+            DiffBind::dba.count,
+            base::append(
+                dba_count_default_params,
+                list(
+                    minOverlap=1,                                   # force it to 1 to get the union of peaks from each of the conditions
+                    peaks=consensus_peaks
+                )
+            )
+        )
+
+        dba_data <- DiffBind::dba.contrast(
+            dba_data,
+            design="~Condition",
+            contrast=c("Condition", args$second, args$first)
+        )
+
+        base::print("Normalizing counts")
+        dba_data <- DiffBind::dba.normalize(                        # this doesn't know anything about design formula yet, so it's not taken into account when normalizing
+            dba_data,                                               # normalization somehow updates Score column from peaks?
+            method=analysis_method,
+            normalize=DiffBind::DBA_NORM_NATIVE
+        )
+
+        base::print("Performing the differential accessibility analysis")
+        dba_data <- DiffBind::dba.analyze(
+            dba_data,
+            method=analysis_method,
+            bParallel=TRUE,
+            bReduceObjects=FALSE                                    # we want to have a complete DESeq2 or edgeR object
+        )
+
+        db_sites <- DiffBind::dba.report(
+            dba_data,
+            method=analysis_method,
+            th=1,                                                   # to include all differentially bound sites
+            DataType=DiffBind::DBA_DATA_FRAME,
+            bCalled=FALSE,
+            bCounts=FALSE,
+            bNormalized=FALSE
+        )  %>%
+        stats::na.omit() %>%
+        dplyr::filter_all(dplyr::all_vars(!is.infinite(.))) %>%
+        dplyr::rename(
+            "chr"="Chr",
+            "start"="Start",
+            "end"="End",
+            "baseMean"="Conc",
+            "log2FoldChange"="Fold",
+            !!base::paste0("conc_", args$second):=base::paste0("Conc_", args$second),
+            !!base::paste0("conc_", args$first):=base::paste0("Conc_", args$first),
+            "pvalue"="p-value",
+            "padj"="FDR"
+        ) %>%
+        dplyr::select(                                             # to have a proper columns order
+            c(
+                "chr", "start", "end",
+                "baseMean", "log2FoldChange",
+                base::paste0("conc_", args$second),
+                base::paste0("conc_", args$first),
+                "pvalue", "padj"
+            )
+        )
+
+        base::print(
+            base::paste(
+                "Number of differentially bound sites:",
+                base::nrow(db_sites)
+            )
+        )
+
         results$db_sites <- db_sites                               # not filtered differentialy bound sites
+
     } else {
         SeuratObject::Idents(seurat_data) <- args$splitby
         db_sites <- Seurat::FindMarkers(

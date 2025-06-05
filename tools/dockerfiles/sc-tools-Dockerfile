@@ -37,7 +37,8 @@
 #     sc_cb_utils_atac_search.R --help && \
 #     sc_cb_utils_split_mex.R --help && \
 #     sc_rna_azimuth.R --help && \
-#     sc_rna_load_rhapsody.R --help
+#     sc_rna_load_rhapsody.R --help && \
+#     sc_utils_extend_htmp.R
 #
 # v0.0.42 -- based on biowardrobe2/sc-tools:v0.0.41
 # - Updated sc_atac_dbinding.R and sc_atac_coverage.R
@@ -89,9 +90,21 @@
 #   are more than 26 datasets.
 # - Fixed samples ordering issue in the
 #   sc_rna_load_rhapsody.R script.
+# - Added DiffBind options to sc_atac_dbinding.R
+#   script (had to also include samtools and
+#   bedtools for bed_to_bam.sh script).
+# - Added sc_utils_extend_htmp.R script to update
+#   gct file with the external metadata. We need
+#   it to show on the heatmap the nearest genes
+#   assigned by the iaintersect tool.
 # - Tools added:
-#   pip3 install deeptools==${DEEPTOOLS_VERSION}
-#   R -e 'devtools::install_github("michael-kotliar/morpheus.R")'
+#   * deeptools
+#   * michael-kotliar/morpheus.R
+#   * DiffBind
+#   * samtools
+#   * bedtools2
+#   * bed_to_bam.sh
+#   * sc_utils_extend_htmp.R
 #
 # v0.0.41 -- based on biowardrobe2/sc-tools:v0.0.40
 # - Updated UCSC Cellbrowser to 1.2.8.
@@ -441,12 +454,16 @@ ENV R_MAX_VSIZE=200000000000 \
     HTSLIB_VERSION=1.17 \
     LOUPER_VERSION=1.1.0 \
     DEEPTOOLS_VERSION=3.5.5 \
+    BEDTOOLS_VERSION=2.31.1 \
     MACS2_URL=https://github.com/macs3-project/MACS.git
 ENV HTSLIB_URL=https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 \
-    LOUPER_URL=https://github.com/10XGenomics/loupeR/releases/download/v${LOUPER_VERSION}/loupeR_Linux.tar.gz
+    LOUPER_URL=https://github.com/10XGenomics/loupeR/releases/download/v${LOUPER_VERSION}/loupeR_Linux.tar.gz \
+    BEDTOOLS_URL=https://github.com/arq5x/bedtools2/releases/download/v${BEDTOOLS_VERSION}/bedtools-${BEDTOOLS_VERSION}.tar.gz \
+    SAMTOOLS_URL=https://github.com/samtools/samtools/releases/download/${HTSLIB_VERSION}/samtools-${HTSLIB_VERSION}.tar.bz2
 
 COPY ./scripts/sc_tools/sc_* /usr/local/bin/
 COPY ./scripts/sc_tools/modules/*.R /usr/local/bin/modules/
+COPY ./scripts/sc_tools/modules/*.sh /usr/local/bin/modules/
 COPY ./scripts/sc_tools/data/*.csv /opt/sc_tools/
 
 ### Installing dependencies
@@ -458,6 +475,17 @@ RUN apt-get update && \
     wget -q -O - $HTSLIB_URL | tar -jxv && \
     cd htslib-${HTSLIB_VERSION} && \
     ./configure --prefix=/usr/local/ && \
+    make -j 4 && \
+    make install && \
+    cd .. && \
+    wget -q -O - $SAMTOOLS_URL | tar -jxv && \
+    cd samtools-${HTSLIB_VERSION} && \
+    ./configure --prefix=/usr/local/ && \
+    make -j 4 && \
+    make install && \
+    cd .. && \
+    wget -q -O - $BEDTOOLS_URL | tar -zxv && \
+    cd bedtools2 && \
     make -j 4 && \
     make install && \
     cd .. && \
@@ -492,7 +520,7 @@ RUN apt-get update && \
                                  'batchelor', 'DESeq2', 'Rsamtools', 'rtracklayer', \
                                  'glmGamPoi', 'limma', 'EnhancedVolcano', 'LoomExperiment', \
                                  'hopach', 'Glimma', 'dittoSeq', 'cmapR', 'ComplexHeatmap', 'scDblFinder', \
-                                 'slingshot', 'traviz', 'DropletUtils', 'GSEABase'))" && \
+                                 'slingshot', 'traviz', 'DropletUtils', 'GSEABase', 'DiffBind'))" && \
     R -e 'install.packages("fastmatch")' && \
     R -e 'install.packages("RcppRoll")' && \
     R -e 'devtools::install_github("stuart-lab/signac@1.11.0", upgrade = "never")' && \
@@ -549,6 +577,8 @@ RUN apt-get update && \
     chmod +x /usr/local/bin/sc_report_wrapper.R && \
     chmod +x /usr/local/bin/sc_rna_azimuth.R && \
     chmod +x /usr/local/bin/sc_rna_load_rhapsody.R && \
+    chmod +x /usr/local/bin/sc_utils_extend_htmp.R && \
+    chmod +x /usr/local/bin/modules/bed_to_bam.sh && \
 ### Downloading blacklist regions files
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg38-blacklist.v2.bed.gz && \
     wget https://raw.githubusercontent.com/Boyle-Lab/Blacklist/61a04d2c5e49341d76735d485c61f0d1177d08a8/lists/hg19-blacklist.v2.bed.gz && \
