@@ -820,7 +820,8 @@ get_args <- function(){
         help=paste(
             "Minimum FDR (q-value) cutoff for MACS2 peak detection. Ignored",
             "if --test is not set to either manorm2 or diffbind methods.",
-            "Default: 0.05"
+            "If the provided value is larger than 1, it is treated as -log10",
+            "transformed. Default: 0.05"
         ),
         type="double", default=0.05
     )
@@ -969,6 +970,9 @@ get_args <- function(){
     ){
         args$minoverlap <- 1                                                                     # the same comparison group have identical peaks so better
     }                                                                                            # to set --minoverlap to 1 to avoid confusion.
+    if (args$qvalue > 1){
+        args$qvalue <- 10^(-args$qvalue)
+    }
     logger$setup(
         file.path(dirname(ifelse(args$output == "", "./", args$output)), "error_report.txt"),
         header="Single-Cell ATAC-Seq Differential Accessibility Analysis (sc_atac_dbinding.R)"

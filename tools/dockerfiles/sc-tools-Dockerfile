@@ -93,6 +93,8 @@
 # - Added DiffBind options to sc_atac_dbinding.R
 #   script (had to also include samtools and
 #   bedtools for bed_to_bam.sh script).
+# - Treat --qvalue as -log10 transformed if it's
+#   larger than 1 (in sc_atac_dbinding.R).
 # - Added sc_utils_extend_htmp.R script to update
 #   gct file with the external metadata. We need
 #   it to show on the heatmap the nearest genes
