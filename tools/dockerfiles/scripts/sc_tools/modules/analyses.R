@@ -2219,7 +2219,7 @@ atac_dbinding_analyze <- function(seurat_data, args){
             DataType=DiffBind::DBA_DATA_FRAME,
             bCalled=FALSE,
             bCounts=FALSE,
-            bNormalized=FALSE
+            bNormalized=TRUE
         )  %>%
         stats::na.omit() %>%
         dplyr::filter_all(dplyr::all_vars(!is.infinite(.))) %>%
